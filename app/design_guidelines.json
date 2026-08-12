@@ -1,0 +1,173 @@
+{
+  "app_name": "UniPool",
+  "personality": "4 Tactile / Playful LIGHT",
+  "personality_one_liner": "A friendly, playful, and culturally warm campus ride-sharing hub that makes finding a cab-pool feel like an exciting start to a journey.",
+  "color": {
+    "surface": "#FFF9F2",
+    "onSurface": "#1C1917",
+    "surfaceSecondary": "#F5EAE0",
+    "onSurfaceSecondary": "#2D2622",
+    "surfaceTertiary": "#EBE0D5",
+    "onSurfaceTertiary": "#3D352F",
+    "surfaceInverse": "#1A237E",
+    "onSurfaceInverse": "#FFFFFF",
+    "brand": "#FF9933",
+    "brandPrimary": "#1A237E",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#FF9933",
+    "onBrandSecondary": "#1C1917",
+    "brandTertiary": "#FFECC2",
+    "onBrandTertiary": "#B05C00",
+    "success": "#10B981",
+    "onSuccess": "#FFFFFF",
+    "warning": "#F59E0B",
+    "onWarning": "#1C1917",
+    "error": "#EF4444",
+    "onError": "#FFFFFF",
+    "info": "#3B82F6",
+    "onInfo": "#FFFFFF",
+    "border": "#E5D7CA",
+    "borderStrong": "#C2AFA0",
+    "divider": "#E5D7CA"
+  },
+  "typography": {
+    "displayFontFamily": "Plus Jakarta Sans",
+    "textFontFamily": "Plus Jakarta Sans",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Use generous tactile padding. Cards and containers should feel chunky and touchable.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": "2",
+  "navigation": "bottom_tabs",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": "true",
+    "do's": [
+      "Use on the bottom tab bar to let scrolling ride requests bleed through.",
+      "Use on sticky headers over the main feed.",
+      "Use for the Floating Action Button (FAB) background."
+    ],
+    "dont's": [
+      "Do not use on list item cards or form inputs.",
+      "Do not use on primary CTAs directly."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "SplashLoading",
+      "purpose": "A travel-themed entry screen that sets the warm Indian journey motif.",
+      "states": {
+        "loading": "Animated plane or train moving along a route line over a subtle Rangoli pattern background.",
+        "empty": "N/A",
+        "error": "N/A"
+      },
+      "layout": "Full-bleed background image with a gradient scrim. Center an animated route line with a train/flight icon. Use a subtle spinner for processing Google Sign-in."
+    },
+    {
+      "name": "HomeFeed",
+      "purpose": "Browse open cab-pool requests and quickly post a new one.",
+      "states": {
+        "loading": "Skeleton cards representing ride listings.",
+        "empty": "Illustration of an empty road with a 'Be the first to post a pool!' CTA.",
+        "error": "Connection error message with a 'Retry' button."
+      },
+      "layout": "Top: Search bar and filter chips (Saffron active state). Middle: Vertically stacked, chunky cards showing from/to, date, time, and remaining seats. Bottom: Sticky Deep Indigo FAB 'Create Pool' hovering above the glass tab bar."
+    },
+    {
+      "name": "PostRequest",
+      "purpose": "Form to post a query for a cab share.",
+      "states": {
+        "loading": "Spinner over the 'Submit' button.",
+        "empty": "N/A",
+        "error": "Inline validation messages for required fields."
+      },
+      "layout": "Bottom sheet or modal. Single column inputs: From, To, Date, Time. Stepper for 'Companions'. Toggle for 'Luggage'. Sticky 'Post Request' CTA at the bottom inside KeyboardAvoidingView."
+    },
+    {
+      "name": "Matches",
+      "purpose": "Show auto-matched requests within the +-1 hr window.",
+      "states": {
+        "loading": "Skeleton list items.",
+        "empty": "Illustration of a calendar/clock showing no current +-1hr matches.",
+        "error": "Failed to load matches, retry CTA."
+      },
+      "layout": "List of high-match cards. Each card highlights the overlapping time window and has a prominent 'Connect/Email' secondary CTA button."
+    },
+    {
+      "name": "MiniGames",
+      "purpose": "Timepass hub for users waiting for matches.",
+      "states": {
+        "loading": "Spinner.",
+        "empty": "N/A",
+        "error": "N/A"
+      },
+      "layout": "Two large, chunky feature cards using image backgrounds with gradient scrims. Top card: 'Travel Trivia' (India facts). Bottom card: 'Tap-the-Plane' arcade. Both use engaging illustrations."
+    }
+  ],
+  "images": {
+    "loading_bg_pattern": {
+      "url": "https://images.pexels.com/photos/9693916/pexels-photo-9693916.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Colorful mandala and rangoli pattern"
+    },
+    "train_travel_hero": {
+      "url": "https://images.unsplash.com/photo-1582217900003-2b19c0e3a7d0?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzN8MHwxfHNlYXJjaHwzfHxpbmRpYW4lMjB0cmFpbiUyMHRyYXZlbHxlbnwwfHx8fDE3ODY0MjIwMTh8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Indian train on a track during daytime"
+    },
+    "airplane_arcade_cover": {
+      "url": "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MTJ8MHwxfHNlYXJjaHwyfHxhaXJwbGFuZSUyMHNreXxlbnwwfHx8fDE3ODY0MjIwMTh8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Airplane flying in the sky"
+    }
+  },
+  "haptics": {
+    "tab_press": "light",
+    "button_primary": "medium",
+    "button_secondary": "light",
+    "form_toggle": "light",
+    "game_tap": "heavy",
+    "match_found": "success"
+  },
+  "instructions_to_main_agent": [
+    "Strictly follow the color palette. Note the explicit exception for Deep Indigo (#1A237E) as it was explicitly requested by the user and serves as the primary brand color.",
+    "Implement the 'Saffron/Marigold' (#FF9933) heavily as an accent color for tags, active tab indicators, and interactive highlights to reinforce the warm Indian touch.",
+    "For the Splash/Loading screen, use the 'loading_bg_pattern' with a heavy opacity/blur overlay so it forms a subtle rangoli/kolam texture, not a noisy image.",
+    "Ensure the CAB pool feed uses chunky, tactile cards with generously rounded corners (lg/pill) and shadow tier 2.",
+    "Implement a sticky 'Post Request' FAB at the bottom right of the HomeFeed, floating above the glass tab bar.",
+    "MiniGames screen should present two large feature cards using the train and airplane images fetched, properly applying a gradient scrim (top to bottom, transparent to ≥70% surfaceInverse) to ensure text on the cards is perfectly legible.",
+    "All form fields in the Post Request sheet must follow the single-column layout with labels above inputs.",
+    "Wire up haptic feedback to all CTAs, bottom tabs, and explicitly the 'Tap-the-Plane' game interactions based on the provided haptics mapping."
+  ]
+}
+
+
