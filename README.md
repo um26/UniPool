@@ -3,9 +3,9 @@
 > A university carpooling platform that matches students travelling
 > on the same route within a ±1-hour window.
 
-[🌐 Live Demo](https://uni-pool-ruddy.vercel.app)
+[🌐 Live Demo](https://uni-pool-ruddy.vercel.app) //coming soon
 
-![UniPool Preview](assets/banner.png)
+![UniPool Preview](assets/banner.png) //coming soon
 
 ## **Why UniPool?**
 
