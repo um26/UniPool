@@ -5,7 +5,17 @@
 
 [🌐 Live Demo](https://uni-pool-ruddy.vercel.app) //coming soon
 
-![UniPool Preview](assets/banner.png) //coming soon
+![UniPool Preview](assets/banner.png)
+
+## 📸 Screenshots
+
+| Home Feed | Post a Pool |
+|-----------|-------------|
+| ![Home](assets/home.png) | ![Post](assets/post-pool.png) |
+
+| Matches | Profile |
+|---------|---------|
+| ![Matches](assets/matches.png) | ![Profile](assets/profile.png) |
 
 ## **Why UniPool?**
 
