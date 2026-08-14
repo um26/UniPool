@@ -11,11 +11,11 @@
 
 | Home Feed | Post a Pool |
 |-----------|-------------|
-| ![Home](assets/home.png) | ![Post](assets/post-pool.png) |
+| ![Home](assets/home.jpeg) | ![Post](assets/post-pool.jpeg) |
 
 | Matches | Profile |
 |---------|---------|
-| ![Matches](assets/matches.png) | ![Profile](assets/profile.png) |
+| ![Matches](assets/matches.jpeg) | ![Profile](assets/profile.jpeg) |
 
 ## **Why UniPool?**
 
