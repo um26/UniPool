@@ -1,3 +1,10 @@
+# Secrets — never commit these
+app/backend/.env
+app/backend/.env.local
+.env
+.env.local
+.env.*.local
+
 # Python
 venv/
 .venv/
@@ -12,15 +19,11 @@ node_modules/
 .expo/
 dist/
 build/
+web-build/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-
-# Env files
-.env
-.env.local
-.env.*.local
 
 # OS / editor
 .DS_Store

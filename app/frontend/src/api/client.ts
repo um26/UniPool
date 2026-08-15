@@ -1,6 +1,6 @@
 import { storage } from "@/src/utils/storage";
 
-const BASE = process.env.EXPO_PUBLIC_BACKEND_URL;
+const BASE = process.env.EXPO_PUBLIC_API_BASE_URL;
 const TOKEN_KEY = "unipool.session_token";
 
 export async function getToken(): Promise<string | null> {
@@ -33,7 +33,7 @@ async function req(path: string, opts: RequestInit = {}) {
 }
 
 export const api = {
-  exchangeSession: (session_id: string) => req("/auth/session", { method: "POST", body: JSON.stringify({ session_id }) }),
+  googleSignIn: (id_token: string) => req("/auth/google", { method: "POST", body: JSON.stringify({ id_token }) }),
   me: () => req("/auth/me"),
   logout: () => req("/auth/logout", { method: "POST" }),
   updateProfile: (patch: any) => req("/profile", { method: "PATCH", body: JSON.stringify(patch) }),
@@ -41,6 +41,11 @@ export const api = {
   myPools: () => req("/pools/mine"),
   myMatches: () => req("/pools/matches"),
   createPool: (body: any) => req("/pools", { method: "POST", body: JSON.stringify(body) }),
+  closePool: (id: string) => req(`/pools/${id}/close`, { method: "PATCH" }),
+  reopenPool: (id: string) => req(`/pools/${id}/reopen`, { method: "PATCH" }),
   deletePool: (id: string) => req(`/pools/${id}`, { method: "DELETE" }),
   trivia: () => req("/trivia"),
+  adminStats: () => req("/admin/stats"),
+  adminPools: () => req("/admin/pools"),
+  adminDeletePool: (id: string) => req(`/admin/pools/${id}`, { method: "DELETE" }),
 };

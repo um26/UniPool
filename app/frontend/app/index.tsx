@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { View, Text, Pressable, StyleSheet, ActivityIndicator, Dimensions } from "react-native";
+import { View, Text, Pressable, StyleSheet, ActivityIndicator, Dimensions, Platform } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
@@ -12,7 +12,7 @@ import { COLORS, SPACING, RADIUS, FONT } from "@/src/theme";
 const { width } = Dimensions.get("window");
 
 export default function LoginScreen() {
-  const { user, loading, signIn } = useAuth();
+  const { user, loading, signIn, renderGoogleButton } = useAuth();
   const router = useRouter();
   const planeX = useSharedValue(-80);
 
@@ -23,6 +23,13 @@ export default function LoginScreen() {
       false
     );
   }, []);
+
+  // Web: mount Google's own Sign-In button (most reliable way to trigger the flow).
+  useEffect(() => {
+    if (Platform.OS === "web" && !loading && !user) {
+      renderGoogleButton("google-signin-container");
+    }
+  }, [loading, user, renderGoogleButton]);
 
   useEffect(() => {
     if (user) router.replace("/(tabs)");
@@ -67,23 +74,34 @@ export default function LoginScreen() {
         <Text style={styles.subheading}>
           Sign in with your college email to post cab-pool requests and get matched instantly.
         </Text>
-        <Pressable
-          testID="google-signin-button"
-          onPress={signIn}
-          disabled={loading}
-          style={({ pressed }) => [styles.googleBtn, pressed && { opacity: 0.85 }]}
-        >
-          {loading ? (
-            <ActivityIndicator color={COLORS.indigo} />
-          ) : (
-            <>
-              <View style={styles.gLogo}>
-                <Text style={{ fontWeight: "800", color: "#4285F4", fontSize: 18 }}>G</Text>
-              </View>
-              <Text style={styles.googleText}>Continue with Google</Text>
-            </>
-          )}
-        </Pressable>
+        {Platform.OS === "web" ? (
+          // Google's own rendered button (most reliable way to trigger Sign-In on web).
+          <View style={styles.googleBtnWrap}>
+            {loading ? (
+              <ActivityIndicator color={COLORS.indigo} />
+            ) : (
+              <View nativeID="google-signin-container" />
+            )}
+          </View>
+        ) : (
+          <Pressable
+            testID="google-signin-button"
+            onPress={signIn}
+            disabled={loading}
+            style={({ pressed }) => [styles.googleBtn, pressed && { opacity: 0.85 }]}
+          >
+            {loading ? (
+              <ActivityIndicator color={COLORS.indigo} />
+            ) : (
+              <>
+                <View style={styles.gLogo}>
+                  <Text style={{ fontWeight: "800", color: "#4285F4", fontSize: 18 }}>G</Text>
+                </View>
+                <Text style={styles.googleText}>Continue with Google</Text>
+              </>
+            )}
+          </Pressable>
+        )}
 
         <View style={styles.footerRow}>
           <Ionicons name="shield-checkmark" size={14} color={COLORS.muted} />
@@ -119,6 +137,7 @@ const styles = StyleSheet.create({
   },
   heading: { fontSize: FONT["2xl"], fontWeight: "800", color: COLORS.onSurface, marginBottom: SPACING.sm },
   subheading: { fontSize: FONT.base, color: COLORS.muted, marginBottom: SPACING.xl, lineHeight: 20 },
+  googleBtnWrap: { alignItems: "center", justifyContent: "center", minHeight: 44 },
   googleBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: SPACING.md,
     backgroundColor: "#fff", borderRadius: RADIUS.pill, paddingVertical: 16,

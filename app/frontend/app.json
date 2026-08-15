@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "frontend",
-    "slug": "frontend",
+    "name": "UniPool",
+    "slug": "unipool",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",

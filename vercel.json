@@ -1,0 +1,5 @@
+{
+  "buildCommand": "cd app/frontend && npm install --legacy-peer-deps && npx expo export -p web",
+  "outputDirectory": "app/frontend/dist",
+  "installCommand": "echo 'handled in buildCommand'"
+}
