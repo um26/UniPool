@@ -12,6 +12,8 @@ from typing import List, Optional
 from datetime import datetime, timezone, timedelta
 
 import httpx
+from google.oauth2 import id_token as google_id_token
+from google.auth.transport import requests as google_requests
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -21,11 +23,15 @@ mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
 
-EMERGENT_AUTH_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 
-EMAIL_BASE_URL = "https://integrations.emergentagent.com"
-EMAIL_KEY = os.environ.get("EMERGENT_EMAIL_KEY", "")
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
 EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "UniPool")
+
+ADMIN_EMAILS = {
+    e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()
+}
 
 logging.basicConfig(
     level=logging.INFO,
@@ -72,6 +78,7 @@ class PoolRequestOut(BaseModel):
     companions: int
     luggage: Optional[str] = None
     notes: Optional[str] = None
+    status: str = "open"
     created_at: datetime
 
 
@@ -90,6 +97,16 @@ def _clean(doc: dict) -> dict:
 
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _is_admin(email: str) -> bool:
+    return (email or "").lower() in ADMIN_EMAILS
+
+
+def _with_admin_flag(user: dict) -> dict:
+    if user:
+        user["is_admin"] = _is_admin(user.get("email", ""))
+    return user
 
 
 def _ensure_aware(dt: datetime) -> datetime:
@@ -111,25 +128,25 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
-    return user
+    return _with_admin_flag(user)
 
 
 # ---------- Email ----------
 async def send_email(to_email: str, subject: str, html_content: str) -> bool:
-    if not EMAIL_KEY:
-        logger.warning("EMERGENT_EMAIL_KEY missing — skipping email send")
+    if not RESEND_API_KEY:
+        logger.warning("RESEND_API_KEY missing — skipping email send")
         return False
     payload = {
+        "from": f"{EMAIL_FROM_NAME} <{RESEND_FROM_EMAIL}>",
         "to": [to_email],
         "subject": subject,
         "html": html_content,
-        "from_name": EMAIL_FROM_NAME,
     }
     try:
         async with httpx.AsyncClient(timeout=30) as http:
             resp = await http.post(
-                f"{EMAIL_BASE_URL}/api/v1/email/send",
-                headers={"X-Email-Key": EMAIL_KEY},
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
                 json=payload,
             )
         resp.raise_for_status()
@@ -172,6 +189,7 @@ async def find_and_notify_matches(new_pool: dict):
         {
             "pool_id": {"$ne": new_pool["pool_id"]},
             "user_id": {"$ne": new_pool["user_id"]},
+            "status": "open",
             "from_location": {"$regex": f"^{new_pool['from_location']}$", "$options": "i"},
             "to_location": {"$regex": f"^{new_pool['to_location']}$", "$options": "i"},
             "travel_datetime": {
@@ -201,39 +219,12 @@ async def find_and_notify_matches(new_pool: dict):
 
 
 # ---------- Auth Routes ----------
-_processed_session_ids: set = set()
+class GoogleSignIn(BaseModel):
+    id_token: str
 
 
-@api.post("/auth/session")
-async def exchange_session(body: SessionExchange):
-    sid = body.session_id.strip()
-    if not sid:
-        raise HTTPException(status_code=400, detail="session_id required")
-    if sid in _processed_session_ids:
-        # Idempotent-ish: return the token if we still have it
-        existing = await db.user_sessions.find_one({"_source_sid": sid}, {"_id": 0})
-        if existing:
-            user = await db.users.find_one({"user_id": existing["user_id"]}, {"_id": 0})
-            return {"session_token": existing["session_token"], "user": user}
-    try:
-        async with httpx.AsyncClient(timeout=15) as http:
-            resp = await http.get(EMERGENT_AUTH_SESSION_URL, headers={"X-Session-ID": sid})
-        if resp.status_code != 200:
-            raise HTTPException(status_code=401, detail="Invalid session")
-        data = resp.json()
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Auth exchange failed: {e}")
-        raise HTTPException(status_code=401, detail="Auth failed")
-
-    email = data.get("email")
-    name = data.get("name") or (email.split("@")[0] if email else "Traveller")
-    picture = data.get("picture")
-    session_token = data.get("session_token")
-    if not (email and session_token):
-        raise HTTPException(status_code=401, detail="Malformed auth response")
-
+async def _create_session_for_user(email: str, name: str, picture: Optional[str]) -> dict:
+    """Shared logic: upsert the user, mint a session token, return {session_token, user}."""
     existing_user = await db.users.find_one({"email": email}, {"_id": 0})
     if existing_user:
         user_id = existing_user["user_id"]
@@ -256,19 +247,38 @@ async def exchange_session(body: SessionExchange):
             }
         )
 
+    session_token = uuid.uuid4().hex
     await db.user_sessions.insert_one(
         {
             "session_token": session_token,
             "user_id": user_id,
             "expires_at": _now_utc() + timedelta(days=7),
             "created_at": _now_utc(),
-            "_source_sid": sid,
         }
     )
-    _processed_session_ids.add(sid)
-
     user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
-    return {"session_token": session_token, "user": user_doc}
+    return {"session_token": session_token, "user": _with_admin_flag(user_doc)}
+
+
+@api.post("/auth/google")
+async def google_sign_in(body: GoogleSignIn):
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="Server missing GOOGLE_CLIENT_ID")
+    try:
+        idinfo = google_id_token.verify_oauth2_token(
+            body.id_token, google_requests.Request(), GOOGLE_CLIENT_ID
+        )
+    except Exception as e:
+        logger.warning(f"Google token verification failed: {e}")
+        raise HTTPException(status_code=401, detail="Invalid Google token")
+
+    email = idinfo.get("email")
+    if not email or not idinfo.get("email_verified", False):
+        raise HTTPException(status_code=401, detail="Google email not verified")
+    name = idinfo.get("name") or email.split("@")[0]
+    picture = idinfo.get("picture")
+
+    return await _create_session_for_user(email, name, picture)
 
 
 @api.get("/auth/me")
@@ -313,6 +323,7 @@ async def create_pool(body: PoolRequestCreate, authorization: Optional[str] = He
         "companions": body.companions,
         "luggage": body.luggage,
         "notes": body.notes,
+        "status": "open",
         "created_at": _now_utc(),
     }
     await db.pools.insert_one(doc)
@@ -326,7 +337,7 @@ async def list_pools(authorization: Optional[str] = Header(None)):
     await get_current_user(authorization)
     now = _now_utc()
     cursor = db.pools.find(
-        {"travel_datetime": {"$gte": now - timedelta(hours=2)}},
+        {"travel_datetime": {"$gte": now - timedelta(hours=2)}, "status": "open"},
         {"_id": 0},
     ).sort("travel_datetime", 1)
     return await cursor.to_list(200)
@@ -335,8 +346,30 @@ async def list_pools(authorization: Optional[str] = Header(None)):
 @api.get("/pools/mine", response_model=List[PoolRequestOut])
 async def my_pools(authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
-    cursor = db.pools.find({"user_id": user["user_id"]}, {"_id": 0}).sort("travel_datetime", 1)
+    cursor = db.pools.find({"user_id": user["user_id"]}, {"_id": 0}).sort("travel_datetime", -1)
     return await cursor.to_list(200)
+
+
+@api.patch("/pools/{pool_id}/close", response_model=PoolRequestOut)
+async def close_pool(pool_id: str, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    r = await db.pools.update_one(
+        {"pool_id": pool_id, "user_id": user["user_id"]}, {"$set": {"status": "closed"}}
+    )
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Not found")
+    return _clean(await db.pools.find_one({"pool_id": pool_id}, {"_id": 0}))
+
+
+@api.patch("/pools/{pool_id}/reopen", response_model=PoolRequestOut)
+async def reopen_pool(pool_id: str, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    r = await db.pools.update_one(
+        {"pool_id": pool_id, "user_id": user["user_id"]}, {"$set": {"status": "open"}}
+    )
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Not found")
+    return _clean(await db.pools.find_one({"pool_id": pool_id}, {"_id": 0}))
 
 
 @api.get("/pools/matches", response_model=List[PoolRequestOut])
@@ -348,10 +381,13 @@ async def my_matches(authorization: Optional[str] = Header(None)):
         return []
     results: dict = {}
     for own in my:
+        if own.get("status") != "open":
+            continue
         dt = _ensure_aware(own["travel_datetime"])
         cursor = db.pools.find(
             {
                 "user_id": {"$ne": user["user_id"]},
+                "status": "open",
                 "from_location": {"$regex": f"^{own['from_location']}$", "$options": "i"},
                 "to_location": {"$regex": f"^{own['to_location']}$", "$options": "i"},
                 "travel_datetime": {
@@ -370,6 +406,45 @@ async def my_matches(authorization: Optional[str] = Header(None)):
 async def delete_pool(pool_id: str, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     r = await db.pools.delete_one({"pool_id": pool_id, "user_id": user["user_id"]})
+    if r.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"ok": True}
+
+
+# ---------- Admin ----------
+async def require_admin(authorization: Optional[str] = Header(None)) -> dict:
+    user = await get_current_user(authorization)
+    if not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
+
+@api.get("/admin/stats")
+async def admin_stats(user=None, authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    total_users = await db.users.count_documents({})
+    total_pools = await db.pools.count_documents({})
+    open_pools = await db.pools.count_documents({"status": "open"})
+    closed_pools = await db.pools.count_documents({"status": "closed"})
+    return {
+        "total_users": total_users,
+        "total_pools": total_pools,
+        "open_pools": open_pools,
+        "closed_pools": closed_pools,
+    }
+
+
+@api.get("/admin/pools", response_model=List[PoolRequestOut])
+async def admin_list_pools(authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    cursor = db.pools.find({}, {"_id": 0}).sort("created_at", -1)
+    return await cursor.to_list(500)
+
+
+@api.delete("/admin/pools/{pool_id}")
+async def admin_delete_pool(pool_id: str, authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    r = await db.pools.delete_one({"pool_id": pool_id})
     if r.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Not found")
     return {"ok": True}
@@ -407,7 +482,7 @@ async def root():
 app.include_router(api)
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],

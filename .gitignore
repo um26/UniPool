@@ -1,0 +1,19 @@
+# Secrets — never commit these
+app/backend/.env
+app/backend/.env.local
+
+# Node / Expo
+node_modules/
+.expo/
+dist/
+web-build/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS
+.DS_Store

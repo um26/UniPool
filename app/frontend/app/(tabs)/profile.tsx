@@ -1,22 +1,40 @@
 import React, { useCallback, useState } from "react";
-import { View, Text, StyleSheet, Pressable, FlatList, Alert } from "react-native";
+import { View, Text, StyleSheet, Pressable, FlatList, Alert, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
 
 import { COLORS, SPACING, RADIUS, FONT } from "@/src/theme";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/auth/AuthContext";
 
-type Pool = { pool_id: string; from_location: string; to_location: string; travel_datetime: string; companions: number };
+type Pool = {
+  pool_id: string;
+  from_location: string;
+  to_location: string;
+  travel_datetime: string;
+  companions: number;
+  status?: string;
+  user_name?: string;
+  user_email?: string;
+};
+
+function fmt(dt: string) {
+  return new Date(dt).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+}
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
-  const router = useRouter();
   const [myPools, setMyPools] = useState<Pool[]>([]);
   const [gender, setGender] = useState<string>(user?.gender || "any");
+  const [tab, setTab] = useState<"open" | "closed">("open");
+
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [adminStats, setAdminStats] = useState<any>(null);
+  const [adminPools, setAdminPools] = useState<Pool[]>([]);
+  const [adminLoading, setAdminLoading] = useState(false);
 
   const load = useCallback(async () => {
     try { setMyPools(await api.myPools()); } catch {}
@@ -33,16 +51,52 @@ export default function ProfileScreen() {
     try { await api.deletePool(id); await load(); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch (e: any) { Alert.alert("Error", e.message); }
   };
 
+  const closeQuery = async (id: string) => {
+    try { await api.closePool(id); await load(); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch (e: any) { Alert.alert("Error", e.message); }
+  };
+
+  const reopenQuery = async (id: string) => {
+    try { await api.reopenPool(id); await load(); Haptics.selectionAsync(); } catch (e: any) { Alert.alert("Error", e.message); }
+  };
+
+  const loadAdmin = async () => {
+    setAdminLoading(true);
+    try {
+      const [stats, pools] = await Promise.all([api.adminStats(), api.adminPools()]);
+      setAdminStats(stats);
+      setAdminPools(pools);
+    } catch (e: any) {
+      Alert.alert("Admin error", e.message);
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const toggleAdmin = () => {
+    const next = !adminOpen;
+    setAdminOpen(next);
+    if (next && !adminStats) loadAdmin();
+  };
+
+  const adminRemove = async (id: string) => {
+    try { await api.adminDeletePool(id); await loadAdmin(); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch (e: any) { Alert.alert("Error", e.message); }
+  };
+
+  const filtered = myPools.filter((p) => (tab === "open" ? (p.status ?? "open") === "open" : p.status === "closed"));
+
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <LinearGradient colors={[COLORS.indigo, "#3949AB"]} style={styles.header}>
         <View style={styles.avatar}><Text style={styles.avatarText}>{user?.name?.[0]?.toUpperCase() || "U"}</Text></View>
         <Text style={styles.name}>{user?.name}</Text>
         <Text style={styles.email}>{user?.email}</Text>
+        {user?.is_admin ? (
+          <View style={styles.adminBadge}><Ionicons name="shield-checkmark" size={12} color={COLORS.indigo} /><Text style={styles.adminBadgeText}>Admin</Text></View>
+        ) : null}
       </LinearGradient>
 
       <FlatList
-        data={myPools}
+        data={filtered}
         keyExtractor={(i) => i.pool_id}
         contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 140 }}
         ListHeaderComponent={
@@ -65,29 +119,99 @@ export default function ProfileScreen() {
                 </Pressable>
               ))}
             </View>
-            <Text style={styles.sectionLabel}>My Requests</Text>
+
+            <Text style={styles.sectionLabel}>My Queries</Text>
+            <View style={styles.segmentRow}>
+              <Pressable testID="mine-tab-open" onPress={() => setTab("open")} style={[styles.segment, tab === "open" && styles.segmentActive]}>
+                <Text style={[styles.segmentText, tab === "open" && styles.segmentTextActive]}>Open</Text>
+              </Pressable>
+              <Pressable testID="mine-tab-closed" onPress={() => setTab("closed")} style={[styles.segment, tab === "closed" && styles.segmentActive]}>
+                <Text style={[styles.segmentText, tab === "closed" && styles.segmentTextActive]}>Closed</Text>
+              </Pressable>
+            </View>
           </>
         }
         renderItem={({ item }) => (
-          <View style={styles.mine}>
+          <View style={styles.mine} testID={`mine-item-${item.pool_id}`}>
             <View style={{ flex: 1 }}>
               <Text style={styles.mineRoute}>{item.from_location} → {item.to_location}</Text>
-              <Text style={styles.mineWhen}>{new Date(item.travel_datetime).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}</Text>
+              <Text style={styles.mineWhen}>{fmt(item.travel_datetime)}</Text>
             </View>
-            <Pressable testID={`delete-${item.pool_id}`} onPress={() => remove(item.pool_id)} hitSlop={8}>
+            {tab === "open" ? (
+              <Pressable testID={`close-${item.pool_id}`} onPress={() => closeQuery(item.pool_id)} style={styles.actionBtn} hitSlop={8}>
+                <Ionicons name="checkmark-circle-outline" size={20} color={COLORS.success} />
+              </Pressable>
+            ) : (
+              <Pressable testID={`reopen-${item.pool_id}`} onPress={() => reopenQuery(item.pool_id)} style={styles.actionBtn} hitSlop={8}>
+                <Ionicons name="refresh" size={20} color={COLORS.indigo} />
+              </Pressable>
+            )}
+            <Pressable testID={`delete-${item.pool_id}`} onPress={() => remove(item.pool_id)} hitSlop={8} style={styles.actionBtn}>
               <Ionicons name="trash" size={20} color={COLORS.error} />
             </Pressable>
           </View>
         )}
-        ListEmptyComponent={<Text style={styles.emptyMine}>You haven't posted any pools yet.</Text>}
+        ListEmptyComponent={
+          <Text style={styles.emptyMine}>
+            {tab === "open" ? "No open queries. Post one from the Pool tab." : "No closed queries yet."}
+          </Text>
+        }
         ListFooterComponent={
-          <Pressable testID="logout-button" onPress={signOut} style={styles.logout}>
-            <Ionicons name="log-out-outline" size={18} color={COLORS.error} />
-            <Text style={styles.logoutText}>Sign out</Text>
-          </Pressable>
+          <>
+            {user?.is_admin ? (
+              <View style={{ marginTop: SPACING.xl }}>
+                <Pressable testID="admin-panel-toggle" onPress={toggleAdmin} style={styles.adminToggle}>
+                  <Ionicons name="shield" size={16} color={COLORS.indigo} />
+                  <Text style={styles.adminToggleText}>Admin panel</Text>
+                  <Ionicons name={adminOpen ? "chevron-up" : "chevron-down"} size={16} color={COLORS.indigo} />
+                </Pressable>
+                {adminOpen && (
+                  <View style={styles.adminPanel}>
+                    {adminLoading ? (
+                      <ActivityIndicator color={COLORS.indigo} />
+                    ) : (
+                      <>
+                        {adminStats && (
+                          <View style={styles.statsRow}>
+                            <Stat label="Users" value={adminStats.total_users} />
+                            <Stat label="Open" value={adminStats.open_pools} />
+                            <Stat label="Closed" value={adminStats.closed_pools} />
+                          </View>
+                        )}
+                        {adminPools.map((p) => (
+                          <View key={p.pool_id} style={styles.adminRow} testID={`admin-pool-${p.pool_id}`}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.adminRoute}>{p.from_location} → {p.to_location}</Text>
+                              <Text style={styles.adminMeta}>{p.user_name} · {p.user_email} · {p.status ?? "open"}</Text>
+                            </View>
+                            <Pressable testID={`admin-delete-${p.pool_id}`} onPress={() => adminRemove(p.pool_id)} hitSlop={8}>
+                              <Ionicons name="trash" size={18} color={COLORS.error} />
+                            </Pressable>
+                          </View>
+                        ))}
+                      </>
+                    )}
+                  </View>
+                )}
+              </View>
+            ) : null}
+            <Pressable testID="logout-button" onPress={signOut} style={styles.logout}>
+              <Ionicons name="log-out-outline" size={18} color={COLORS.error} />
+              <Text style={styles.logoutText}>Sign out</Text>
+            </Pressable>
+          </>
         }
       />
     </SafeAreaView>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <View style={styles.statBox}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
   );
 }
 
@@ -98,15 +222,37 @@ const styles = StyleSheet.create({
   avatarText: { color: COLORS.indigo, fontSize: 28, fontWeight: "800" },
   name: { color: "#fff", fontSize: FONT.xl, fontWeight: "800" },
   email: { color: "rgba(255,236,194,0.9)", marginTop: 4 },
+  adminBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: COLORS.cream, borderRadius: RADIUS.pill, paddingHorizontal: 10, paddingVertical: 4, marginTop: SPACING.sm },
+  adminBadgeText: { color: COLORS.indigo, fontWeight: "800", fontSize: 11 },
   sectionLabel: { fontSize: FONT.sm, fontWeight: "700", color: COLORS.muted, marginTop: SPACING.lg, marginBottom: SPACING.sm, letterSpacing: 0.8, textTransform: "uppercase" },
   prefRow: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.sm },
   prefChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: RADIUS.pill, backgroundColor: "#fff", borderWidth: 1, borderColor: COLORS.border },
   prefChipActive: { backgroundColor: COLORS.indigo, borderColor: COLORS.indigo },
   prefText: { color: COLORS.onSurface, fontWeight: "600", fontSize: 13 },
-  mine: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: COLORS.border },
+
+  segmentRow: { flexDirection: "row", gap: SPACING.sm, marginBottom: SPACING.sm },
+  segment: { flex: 1, paddingVertical: 10, borderRadius: RADIUS.pill, alignItems: "center", backgroundColor: "#fff", borderWidth: 1, borderColor: COLORS.border },
+  segmentActive: { backgroundColor: COLORS.indigo, borderColor: COLORS.indigo },
+  segmentText: { fontWeight: "700", color: COLORS.onSurface },
+  segmentTextActive: { color: "#fff" },
+
+  mine: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: COLORS.border, gap: SPACING.sm },
   mineRoute: { fontSize: FONT.base, fontWeight: "700", color: COLORS.onSurface },
   mineWhen: { color: COLORS.muted, marginTop: 2, fontSize: FONT.sm },
+  actionBtn: { padding: 4 },
   emptyMine: { color: COLORS.muted, padding: SPACING.md, textAlign: "center" },
+
+  adminToggle: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#fff", borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.border, paddingVertical: 12, paddingHorizontal: SPACING.lg, justifyContent: "center" },
+  adminToggleText: { color: COLORS.indigo, fontWeight: "700", flex: 1, textAlign: "center" },
+  adminPanel: { marginTop: SPACING.sm, backgroundColor: "#fff", borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, padding: SPACING.md },
+  statsRow: { flexDirection: "row", gap: SPACING.sm, marginBottom: SPACING.md },
+  statBox: { flex: 1, alignItems: "center", backgroundColor: COLORS.surface2, borderRadius: RADIUS.md, paddingVertical: SPACING.sm },
+  statValue: { fontSize: FONT.xl, fontWeight: "800", color: COLORS.indigo },
+  statLabel: { fontSize: FONT.sm, color: COLORS.muted, marginTop: 2 },
+  adminRow: { flexDirection: "row", alignItems: "center", paddingVertical: SPACING.sm, borderTopWidth: 1, borderTopColor: COLORS.border },
+  adminRoute: { fontWeight: "700", color: COLORS.onSurface },
+  adminMeta: { color: COLORS.muted, fontSize: FONT.sm, marginTop: 2 },
+
   logout: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: SPACING.xl, paddingVertical: 14, borderRadius: RADIUS.pill, backgroundColor: "#fff", borderWidth: 1, borderColor: COLORS.error },
   logoutText: { color: COLORS.error, fontWeight: "700" },
 });
