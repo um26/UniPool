@@ -3,18 +3,19 @@ import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, Pr
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 
 import { COLORS, SPACING, RADIUS, FONT } from "@/src/theme";
 import { api } from "@/src/api/client";
 
 type Pool = {
-  pool_id: string; user_name: string; user_email: string;
+  pool_id: string; user_id: string; user_name: string; user_email: string;
   from_location: string; to_location: string; travel_datetime: string;
   gender_preference: string; companions: number; luggage?: string | null; notes?: string | null;
 };
 
 export default function MatchesScreen() {
+  const router = useRouter();
   const [items, setItems] = useState<Pool[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -68,14 +69,23 @@ export default function MatchesScreen() {
                 <Text style={styles.route}>{item.to_location}</Text>
               </View>
               {item.notes ? <Text style={styles.notes}>“{item.notes}”</Text> : null}
-              <Pressable
-                testID={`connect-${item.pool_id}`}
-                onPress={() => Linking.openURL(`mailto:${item.user_email}?subject=UniPool%20-%20Cab%20Share&body=Hi%20${encodeURIComponent(item.user_name)},%20saw%20your%20UniPool%20request.%20Want%20to%20share%20the%20cab%3F`)}
-                style={styles.cta}
-              >
-                <Ionicons name="mail" size={16} color="#fff" />
-                <Text style={styles.ctaText}>Email {item.user_name.split(" ")[0]}</Text>
-              </Pressable>
+              <View style={styles.ctaRow}>
+                <Pressable
+                  testID={`message-${item.pool_id}`}
+                  onPress={() => router.push({ pathname: "/chat/[userId]", params: { userId: item.user_id, name: item.user_name } })}
+                  style={[styles.cta, { flex: 1 }]}
+                >
+                  <Ionicons name="chatbubble" size={16} color="#fff" />
+                  <Text style={styles.ctaText}>Message</Text>
+                </Pressable>
+                <Pressable
+                  testID={`connect-${item.pool_id}`}
+                  onPress={() => Linking.openURL(`mailto:${item.user_email}?subject=UniPool%20-%20Cab%20Share&body=Hi%20${encodeURIComponent(item.user_name)},%20saw%20your%20UniPool%20request.%20Want%20to%20share%20the%20cab%3F`)}
+                  style={[styles.cta, styles.ctaGhost]}
+                >
+                  <Ionicons name="mail" size={16} color={COLORS.indigo} />
+                </Pressable>
+              </View>
             </View>
           )}
         />
@@ -102,6 +112,8 @@ const styles = StyleSheet.create({
   routeRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: SPACING.sm },
   route: { fontSize: FONT.base, color: COLORS.onSurface, fontWeight: "600" },
   notes: { color: COLORS.muted, fontStyle: "italic", marginBottom: SPACING.md },
-  cta: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: COLORS.indigo, paddingVertical: 12, borderRadius: RADIUS.pill, marginTop: SPACING.md },
+  cta: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: COLORS.indigo, paddingVertical: 12, paddingHorizontal: 16, borderRadius: RADIUS.pill },
+  ctaRow: { flexDirection: "row", gap: SPACING.sm, marginTop: SPACING.md },
+  ctaGhost: { backgroundColor: "#fff", borderWidth: 1, borderColor: COLORS.indigo, flex: 0 },
   ctaText: { color: "#fff", fontWeight: "700" },
 });

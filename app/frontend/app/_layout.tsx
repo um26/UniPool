@@ -21,7 +21,7 @@ function AuthGate() {
     if (loading) return;
     const inTabs = segments[0] === "(tabs)";
     if (!user && inTabs) router.replace("/");
-    if (user && !inTabs && segments[0] !== "post-request" && segments[0] !== "games") {
+    if (user && !inTabs && segments[0] !== "post-request" && segments[0] !== "games" && segments[0] !== "chat") {
       router.replace("/(tabs)");
     }
   }, [user, loading, segments]);
@@ -40,6 +40,7 @@ function AuthGate() {
       <Stack.Screen name="post-request" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
       <Stack.Screen name="games/trivia" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="games/tap-plane" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="chat/[userId]" options={{ animation: "slide_from_right" }} />
     </Stack>
   );
 }

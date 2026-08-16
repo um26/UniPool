@@ -8,6 +8,7 @@ import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Eas
 
 import { useAuth } from "@/src/auth/AuthContext";
 import { COLORS, SPACING, RADIUS, FONT } from "@/src/theme";
+import BrandFooter from "@/src/components/BrandFooter";
 
 const { width } = Dimensions.get("window");
 
@@ -107,6 +108,7 @@ export default function LoginScreen() {
           <Ionicons name="shield-checkmark" size={14} color={COLORS.muted} />
           <Text style={styles.footerText}>Safe rides. Real people. Verified emails.</Text>
         </View>
+        <BrandFooter />
       </View>
     </View>
   );

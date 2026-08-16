@@ -41,6 +41,7 @@ export const api = {
   myPools: () => req("/pools/mine"),
   myMatches: () => req("/pools/matches"),
   createPool: (body: any) => req("/pools", { method: "POST", body: JSON.stringify(body) }),
+  updatePool: (id: string, body: any) => req(`/pools/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   closePool: (id: string) => req(`/pools/${id}/close`, { method: "PATCH" }),
   reopenPool: (id: string) => req(`/pools/${id}/reopen`, { method: "PATCH" }),
   deletePool: (id: string) => req(`/pools/${id}`, { method: "DELETE" }),
@@ -48,4 +49,11 @@ export const api = {
   adminStats: () => req("/admin/stats"),
   adminPools: () => req("/admin/pools"),
   adminDeletePool: (id: string) => req(`/admin/pools/${id}`, { method: "DELETE" }),
+  sendMessage: (to_user_id: string, text: string, pool_id?: string) =>
+    req("/messages", { method: "POST", body: JSON.stringify({ to_user_id, text, pool_id }) }),
+  getThread: (otherUserId: string) => req(`/messages/thread/${otherUserId}`),
+  listConversations: () => req("/messages/conversations"),
+  getVapidKey: () => req("/push/vapid-public-key"),
+  pushSubscribe: (sub: { endpoint: string; keys: any }) => req("/push/subscribe", { method: "POST", body: JSON.stringify(sub) }),
+  pushUnsubscribe: (endpoint: string) => req("/push/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint }) }),
 };

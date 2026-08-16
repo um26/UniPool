@@ -33,6 +33,10 @@ ADMIN_EMAILS = {
     e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()
 }
 
+VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
+VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
+VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:admin@unipool.app")
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -63,6 +67,37 @@ class PoolRequestCreate(BaseModel):
     companions: int = 0
     luggage: Optional[str] = None
     notes: Optional[str] = None
+
+
+class PoolRequestUpdate(BaseModel):
+    from_location: Optional[str] = None
+    to_location: Optional[str] = None
+    travel_datetime: Optional[datetime] = None
+    gender_preference: Optional[str] = None
+    companions: Optional[int] = None
+    luggage: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class MessageCreate(BaseModel):
+    to_user_id: str
+    pool_id: Optional[str] = None
+    text: str
+
+
+class MessageOut(BaseModel):
+    message_id: str
+    from_user_id: str
+    to_user_id: str
+    pool_id: Optional[str] = None
+    text: str
+    created_at: datetime
+    read: bool = False
+
+
+class PushSubscribe(BaseModel):
+    endpoint: str
+    keys: dict
 
 
 class PoolRequestOut(BaseModel):
@@ -156,6 +191,32 @@ async def send_email(to_email: str, subject: str, html_content: str) -> bool:
         return False
 
 
+async def send_push(user_id: str, title: str, body: str, url: str = "/") -> None:
+    if not (VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY):
+        return
+    subs = await db.push_subscriptions.find({"user_id": user_id}, {"_id": 0}).to_list(10)
+    if not subs:
+        return
+    from pywebpush import webpush, WebPushException
+    import json as _json
+
+    payload = _json.dumps({"title": title, "body": body, "url": url})
+    for sub in subs:
+        try:
+            webpush(
+                subscription_info={"endpoint": sub["endpoint"], "keys": sub["keys"]},
+                data=payload,
+                vapid_private_key=VAPID_PRIVATE_KEY,
+                vapid_claims={"sub": VAPID_SUBJECT},
+            )
+        except WebPushException as e:
+            logger.warning(f"Push failed for {user_id}: {e}")
+            if "410" in str(e) or "404" in str(e):
+                await db.push_subscriptions.delete_one({"endpoint": sub["endpoint"]})
+        except Exception as e:
+            logger.warning(f"Push error for {user_id}: {e}")
+
+
 def match_email_html(recipient_name: str, match: dict, own: dict) -> str:
     return f"""
     <html><body style="font-family:Arial,sans-serif;background:#FFF9F2;padding:24px;">
@@ -214,6 +275,8 @@ async def find_and_notify_matches(new_pool: dict):
         await asyncio.gather(
             send_email(new_pool["user_email"], "UniPool: A matching cab-pool request!", html_new),
             send_email(m["user_email"], "UniPool: A matching cab-pool request!", html_old),
+            send_push(new_pool["user_id"], "New UniPool match!", f"{m['user_name']} is also going {m['from_location']} → {m['to_location']}", "/(tabs)/matches"),
+            send_push(m["user_id"], "New UniPool match!", f"{new_pool['user_name']} is also going {new_pool['from_location']} → {new_pool['to_location']}", "/(tabs)/matches"),
             return_exceptions=True,
         )
 
@@ -372,6 +435,23 @@ async def reopen_pool(pool_id: str, authorization: Optional[str] = Header(None))
     return _clean(await db.pools.find_one({"pool_id": pool_id}, {"_id": 0}))
 
 
+@api.patch("/pools/{pool_id}", response_model=PoolRequestOut)
+async def update_pool(pool_id: str, body: PoolRequestUpdate, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    updates = {k: v for k, v in body.dict(exclude_unset=True).items() if v is not None}
+    if not updates:
+        existing = await db.pools.find_one({"pool_id": pool_id, "user_id": user["user_id"]}, {"_id": 0})
+        if not existing:
+            raise HTTPException(status_code=404, detail="Not found")
+        return _clean(existing)
+    r = await db.pools.update_one(
+        {"pool_id": pool_id, "user_id": user["user_id"]}, {"$set": updates}
+    )
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Not found")
+    return _clean(await db.pools.find_one({"pool_id": pool_id}, {"_id": 0}))
+
+
 @api.get("/pools/matches", response_model=List[PoolRequestOut])
 async def my_matches(authorization: Optional[str] = Header(None)):
     """All pools that overlap +-1h with any of my own pools on the same route."""
@@ -409,6 +489,109 @@ async def delete_pool(pool_id: str, authorization: Optional[str] = Header(None))
     if r.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Not found")
     return {"ok": True}
+
+
+# ---------- Push ----------
+@api.get("/push/vapid-public-key")
+async def vapid_public_key():
+    return {"key": VAPID_PUBLIC_KEY}
+
+
+@api.post("/push/subscribe")
+async def push_subscribe(body: PushSubscribe, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    await db.push_subscriptions.update_one(
+        {"endpoint": body.endpoint},
+        {"$set": {"user_id": user["user_id"], "endpoint": body.endpoint, "keys": body.keys, "created_at": _now_utc()}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api.post("/push/unsubscribe")
+async def push_unsubscribe(body: dict, authorization: Optional[str] = Header(None)):
+    await get_current_user(authorization)
+    endpoint = body.get("endpoint")
+    if endpoint:
+        await db.push_subscriptions.delete_one({"endpoint": endpoint})
+    return {"ok": True}
+
+
+# ---------- Messaging ----------
+@api.post("/messages", response_model=MessageOut)
+async def send_message(body: MessageCreate, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    if not body.text.strip():
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+    to_user = await db.users.find_one({"user_id": body.to_user_id}, {"_id": 0})
+    if not to_user:
+        raise HTTPException(status_code=404, detail="Recipient not found")
+    doc = {
+        "message_id": f"msg_{uuid.uuid4().hex[:12]}",
+        "from_user_id": user["user_id"],
+        "to_user_id": body.to_user_id,
+        "pool_id": body.pool_id,
+        "text": body.text.strip()[:2000],
+        "created_at": _now_utc(),
+        "read": False,
+    }
+    await db.messages.insert_one(doc)
+    asyncio.create_task(send_push(
+        body.to_user_id,
+        f"New message from {user['name']}",
+        doc["text"][:100],
+        "/(tabs)/messages",
+    ))
+    return _clean(dict(doc))
+
+
+@api.get("/messages/thread/{other_user_id}", response_model=List[MessageOut])
+async def get_thread(other_user_id: str, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    cursor = db.messages.find(
+        {
+            "$or": [
+                {"from_user_id": user["user_id"], "to_user_id": other_user_id},
+                {"from_user_id": other_user_id, "to_user_id": user["user_id"]},
+            ]
+        },
+        {"_id": 0},
+    ).sort("created_at", 1)
+    msgs = await cursor.to_list(500)
+    await db.messages.update_many(
+        {"from_user_id": other_user_id, "to_user_id": user["user_id"], "read": False},
+        {"$set": {"read": True}},
+    )
+    return msgs
+
+
+@api.get("/messages/conversations")
+async def list_conversations(authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    uid = user["user_id"]
+    cursor = db.messages.find(
+        {"$or": [{"from_user_id": uid}, {"to_user_id": uid}]}, {"_id": 0}
+    ).sort("created_at", -1)
+    msgs = await cursor.to_list(1000)
+    seen: dict = {}
+    for m in msgs:
+        other = m["to_user_id"] if m["from_user_id"] == uid else m["from_user_id"]
+        if other not in seen:
+            unread = 1 if (m["to_user_id"] == uid and not m["read"]) else 0
+            seen[other] = {"other_user_id": other, "last_message": m["text"], "last_at": m["created_at"], "unread": unread}
+        elif m["to_user_id"] == uid and not m["read"]:
+            seen[other]["unread"] += 1
+
+    others = list(seen.keys())
+    if not others:
+        return []
+    users = await db.users.find({"user_id": {"$in": others}}, {"_id": 0}).to_list(len(others))
+    umap = {u["user_id"]: u for u in users}
+    out = []
+    for other_id, convo in seen.items():
+        u = umap.get(other_id, {})
+        out.append({**convo, "name": u.get("name", "Unknown"), "picture": u.get("picture")})
+    return out
 
 
 # ---------- Admin ----------

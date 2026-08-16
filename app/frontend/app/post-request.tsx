@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform, Alert, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 
 import { COLORS, SPACING, RADIUS, FONT } from "@/src/theme";
@@ -12,6 +12,8 @@ function pad(n: number) { return n < 10 ? `0${n}` : `${n}`; }
 
 export default function PostRequestScreen() {
   const router = useRouter();
+  const { edit } = useLocalSearchParams<{ edit?: string }>();
+  const isEditing = !!edit;
   const now = new Date();
   const defaultDate = new Date(now.getTime() + 60 * 60 * 1000);
   const [from, setFrom] = useState("");
@@ -23,6 +25,32 @@ export default function PostRequestScreen() {
   const [luggage, setLuggage] = useState("");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [loadingExisting, setLoadingExisting] = useState(isEditing);
+
+  useEffect(() => {
+    if (!isEditing) return;
+    (async () => {
+      try {
+        const mine = await api.myPools();
+        const pool = mine.find((p: any) => p.pool_id === edit);
+        if (!pool) { Alert.alert("Not found", "This query no longer exists."); router.back(); return; }
+        setFrom(pool.from_location);
+        setTo(pool.to_location);
+        const dt = new Date(pool.travel_datetime);
+        setDate(dt.toISOString().slice(0, 10));
+        setTime(`${pad(dt.getHours())}:${pad(dt.getMinutes())}`);
+        setGenderPref(pool.gender_preference || "any");
+        setCompanions(pool.companions || 0);
+        setLuggage(pool.luggage || "");
+        setNotes(pool.notes || "");
+      } catch (e: any) {
+        Alert.alert("Error", e.message);
+        router.back();
+      } finally {
+        setLoadingExisting(false);
+      }
+    })();
+  }, [isEditing, edit]);
 
   const submit = async () => {
     if (!from.trim() || !to.trim()) return Alert.alert("Missing", "From & To are required");
@@ -31,7 +59,7 @@ export default function PostRequestScreen() {
     const iso = new Date(`${date}T${time}:00`).toISOString();
     setSubmitting(true);
     try {
-      await api.createPool({
+      const payload = {
         from_location: from.trim(),
         to_location: to.trim(),
         travel_datetime: iso,
@@ -39,7 +67,12 @@ export default function PostRequestScreen() {
         companions,
         luggage: luggage.trim() || null,
         notes: notes.trim() || null,
-      });
+      };
+      if (isEditing) {
+        await api.updatePool(edit as string, payload);
+      } else {
+        await api.createPool(payload);
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
     } catch (e: any) {
@@ -54,10 +87,15 @@ export default function PostRequestScreen() {
           <Pressable testID="close-post" onPress={() => router.back()} hitSlop={12}>
             <Ionicons name="close" size={26} color={COLORS.onSurface} />
           </Pressable>
-          <Text style={styles.title}>Post a Pool</Text>
+          <Text style={styles.title}>{isEditing ? "Edit Pool" : "Post a Pool"}</Text>
           <View style={{ width: 26 }} />
         </View>
 
+        {loadingExisting ? (
+          <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 60 }}>
+            <ActivityIndicator color={COLORS.indigo} />
+          </View>
+        ) : (
         <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 140 }}>
           <Field label="From (city / area)" testID="input-from">
             <TextInput testID="from-input" value={from} onChangeText={setFrom} placeholder="e.g. IIT Delhi" style={styles.input} placeholderTextColor={COLORS.muted} />
@@ -106,13 +144,14 @@ export default function PostRequestScreen() {
             <TextInput testID="notes-input" value={notes} onChangeText={setNotes} placeholder="Any details" style={[styles.input, { height: 80, textAlignVertical: "top" }]} multiline placeholderTextColor={COLORS.muted} />
           </Field>
         </ScrollView>
+        )}
 
         <View style={styles.footer}>
-          <Pressable testID="submit-pool" disabled={submitting} onPress={submit} style={[styles.submit, submitting && { opacity: 0.6 }]}>
+          <Pressable testID="submit-pool" disabled={submitting || loadingExisting} onPress={submit} style={[styles.submit, (submitting || loadingExisting) && { opacity: 0.6 }]}>
             {submitting ? <ActivityIndicator color="#fff" /> : (
               <>
-                <Ionicons name="paper-plane" size={18} color="#fff" />
-                <Text style={styles.submitText}>Post Request</Text>
+                <Ionicons name={isEditing ? "checkmark" : "paper-plane"} size={18} color="#fff" />
+                <Text style={styles.submitText}>{isEditing ? "Save Changes" : "Post Request"}</Text>
               </>
             )}
           </Pressable>
