@@ -72,6 +72,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.google.accounts.id.initialize({
       client_id: GOOGLE_CLIENT_ID,
       callback: handleCredential,
+      auto_select: false,
+      cancel_on_tap_outside: true,
     });
   }, [handleCredential]);
 
@@ -114,6 +116,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       initGoogle().then(() => {
         const el = document.getElementById(containerId);
         if (el && window.google?.accounts?.id) {
+          // Clear any stale button from a previous mount before re-rendering,
+          // otherwise repeated calls can stack duplicate/broken iframes.
+          el.innerHTML = "";
           window.google.accounts.id.renderButton(el, {
             theme: "outline",
             size: "large",
@@ -129,6 +134,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try { await api.logout(); } catch {}
     await setToken(null);
     setUser(null);
+    // Without this, Google Identity Services silently suppresses the next
+    // sign-in attempt (button click / prompt does nothing) because it still
+    // thinks there's an active selected session from before.
+    if (Platform.OS === "web" && window.google?.accounts?.id) {
+      try {
+        window.google.accounts.id.disableAutoSelect();
+        window.google.accounts.id.cancel();
+      } catch {}
+    }
   }, []);
 
   return (

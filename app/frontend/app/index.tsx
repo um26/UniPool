@@ -81,7 +81,12 @@ export default function LoginScreen() {
             {loading ? (
               <ActivityIndicator color={COLORS.indigo} />
             ) : (
-              <View nativeID="google-signin-container" />
+              <>
+                <View nativeID="google-signin-container" />
+                <Pressable testID="signin-fallback" onPress={signIn} hitSlop={8} style={{ marginTop: SPACING.sm }}>
+                  <Text style={styles.fallbackLink}>Button not showing? Tap here</Text>
+                </Pressable>
+              </>
             )}
           </View>
         ) : (
@@ -140,6 +145,7 @@ const styles = StyleSheet.create({
   heading: { fontSize: FONT["2xl"], fontWeight: "800", color: COLORS.onSurface, marginBottom: SPACING.sm },
   subheading: { fontSize: FONT.base, color: COLORS.muted, marginBottom: SPACING.xl, lineHeight: 20 },
   googleBtnWrap: { alignItems: "center", justifyContent: "center", minHeight: 44 },
+  fallbackLink: { color: COLORS.muted, fontSize: FONT.sm, textDecorationLine: "underline" },
   googleBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: SPACING.md,
     backgroundColor: "#fff", borderRadius: RADIUS.pill, paddingVertical: 16,
