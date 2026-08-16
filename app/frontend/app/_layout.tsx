@@ -42,6 +42,7 @@ function AuthGate() {
       <Stack.Screen name="games/tap-plane" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="games/memory-match" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="games/word-scramble" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="games/rickshaw-rush" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="chat/[userId]" options={{ animation: "slide_from_right" }} />
     </Stack>
   );
