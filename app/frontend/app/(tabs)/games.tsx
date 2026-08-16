@@ -53,6 +53,42 @@ export default function GamesHub() {
             <Text style={styles.cardSub}>Beat your best — tap the plane before it flies off.</Text>
           </View>
         </Pressable>
+
+        <Pressable
+          testID="game-memory-match-card"
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/games/memory-match"); }}
+          style={styles.card}
+        >
+          <Image
+            source={{ uri: "https://images.unsplash.com/photo-1488646953014-85cb44e25828?crop=entropy&cs=srgb&fm=jpg&w=1200&q=85" }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+          />
+          <LinearGradient colors={["rgba(26,35,126,0.05)", "rgba(26,35,126,0.85)"]} style={StyleSheet.absoluteFill} />
+          <View style={styles.cardBody}>
+            <View style={styles.tagRow}><Ionicons name="grid" size={14} color={COLORS.cream} /><Text style={styles.tag}>MEMORY</Text></View>
+            <Text style={styles.cardTitle}>Match the Travel Icons</Text>
+            <Text style={styles.cardSub}>Flip cards, find pairs, beat your move count.</Text>
+          </View>
+        </Pressable>
+
+        <Pressable
+          testID="game-word-scramble-card"
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/games/word-scramble"); }}
+          style={styles.card}
+        >
+          <Image
+            source={{ uri: "https://images.unsplash.com/photo-1524661135-423995f22d0b?crop=entropy&cs=srgb&fm=jpg&w=1200&q=85" }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+          />
+          <LinearGradient colors={["rgba(255,153,51,0.1)", "rgba(176,92,0,0.85)"]} style={StyleSheet.absoluteFill} />
+          <View style={styles.cardBody}>
+            <View style={styles.tagRow}><Ionicons name="text" size={14} color={COLORS.cream} /><Text style={styles.tag}>SPEED ROUND</Text></View>
+            <Text style={styles.cardTitle}>Word Scramble</Text>
+            <Text style={styles.cardSub}>Unscramble Indian cities before time runs out.</Text>
+          </View>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
