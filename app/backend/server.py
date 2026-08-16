@@ -369,9 +369,30 @@ async def update_profile(body: ProfileUpdate, authorization: Optional[str] = Hea
 
 
 # ---------- Pool Routes ----------
+MAX_OPEN_POOLS_PER_USER = 5
+MAX_POOLS_PER_HOUR = 10
+
+
 @api.post("/pools", response_model=PoolRequestOut)
 async def create_pool(body: PoolRequestCreate, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
+
+    open_count = await db.pools.count_documents({"user_id": user["user_id"], "status": "open"})
+    if open_count >= MAX_OPEN_POOLS_PER_USER:
+        raise HTTPException(
+            status_code=429,
+            detail=f"You already have {MAX_OPEN_POOLS_PER_USER} open queries. Close one before posting a new one.",
+        )
+
+    recent_count = await db.pools.count_documents(
+        {"user_id": user["user_id"], "created_at": {"$gte": _now_utc() - timedelta(hours=1)}}
+    )
+    if recent_count >= MAX_POOLS_PER_HOUR:
+        raise HTTPException(
+            status_code=429,
+            detail="You're posting too fast. Please wait a bit before posting again.",
+        )
+
     pool_id = f"pool_{uuid.uuid4().hex[:12]}"
     doc = {
         "pool_id": pool_id,
@@ -523,6 +544,13 @@ async def send_message(body: MessageCreate, authorization: Optional[str] = Heade
     user = await get_current_user(authorization)
     if not body.text.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    recent_msgs = await db.messages.count_documents(
+        {"from_user_id": user["user_id"], "created_at": {"$gte": _now_utc() - timedelta(minutes=1)}}
+    )
+    if recent_msgs >= 30:
+        raise HTTPException(status_code=429, detail="You're sending messages too fast. Slow down a bit.")
+
     to_user = await db.users.find_one({"user_id": body.to_user_id}, {"_id": 0})
     if not to_user:
         raise HTTPException(status_code=404, detail="Recipient not found")
