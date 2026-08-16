@@ -13,7 +13,7 @@ import BrandFooter from "@/src/components/BrandFooter";
 const { width } = Dimensions.get("window");
 
 export default function LoginScreen() {
-  const { user, loading, signIn, renderGoogleButton } = useAuth();
+  const { user, loading, signingIn, signInError, signIn, renderGoogleButton } = useAuth();
   const router = useRouter();
   const planeX = useSharedValue(-80);
 
@@ -80,12 +80,22 @@ export default function LoginScreen() {
           <View style={styles.googleBtnWrap}>
             {loading ? (
               <ActivityIndicator color={COLORS.indigo} />
+            ) : signingIn ? (
+              <View style={{ alignItems: "center" }}>
+                <ActivityIndicator color={COLORS.indigo} />
+                <Text style={styles.signingInText}>
+                  Signing you in… this can take up to a minute if the server was asleep.
+                </Text>
+              </View>
             ) : (
               <>
                 <View nativeID="google-signin-container" />
                 <Pressable testID="signin-fallback" onPress={signIn} hitSlop={8} style={{ marginTop: SPACING.sm }}>
                   <Text style={styles.fallbackLink}>Button not showing? Tap here</Text>
                 </Pressable>
+                {signInError ? (
+                  <Text testID="signin-error" style={styles.errorText}>{signInError}</Text>
+                ) : null}
               </>
             )}
           </View>
@@ -146,6 +156,8 @@ const styles = StyleSheet.create({
   subheading: { fontSize: FONT.base, color: COLORS.muted, marginBottom: SPACING.xl, lineHeight: 20 },
   googleBtnWrap: { alignItems: "center", justifyContent: "center", minHeight: 44 },
   fallbackLink: { color: COLORS.muted, fontSize: FONT.sm, textDecorationLine: "underline" },
+  signingInText: { color: COLORS.muted, fontSize: FONT.sm, marginTop: SPACING.sm, textAlign: "center", maxWidth: 260 },
+  errorText: { color: COLORS.error, fontSize: FONT.sm, marginTop: SPACING.sm, textAlign: "center", maxWidth: 280 },
   googleBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: SPACING.md,
     backgroundColor: "#fff", borderRadius: RADIUS.pill, paddingVertical: 16,

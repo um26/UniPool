@@ -14,6 +14,10 @@ export type UniUser = {
 type AuthCtx = {
   user: UniUser | null;
   loading: boolean;
+  // True while we're mid-way exchanging a Google credential with our backend.
+  signingIn: boolean;
+  // Set (with a message) if the last sign-in attempt failed. Cleared on next attempt.
+  signInError: string | null;
   // On web this opens the Google Sign-In popup itself, so no args needed.
   // Exposed so screens can trigger it from a custom button if desired.
   signIn: () => Promise<void>;
@@ -54,14 +58,27 @@ function loadGoogleScript(): Promise<void> {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UniUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [signingIn, setSigningIn] = useState(false);
+  const [signInError, setSignInError] = useState<string | null>(null);
 
   const handleCredential = useCallback(async (response: { credential: string }) => {
+    setSigningIn(true);
+    setSignInError(null);
     try {
+      // Render's free tier can take 30-50s to wake from a cold start —
+      // give this real room instead of failing silently and fast.
       const res = await api.googleSignIn(response.credential);
       await setToken(res.session_token);
       setUser(res.user);
-    } catch (e) {
+    } catch (e: any) {
       console.warn("Google sign-in failed", e);
+      setSignInError(
+        e?.message === "Failed to fetch" || e?.name === "TypeError"
+          ? "Couldn't reach the server. It may be waking up from sleep — please try again in a few seconds."
+          : e?.message || "Sign-in failed. Please try again."
+      );
+    } finally {
+      setSigningIn(false);
     }
   }, []);
 
@@ -146,7 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <Ctx.Provider value={{ user, loading, signIn, signOut, refresh, renderGoogleButton }}>
+    <Ctx.Provider value={{ user, loading, signingIn, signInError, signIn, signOut, refresh, renderGoogleButton }}>
       {children}
     </Ctx.Provider>
   );
