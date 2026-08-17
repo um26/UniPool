@@ -6,6 +6,8 @@ import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 
 import { COLORS, SPACING, RADIUS, FONT } from "@/src/theme";
+import { api } from "@/src/api/client";
+import LeaderboardModal from "@/src/components/LeaderboardModal";
 
 const WORDS = [
   "MUMBAI", "DELHI", "JAIPUR", "GOA", "KOLKATA", "CHENNAI",
@@ -46,6 +48,11 @@ export default function WordScramble() {
   const [timeLeft, setTimeLeft] = useState(ROUND_SECONDS);
   const [feedback, setFeedback] = useState<"correct" | "wrong" | null>(null);
   const [done, setDone] = useState(false);
+  const [showBoard, setShowBoard] = useState(false);
+
+  useEffect(() => {
+    if (done) api.submitScore("word-scramble", score).catch(() => {});
+  }, [done]);
 
   const current = words[round];
 
@@ -111,8 +118,12 @@ export default function WordScramble() {
             {score >= TOTAL_ROUNDS * 4 ? "Word wizard!" : score >= TOTAL_ROUNDS * 2 ? "Nicely done!" : "Give it another shot!"}
           </Text>
           <Pressable testID="scramble-restart" onPress={restart} style={styles.btn}><Text style={styles.btnText}>Play again</Text></Pressable>
+          <Pressable testID="scramble-leaderboard" onPress={() => setShowBoard(true)} style={{ marginTop: SPACING.sm }}>
+            <Text style={{ color: COLORS.indigo, fontWeight: "700", textDecorationLine: "underline" }}>View leaderboard</Text>
+          </Pressable>
           <Pressable testID="scramble-back" onPress={() => router.back()} style={[styles.btn, styles.btnGhost]}><Text style={[styles.btnText, { color: COLORS.indigo }]}>Back</Text></Pressable>
         </View>
+        <LeaderboardModal visible={showBoard} onClose={() => setShowBoard(false)} game="word-scramble" gameLabel="Word Scramble" unit="pts" />
       </SafeAreaView>
     );
   }

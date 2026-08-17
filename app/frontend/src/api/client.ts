@@ -56,4 +56,6 @@ export const api = {
   getVapidKey: () => req("/push/vapid-public-key"),
   pushSubscribe: (sub: { endpoint: string; keys: any }) => req("/push/subscribe", { method: "POST", body: JSON.stringify(sub) }),
   pushUnsubscribe: (endpoint: string) => req("/push/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint }) }),
+  submitScore: (game: string, score: number) => req("/games/score", { method: "POST", body: JSON.stringify({ game, score }) }),
+  getLeaderboard: (game: string) => req(`/games/leaderboard/${game}`),
 };

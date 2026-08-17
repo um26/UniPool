@@ -8,6 +8,8 @@ import * as Haptics from "expo-haptics";
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, Easing } from "react-native-reanimated";
 
 import { COLORS, SPACING, RADIUS, FONT } from "@/src/theme";
+import { api } from "@/src/api/client";
+import LeaderboardModal from "@/src/components/LeaderboardModal";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const ROAD_W = Math.min(SCREEN_W - SPACING.lg * 2, 420);
@@ -37,6 +39,7 @@ export default function RickshawRush() {
   const [best, setBest] = useState(0);
   const [running, setRunning] = useState(false);
   const [gameOver, setGameOver] = useState(false);
+  const [showBoard, setShowBoard] = useState(false);
 
   const laneX = useSharedValue(LANE_W); // lane 1 (middle) initial x offset
   const speedRef = useRef(6);
@@ -63,6 +66,7 @@ export default function RickshawRush() {
     setGameOver(true);
     setBest((b) => Math.max(b, score));
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    api.submitScore("rickshaw-rush", score).catch(() => {});
   }, [score]);
 
   useEffect(() => {
@@ -219,10 +223,15 @@ export default function RickshawRush() {
               <Pressable testID="rickshaw-restart" onPress={start} style={styles.startBtn}>
                 <Text style={styles.startText}>Ride again</Text>
               </Pressable>
+              <Pressable testID="rickshaw-leaderboard" onPress={() => setShowBoard(true)} style={{ marginTop: SPACING.md }}>
+                <Text style={{ color: "#fff", fontWeight: "700", textDecorationLine: "underline" }}>View leaderboard</Text>
+              </Pressable>
             </View>
           )}
         </View>
       </View>
+
+      <LeaderboardModal visible={showBoard} onClose={() => setShowBoard(false)} game="rickshaw-rush" gameLabel="Rickshaw Rush" unit="pts" />
     </SafeAreaView>
   );
 }

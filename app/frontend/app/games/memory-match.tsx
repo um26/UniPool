@@ -7,6 +7,8 @@ import * as Haptics from "expo-haptics";
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence, withTiming } from "react-native-reanimated";
 
 import { COLORS, SPACING, RADIUS, FONT } from "@/src/theme";
+import { api } from "@/src/api/client";
+import LeaderboardModal from "@/src/components/LeaderboardModal";
 
 const ICONS = ["car-sport", "airplane", "boat", "bicycle", "compass", "map"] as const;
 type IconName = (typeof ICONS)[number];
@@ -31,6 +33,7 @@ export default function MemoryMatch() {
   const [running, setRunning] = useState(true);
   const [won, setWon] = useState(false);
   const [best, setBest] = useState<number | null>(null);
+  const [showBoard, setShowBoard] = useState(false);
   const lockRef = useRef(false);
 
   useEffect(() => {
@@ -45,6 +48,7 @@ export default function MemoryMatch() {
       setWon(true);
       setBest((b) => (b === null ? moves : Math.min(b, moves)));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      api.submitScore("memory-match", moves).catch(() => {});
     }
   }, [cards]);
 
@@ -124,9 +128,14 @@ export default function MemoryMatch() {
             <Pressable testID="memory-restart" onPress={restart} style={styles.playAgainBtn}>
               <Text style={styles.playAgainText}>Play again</Text>
             </Pressable>
+            <Pressable testID="memory-leaderboard" onPress={() => setShowBoard(true)} style={{ marginTop: SPACING.md }}>
+              <Text style={{ color: COLORS.indigo, fontWeight: "700", textDecorationLine: "underline" }}>View leaderboard</Text>
+            </Pressable>
           </View>
         </View>
       )}
+
+      <LeaderboardModal visible={showBoard} onClose={() => setShowBoard(false)} game="memory-match" gameLabel="Match the Travel Icons" unit="moves" />
     </SafeAreaView>
   );
 }

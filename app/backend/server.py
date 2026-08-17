@@ -122,6 +122,11 @@ class ProfileUpdate(BaseModel):
     phone: Optional[str] = None
 
 
+class ScoreSubmit(BaseModel):
+    game: str
+    score: int
+
+
 # ---------- Helpers ----------
 def _clean(doc: dict) -> dict:
     if not doc:
@@ -659,6 +664,79 @@ async def admin_delete_pool(pool_id: str, authorization: Optional[str] = Header(
     if r.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Not found")
     return {"ok": True}
+
+
+# ---------- Game Leaderboards ----------
+ALLOWED_GAMES = {"tap-plane", "memory-match", "word-scramble", "rickshaw-rush", "trivia"}
+# For these games a LOWER score is better (e.g. fewer moves). Everything
+# else defaults to higher-is-better.
+LOWER_IS_BETTER = {"memory-match"}
+
+
+@api.post("/games/score")
+async def submit_score(body: ScoreSubmit, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    if body.game not in ALLOWED_GAMES:
+        raise HTTPException(status_code=400, detail="Unknown game")
+    doc = {
+        "score_id": f"score_{uuid.uuid4().hex[:12]}",
+        "user_id": user["user_id"],
+        "user_name": user["name"],
+        "game": body.game,
+        "score": body.score,
+        "created_at": _now_utc(),
+    }
+    await db.game_scores.insert_one(doc)
+
+    # Return the user's rank on this game's leaderboard so the UI can
+    # show "You're #3!" style feedback immediately.
+    ascending = body.game in LOWER_IS_BETTER
+    board = await _leaderboard_for(body.game, limit=1000)
+    rank = next((i + 1 for i, r in enumerate(board) if r["user_id"] == user["user_id"]), None)
+    return {"ok": True, "rank": rank, "total_players": len(board)}
+
+
+async def _leaderboard_for(game: str, limit: int = 20) -> list:
+    ascending = game in LOWER_IS_BETTER
+    pipeline = [
+        {"$match": {"game": game}},
+        {"$sort": {"score": 1 if ascending else -1, "created_at": 1}},
+        {"$group": {
+            "_id": "$user_id",
+            "user_name": {"$first": "$user_name"},
+            "score": {"$first": "$score"},
+            "created_at": {"$first": "$created_at"},
+        }},
+        {"$sort": {"score": 1 if ascending else -1}},
+        {"$limit": limit},
+    ]
+    results = await db.game_scores.aggregate(pipeline).to_list(limit)
+    return [
+        {"user_id": r["_id"], "user_name": r["user_name"], "score": r["score"]}
+        for r in results
+    ]
+
+
+@api.get("/games/leaderboard/{game}")
+async def leaderboard(game: str, authorization: Optional[str] = Header(None)):
+    if game not in ALLOWED_GAMES:
+        raise HTTPException(status_code=404, detail="Unknown game")
+    user = None
+    try:
+        user = await get_current_user(authorization)
+    except HTTPException:
+        pass
+    board = await _leaderboard_for(game, limit=20)
+    my_best = None
+    if user:
+        ascending = game in LOWER_IS_BETTER
+        cursor = db.game_scores.find(
+            {"game": game, "user_id": user["user_id"]}, {"_id": 0}
+        ).sort("score", 1 if ascending else -1).limit(1)
+        mine = await cursor.to_list(1)
+        if mine:
+            my_best = mine[0]["score"]
+    return {"entries": board, "my_best": my_best, "ascending": game in LOWER_IS_BETTER}
 
 
 # ---------- Trivia ----------
