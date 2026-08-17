@@ -8,9 +8,11 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider, useAuth } from "@/src/auth/AuthContext";
 import { COLORS } from "@/src/theme";
+import { applyPremiumFontDefaults } from "@/src/utils/setupFonts";
 
 LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
+applyPremiumFontDefaults();
 
 function AuthGate() {
   const { user, loading } = useAuth();

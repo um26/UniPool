@@ -6,7 +6,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 
-import { COLORS, SPACING, RADIUS, FONT } from "@/src/theme";
+import { COLORS, SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/auth/AuthContext";
 import BrandFooter from "@/src/components/BrandFooter";
@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
   header: { alignItems: "center", paddingVertical: SPACING.xl, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
   avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: COLORS.cream, alignItems: "center", justifyContent: "center", marginBottom: SPACING.md },
   avatarText: { color: COLORS.indigo, fontSize: 28, fontWeight: "800" },
-  name: { color: "#fff", fontSize: FONT.xl, fontWeight: "800" },
+  name: { color: "#fff", fontSize: FONT.xl, fontWeight: "800", fontFamily: FONT_DISPLAY },
   email: { color: "rgba(255,236,194,0.9)", marginTop: 4 },
   adminBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: COLORS.cream, borderRadius: RADIUS.pill, paddingHorizontal: 10, paddingVertical: 4, marginTop: SPACING.sm },
   adminBadgeText: { color: COLORS.indigo, fontWeight: "800", fontSize: 11 },
