@@ -106,13 +106,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     (async () => {
+      // Don't let a slow/cold backend block the whole app behind a spinner.
+      // Kick off Google's script load (fast, client-side) and unblock
+      // rendering immediately — if a saved session exists, validate it in
+      // the background and let `user` update whenever it resolves. The
+      // login screen already auto-redirects once `user` becomes truthy.
       try {
         await initGoogle();
-        const token = await getToken();
-        if (token) await refresh();
+      } catch (e) {
+        console.warn("Google script failed to load (ad-blocker?)", e);
       } finally {
         setLoading(false);
       }
+      const token = await getToken();
+      if (token) refresh();
     })();
   }, [initGoogle, refresh]);
 
