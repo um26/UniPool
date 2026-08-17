@@ -7,11 +7,14 @@ import { useFocusEffect, useRouter } from "expo-router";
 
 import { COLORS, SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
 import { api } from "@/src/api/client";
+import RatingBadge from "@/src/components/RatingBadge";
+import RatingModal from "@/src/components/RatingModal";
 
 type Pool = {
   pool_id: string; user_id: string; user_name: string; user_email: string;
   from_location: string; to_location: string; travel_datetime: string;
   gender_preference: string; companions: number; luggage?: string | null; notes?: string | null;
+  user_rating_avg?: number | null; user_rating_count?: number;
 };
 
 export default function MatchesScreen() {
@@ -19,6 +22,7 @@ export default function MatchesScreen() {
   const [items, setItems] = useState<Pool[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [ratingTarget, setRatingTarget] = useState<Pool | null>(null);
 
   const load = useCallback(async () => {
     try { setItems(await api.myMatches()); }
@@ -62,6 +66,9 @@ export default function MatchesScreen() {
                 <Text style={styles.when}>{new Date(item.travel_datetime).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}</Text>
               </View>
               <Text style={styles.name}>{item.user_name}</Text>
+              <View style={{ marginBottom: SPACING.sm }}>
+                <RatingBadge avg={item.user_rating_avg} count={item.user_rating_count} />
+              </View>
               <View style={styles.routeRow}>
                 <Ionicons name="location" size={16} color={COLORS.saffron} />
                 <Text style={styles.route}>{item.from_location}</Text>
@@ -85,9 +92,27 @@ export default function MatchesScreen() {
                 >
                   <Ionicons name="mail" size={16} color={COLORS.indigo} />
                 </Pressable>
+                <Pressable
+                  testID={`rate-${item.pool_id}`}
+                  onPress={() => setRatingTarget(item)}
+                  style={[styles.cta, styles.ctaGhost]}
+                >
+                  <Ionicons name="star" size={16} color={COLORS.saffron} />
+                </Pressable>
               </View>
             </View>
           )}
+        />
+      )}
+
+      {ratingTarget && (
+        <RatingModal
+          visible={!!ratingTarget}
+          onClose={() => setRatingTarget(null)}
+          userId={ratingTarget.user_id}
+          userName={ratingTarget.user_name}
+          poolId={ratingTarget.pool_id}
+          onSubmitted={load}
         />
       )}
     </SafeAreaView>

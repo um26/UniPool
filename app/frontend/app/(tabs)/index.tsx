@@ -10,11 +10,13 @@ import { COLORS, SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/auth/AuthContext";
 import PressableScale from "@/src/components/PressableScale";
+import RatingBadge from "@/src/components/RatingBadge";
 
 type Pool = {
   pool_id: string; user_id: string; user_name: string; user_email: string;
   from_location: string; to_location: string; travel_datetime: string;
   gender_preference: string; companions: number; luggage?: string | null; notes?: string | null;
+  user_rating_avg?: number | null; user_rating_count?: number;
 };
 
 const CHIPS = ["All", "Today", "Tomorrow", "Airport", "Railway"];
@@ -127,6 +129,9 @@ function PoolCard({ pool, mine }: { pool: Pool; mine: boolean }) {
         <View style={{ flex: 1 }}>
           <Text style={styles.cardName}>{pool.user_name}{mine && <Text style={{ color: COLORS.saffron }}>  (you)</Text>}</Text>
           <Text style={styles.cardWhen}>{formatDT(pool.travel_datetime)}</Text>
+          <View style={{ marginTop: 3 }}>
+            <RatingBadge avg={pool.user_rating_avg} count={pool.user_rating_count} />
+          </View>
         </View>
         {pool.gender_preference === "same" && (
           <View style={styles.badge}><Text style={styles.badgeText}>Same-gender</Text></View>

@@ -115,6 +115,8 @@ class PoolRequestOut(BaseModel):
     notes: Optional[str] = None
     status: str = "open"
     created_at: datetime
+    user_rating_avg: Optional[float] = None
+    user_rating_count: int = 0
 
 
 class ProfileUpdate(BaseModel):
@@ -125,6 +127,13 @@ class ProfileUpdate(BaseModel):
 class ScoreSubmit(BaseModel):
     game: str
     score: int
+
+
+class RatingCreate(BaseModel):
+    rated_user_id: str
+    stars: int
+    comment: Optional[str] = None
+    pool_id: Optional[str] = None
 
 
 # ---------- Helpers ----------
@@ -153,6 +162,24 @@ def _ensure_aware(dt: datetime) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt
+
+
+async def _enrich_with_ratings(pools: list) -> list:
+    """Batch-attach user_rating_avg/user_rating_count to a list of pool dicts."""
+    if not pools:
+        return pools
+    user_ids = list({p["user_id"] for p in pools})
+    pipeline = [
+        {"$match": {"rated_user_id": {"$in": user_ids}}},
+        {"$group": {"_id": "$rated_user_id", "avg": {"$avg": "$stars"}, "count": {"$sum": 1}}},
+    ]
+    stats = await db.ratings.aggregate(pipeline).to_list(len(user_ids))
+    stat_map = {s["_id"]: s for s in stats}
+    for p in pools:
+        s = stat_map.get(p["user_id"])
+        p["user_rating_avg"] = round(s["avg"], 1) if s else None
+        p["user_rating_count"] = s["count"] if s else 0
+    return pools
 
 
 async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
@@ -429,14 +456,16 @@ async def list_pools(authorization: Optional[str] = Header(None)):
         {"travel_datetime": {"$gte": now - timedelta(hours=2)}, "status": "open"},
         {"_id": 0},
     ).sort("travel_datetime", 1)
-    return await cursor.to_list(200)
+    results = await cursor.to_list(200)
+    return await _enrich_with_ratings(results)
 
 
 @api.get("/pools/mine", response_model=List[PoolRequestOut])
 async def my_pools(authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     cursor = db.pools.find({"user_id": user["user_id"]}, {"_id": 0}).sort("travel_datetime", -1)
-    return await cursor.to_list(200)
+    results = await cursor.to_list(200)
+    return await _enrich_with_ratings(results)
 
 
 @api.patch("/pools/{pool_id}/close", response_model=PoolRequestOut)
@@ -505,7 +534,7 @@ async def my_matches(authorization: Optional[str] = Header(None)):
         )
         for m in await cursor.to_list(100):
             results[m["pool_id"]] = m
-    return list(results.values())
+    return await _enrich_with_ratings(list(results.values()))
 
 
 @api.delete("/pools/{pool_id}")
@@ -625,6 +654,60 @@ async def list_conversations(authorization: Optional[str] = Header(None)):
         u = umap.get(other_id, {})
         out.append({**convo, "name": u.get("name", "Unknown"), "picture": u.get("picture")})
     return out
+
+
+# ---------- Ratings ----------
+@api.post("/ratings")
+async def submit_rating(body: RatingCreate, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    if body.rated_user_id == user["user_id"]:
+        raise HTTPException(status_code=400, detail="You can't rate yourself")
+    if not (1 <= body.stars <= 5):
+        raise HTTPException(status_code=400, detail="Stars must be between 1 and 5")
+    rated_user = await db.users.find_one({"user_id": body.rated_user_id}, {"_id": 0})
+    if not rated_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # One rating per (rater, rated) pair — resubmitting updates it.
+    await db.ratings.update_one(
+        {"rater_user_id": user["user_id"], "rated_user_id": body.rated_user_id},
+        {"$set": {
+            "rater_user_id": user["user_id"],
+            "rater_name": user["name"],
+            "rated_user_id": body.rated_user_id,
+            "stars": body.stars,
+            "comment": (body.comment or "").strip()[:500] or None,
+            "pool_id": body.pool_id,
+            "created_at": _now_utc(),
+        }},
+        upsert=True,
+    )
+    pipeline = [
+        {"$match": {"rated_user_id": body.rated_user_id}},
+        {"$group": {"_id": None, "avg": {"$avg": "$stars"}, "count": {"$sum": 1}}},
+    ]
+    stats = await db.ratings.aggregate(pipeline).to_list(1)
+    s = stats[0] if stats else {"avg": body.stars, "count": 1}
+    return {"ok": True, "user_rating_avg": round(s["avg"], 1), "user_rating_count": s["count"]}
+
+
+@api.get("/ratings/user/{user_id}")
+async def get_user_ratings(user_id: str, authorization: Optional[str] = Header(None)):
+    await get_current_user(authorization)
+    cursor = db.ratings.find({"rated_user_id": user_id}, {"_id": 0}).sort("created_at", -1)
+    ratings = await cursor.to_list(100)
+    avg = round(sum(r["stars"] for r in ratings) / len(ratings), 1) if ratings else None
+    return {"average": avg, "count": len(ratings), "ratings": ratings}
+
+
+@api.get("/ratings/can-rate/{user_id}")
+async def can_rate(user_id: str, authorization: Optional[str] = Header(None)):
+    """Whether the current user has already rated this user, and their existing rating if so."""
+    user = await get_current_user(authorization)
+    existing = await db.ratings.find_one(
+        {"rater_user_id": user["user_id"], "rated_user_id": user_id}, {"_id": 0}
+    )
+    return {"already_rated": existing is not None, "existing": existing}
 
 
 # ---------- Admin ----------
