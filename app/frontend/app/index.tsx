@@ -7,12 +7,13 @@ import { useRouter } from "expo-router";
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing, withDelay } from "react-native-reanimated";
 
 import { useAuth } from "@/src/auth/AuthContext";
-import { COLORS, SPACING, RADIUS, FONT } from "@/src/theme";
+import { COLORS, SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
+import BrandFooter from "@/src/components/BrandFooter";
 
 const { width } = Dimensions.get("window");
 
 export default function LoginScreen() {
-  const { user, loading, signIn, renderGoogleButton } = useAuth();
+  const { user, loading, signingIn, signInError, signIn, renderGoogleButton } = useAuth();
   const router = useRouter();
   const planeX = useSharedValue(-80);
 
@@ -79,8 +80,23 @@ export default function LoginScreen() {
           <View style={styles.googleBtnWrap}>
             {loading ? (
               <ActivityIndicator color={COLORS.indigo} />
+            ) : signingIn ? (
+              <View style={{ alignItems: "center" }}>
+                <ActivityIndicator color={COLORS.indigo} />
+                <Text style={styles.signingInText}>
+                  Signing you in… this can take up to a minute if the server was asleep.
+                </Text>
+              </View>
             ) : (
-              <View nativeID="google-signin-container" />
+              <>
+                <View nativeID="google-signin-container" />
+                <Pressable testID="signin-fallback" onPress={signIn} hitSlop={8} style={{ marginTop: SPACING.sm }}>
+                  <Text style={styles.fallbackLink}>Button not showing? Tap here</Text>
+                </Pressable>
+                {signInError ? (
+                  <Text testID="signin-error" style={styles.errorText}>{signInError}</Text>
+                ) : null}
+              </>
             )}
           </View>
         ) : (
@@ -107,6 +123,7 @@ export default function LoginScreen() {
           <Ionicons name="shield-checkmark" size={14} color={COLORS.muted} />
           <Text style={styles.footerText}>Safe rides. Real people. Verified emails.</Text>
         </View>
+        <BrandFooter />
       </View>
     </View>
   );
@@ -117,10 +134,11 @@ const styles = StyleSheet.create({
   top: { paddingTop: 88, paddingHorizontal: SPACING.xl, alignItems: "center" },
   logoRow: { flexDirection: "row", alignItems: "center", gap: SPACING.md },
   logoBadge: {
-    width: 46, height: 46, borderRadius: RADIUS.pill, backgroundColor: "rgba(255,236,194,0.18)",
-    alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(255,236,194,0.35)",
+    width: 50, height: 50, borderRadius: RADIUS.pill, backgroundColor: "rgba(255,236,194,0.18)",
+    alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(255,236,194,0.4)",
+    shadowColor: COLORS.saffron, shadowOpacity: 0.5, shadowRadius: 16, shadowOffset: { width: 0, height: 0 },
   },
-  logo: { fontSize: 36, fontWeight: "800", color: COLORS.cream, letterSpacing: 0.5 },
+  logo: { fontSize: 38, fontWeight: "800", color: COLORS.cream, letterSpacing: 0.3, fontFamily: FONT_DISPLAY },
   tagline: { color: "rgba(255,236,194,0.9)", marginTop: SPACING.md, fontSize: FONT.lg, textAlign: "center" },
 
   routeStrip: { flex: 1, justifyContent: "center", overflow: "hidden" },
@@ -134,10 +152,14 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderTopLeftRadius: 32, borderTopRightRadius: 32,
     padding: SPACING.xl, paddingBottom: SPACING.xxxl,
+    shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 24, shadowOffset: { width: 0, height: -8 }, elevation: 12,
   },
-  heading: { fontSize: FONT["2xl"], fontWeight: "800", color: COLORS.onSurface, marginBottom: SPACING.sm },
+  heading: { fontSize: FONT["2xl"], fontWeight: "800", color: COLORS.onSurface, marginBottom: SPACING.sm, fontFamily: FONT_DISPLAY, letterSpacing: -0.3 },
   subheading: { fontSize: FONT.base, color: COLORS.muted, marginBottom: SPACING.xl, lineHeight: 20 },
   googleBtnWrap: { alignItems: "center", justifyContent: "center", minHeight: 44 },
+  fallbackLink: { color: COLORS.muted, fontSize: FONT.sm, textDecorationLine: "underline" },
+  signingInText: { color: COLORS.muted, fontSize: FONT.sm, marginTop: SPACING.sm, textAlign: "center", maxWidth: 260 },
+  errorText: { color: COLORS.error, fontSize: FONT.sm, marginTop: SPACING.sm, textAlign: "center", maxWidth: 280 },
   googleBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: SPACING.md,
     backgroundColor: "#fff", borderRadius: RADIUS.pill, paddingVertical: 16,

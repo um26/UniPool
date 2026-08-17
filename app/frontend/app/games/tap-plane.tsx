@@ -8,6 +8,8 @@ import * as Haptics from "expo-haptics";
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, runOnJS, cancelAnimation } from "react-native-reanimated";
 
 import { COLORS, SPACING, RADIUS, FONT } from "@/src/theme";
+import { api } from "@/src/api/client";
+import LeaderboardModal from "@/src/components/LeaderboardModal";
 
 const { width, height } = Dimensions.get("window");
 const AREA_HEIGHT = Math.min(560, height * 0.62);
@@ -21,7 +23,9 @@ export default function TapPlane() {
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(0);
   const [timeLeft, setTimeLeft] = useState(30);
+  const [showBoard, setShowBoard] = useState(false);
   const timerRef = useRef<any>(null);
+  const submittedRef = useRef(false);
 
   const spawn = () => {
     const maxX = width - PLANE - 32;
@@ -34,6 +38,7 @@ export default function TapPlane() {
     setScore(0);
     setTimeLeft(30);
     setRunning(true);
+    submittedRef.current = false;
     spawn();
     timerRef.current = setInterval(() => {
       setTimeLeft((t) => {
@@ -48,7 +53,13 @@ export default function TapPlane() {
     }, 1000);
   };
 
-  useEffect(() => { if (!running) setBest((b) => Math.max(b, score)); }, [running, score]);
+  useEffect(() => {
+    if (!running && score > 0 && !submittedRef.current) {
+      submittedRef.current = true;
+      setBest((b) => Math.max(b, score));
+      api.submitScore("tap-plane", score).catch(() => {});
+    }
+  }, [running, score]);
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); cancelAnimation(x); cancelAnimation(y); }, []);
 
   const tap = () => {
@@ -67,7 +78,9 @@ export default function TapPlane() {
         <View style={{ flexDirection: "row", gap: SPACING.lg }}>
           <View style={styles.stat}><Ionicons name="star" size={14} color={COLORS.saffron} /><Text style={styles.statText}>{score}</Text></View>
           <View style={styles.stat}><Ionicons name="time" size={14} color={COLORS.cream} /><Text style={styles.statText}>{timeLeft}s</Text></View>
-          <View style={styles.stat}><Ionicons name="trophy" size={14} color={COLORS.cream} /><Text style={styles.statText}>{best}</Text></View>
+          <Pressable testID="plane-leaderboard" onPress={() => setShowBoard(true)} style={styles.stat}>
+            <Ionicons name="trophy" size={14} color={COLORS.cream} /><Text style={styles.statText}>{best}</Text>
+          </Pressable>
         </View>
       </LinearGradient>
 
@@ -91,9 +104,16 @@ export default function TapPlane() {
             <Pressable testID="plane-start" onPress={start} style={styles.startBtn}>
               <Text style={styles.startText}>{timeLeft === 30 ? "Start" : "Play again"}</Text>
             </Pressable>
+            {timeLeft !== 30 && (
+              <Pressable testID="plane-view-leaderboard" onPress={() => setShowBoard(true)} style={{ marginTop: SPACING.md }}>
+                <Text style={{ color: COLORS.indigo, fontWeight: "700", textDecorationLine: "underline" }}>View leaderboard</Text>
+              </Pressable>
+            )}
           </View>
         )}
       </View>
+
+      <LeaderboardModal visible={showBoard} onClose={() => setShowBoard(false)} game="tap-plane" gameLabel="Tap-the-Plane" unit="taps" />
     </SafeAreaView>
   );
 }

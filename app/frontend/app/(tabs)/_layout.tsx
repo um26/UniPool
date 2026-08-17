@@ -29,6 +29,7 @@ export default function TabsLayout() {
           const map: Record<string, any> = {
             index: focused ? "car-sport" : "car-sport-outline",
             matches: focused ? "sparkles" : "sparkles-outline",
+            messages: focused ? "chatbubble" : "chatbubble-outline",
             games: focused ? "game-controller" : "game-controller-outline",
             profile: focused ? "person-circle" : "person-circle-outline",
           };
@@ -42,6 +43,7 @@ export default function TabsLayout() {
     >
       <Tabs.Screen name="index" options={{ title: "Pool" }} />
       <Tabs.Screen name="matches" options={{ title: "Matches" }} />
+      <Tabs.Screen name="messages" options={{ title: "Chats" }} />
       <Tabs.Screen name="games" options={{ title: "Play" }} />
       <Tabs.Screen name="profile" options={{ title: "Profile" }} />
     </Tabs>

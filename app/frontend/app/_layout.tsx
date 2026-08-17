@@ -8,9 +8,11 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider, useAuth } from "@/src/auth/AuthContext";
 import { COLORS } from "@/src/theme";
+import { applyPremiumFontDefaults } from "@/src/utils/setupFonts";
 
 LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
+applyPremiumFontDefaults();
 
 function AuthGate() {
   const { user, loading } = useAuth();
@@ -21,7 +23,7 @@ function AuthGate() {
     if (loading) return;
     const inTabs = segments[0] === "(tabs)";
     if (!user && inTabs) router.replace("/");
-    if (user && !inTabs && segments[0] !== "post-request" && segments[0] !== "games") {
+    if (user && !inTabs && segments[0] !== "post-request" && segments[0] !== "games" && segments[0] !== "chat") {
       router.replace("/(tabs)");
     }
   }, [user, loading, segments]);
@@ -40,6 +42,10 @@ function AuthGate() {
       <Stack.Screen name="post-request" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
       <Stack.Screen name="games/trivia" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="games/tap-plane" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="games/memory-match" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="games/word-scramble" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="games/rickshaw-rush" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="chat/[userId]" options={{ animation: "slide_from_right" }} />
     </Stack>
   );
 }

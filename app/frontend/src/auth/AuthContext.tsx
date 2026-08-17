@@ -14,6 +14,10 @@ export type UniUser = {
 type AuthCtx = {
   user: UniUser | null;
   loading: boolean;
+  // True while we're mid-way exchanging a Google credential with our backend.
+  signingIn: boolean;
+  // Set (with a message) if the last sign-in attempt failed. Cleared on next attempt.
+  signInError: string | null;
   // On web this opens the Google Sign-In popup itself, so no args needed.
   // Exposed so screens can trigger it from a custom button if desired.
   signIn: () => Promise<void>;
@@ -54,14 +58,27 @@ function loadGoogleScript(): Promise<void> {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UniUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [signingIn, setSigningIn] = useState(false);
+  const [signInError, setSignInError] = useState<string | null>(null);
 
   const handleCredential = useCallback(async (response: { credential: string }) => {
+    setSigningIn(true);
+    setSignInError(null);
     try {
+      // Render's free tier can take 30-50s to wake from a cold start —
+      // give this real room instead of failing silently and fast.
       const res = await api.googleSignIn(response.credential);
       await setToken(res.session_token);
       setUser(res.user);
-    } catch (e) {
+    } catch (e: any) {
       console.warn("Google sign-in failed", e);
+      setSignInError(
+        e?.message === "Failed to fetch" || e?.name === "TypeError"
+          ? "Couldn't reach the server. It may be waking up from sleep — please try again in a few seconds."
+          : e?.message || "Sign-in failed. Please try again."
+      );
+    } finally {
+      setSigningIn(false);
     }
   }, []);
 
@@ -72,6 +89,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.google.accounts.id.initialize({
       client_id: GOOGLE_CLIENT_ID,
       callback: handleCredential,
+      auto_select: false,
+      cancel_on_tap_outside: true,
     });
   }, [handleCredential]);
 
@@ -87,13 +106,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     (async () => {
+      // Don't let a slow/cold backend block the whole app behind a spinner.
+      // Kick off Google's script load (fast, client-side) and unblock
+      // rendering immediately — if a saved session exists, validate it in
+      // the background and let `user` update whenever it resolves. The
+      // login screen already auto-redirects once `user` becomes truthy.
       try {
         await initGoogle();
-        const token = await getToken();
-        if (token) await refresh();
+      } catch (e) {
+        console.warn("Google script failed to load (ad-blocker?)", e);
       } finally {
         setLoading(false);
       }
+      const token = await getToken();
+      if (token) refresh();
     })();
   }, [initGoogle, refresh]);
 
@@ -114,6 +140,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       initGoogle().then(() => {
         const el = document.getElementById(containerId);
         if (el && window.google?.accounts?.id) {
+          // Clear any stale button from a previous mount before re-rendering,
+          // otherwise repeated calls can stack duplicate/broken iframes.
+          el.innerHTML = "";
           window.google.accounts.id.renderButton(el, {
             theme: "outline",
             size: "large",
@@ -129,10 +158,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try { await api.logout(); } catch {}
     await setToken(null);
     setUser(null);
+    // Without this, Google Identity Services silently suppresses the next
+    // sign-in attempt (button click / prompt does nothing) because it still
+    // thinks there's an active selected session from before.
+    if (Platform.OS === "web" && window.google?.accounts?.id) {
+      try {
+        window.google.accounts.id.disableAutoSelect();
+        window.google.accounts.id.cancel();
+      } catch {}
+    }
   }, []);
 
   return (
-    <Ctx.Provider value={{ user, loading, signIn, signOut, refresh, renderGoogleButton }}>
+    <Ctx.Provider value={{ user, loading, signingIn, signInError, signIn, signOut, refresh, renderGoogleButton }}>
       {children}
     </Ctx.Provider>
   );

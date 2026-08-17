@@ -3,12 +3,14 @@ import { View, Text, StyleSheet, Pressable, FlatList, Alert, ActivityIndicator }
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 
-import { COLORS, SPACING, RADIUS, FONT } from "@/src/theme";
+import { COLORS, SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/auth/AuthContext";
+import BrandFooter from "@/src/components/BrandFooter";
+import { usePushNotifications } from "@/src/hooks/use-push-notifications";
 
 type Pool = {
   pool_id: string;
@@ -27,6 +29,8 @@ function fmt(dt: string) {
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
+  const router = useRouter();
+  const push = usePushNotifications();
   const [myPools, setMyPools] = useState<Pool[]>([]);
   const [gender, setGender] = useState<string>(user?.gender || "any");
   const [tab, setTab] = useState<"open" | "closed">("open");
@@ -120,6 +124,28 @@ export default function ProfileScreen() {
               ))}
             </View>
 
+            {push.supported && (
+              <Pressable
+                testID="push-toggle"
+                onPress={() => (push.subscribed ? push.unsubscribe() : push.subscribe())}
+                disabled={push.busy || push.permission === "denied"}
+                style={[styles.pushToggle, push.subscribed && styles.pushToggleActive]}
+              >
+                {push.busy ? (
+                  <ActivityIndicator color={push.subscribed ? "#fff" : COLORS.indigo} size="small" />
+                ) : (
+                  <Ionicons name={push.subscribed ? "notifications" : "notifications-outline"} size={18} color={push.subscribed ? "#fff" : COLORS.indigo} />
+                )}
+                <Text style={[styles.pushToggleText, push.subscribed && { color: "#fff" }]}>
+                  {push.permission === "denied"
+                    ? "Notifications blocked in browser settings"
+                    : push.subscribed
+                    ? "Push notifications on"
+                    : "Enable push notifications"}
+                </Text>
+              </Pressable>
+            )}
+
             <Text style={styles.sectionLabel}>My Queries</Text>
             <View style={styles.segmentRow}>
               <Pressable testID="mine-tab-open" onPress={() => setTab("open")} style={[styles.segment, tab === "open" && styles.segmentActive]}>
@@ -138,9 +164,14 @@ export default function ProfileScreen() {
               <Text style={styles.mineWhen}>{fmt(item.travel_datetime)}</Text>
             </View>
             {tab === "open" ? (
-              <Pressable testID={`close-${item.pool_id}`} onPress={() => closeQuery(item.pool_id)} style={styles.actionBtn} hitSlop={8}>
-                <Ionicons name="checkmark-circle-outline" size={20} color={COLORS.success} />
-              </Pressable>
+              <>
+                <Pressable testID={`edit-${item.pool_id}`} onPress={() => router.push(`/post-request?edit=${item.pool_id}`)} style={styles.actionBtn} hitSlop={8}>
+                  <Ionicons name="pencil" size={20} color={COLORS.indigo} />
+                </Pressable>
+                <Pressable testID={`close-${item.pool_id}`} onPress={() => closeQuery(item.pool_id)} style={styles.actionBtn} hitSlop={8}>
+                  <Ionicons name="checkmark-circle-outline" size={20} color={COLORS.success} />
+                </Pressable>
+              </>
             ) : (
               <Pressable testID={`reopen-${item.pool_id}`} onPress={() => reopenQuery(item.pool_id)} style={styles.actionBtn} hitSlop={8}>
                 <Ionicons name="refresh" size={20} color={COLORS.indigo} />
@@ -199,6 +230,7 @@ export default function ProfileScreen() {
               <Ionicons name="log-out-outline" size={18} color={COLORS.error} />
               <Text style={styles.logoutText}>Sign out</Text>
             </Pressable>
+            <BrandFooter />
           </>
         }
       />
@@ -220,7 +252,7 @@ const styles = StyleSheet.create({
   header: { alignItems: "center", paddingVertical: SPACING.xl, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
   avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: COLORS.cream, alignItems: "center", justifyContent: "center", marginBottom: SPACING.md },
   avatarText: { color: COLORS.indigo, fontSize: 28, fontWeight: "800" },
-  name: { color: "#fff", fontSize: FONT.xl, fontWeight: "800" },
+  name: { color: "#fff", fontSize: FONT.xl, fontWeight: "800", fontFamily: FONT_DISPLAY },
   email: { color: "rgba(255,236,194,0.9)", marginTop: 4 },
   adminBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: COLORS.cream, borderRadius: RADIUS.pill, paddingHorizontal: 10, paddingVertical: 4, marginTop: SPACING.sm },
   adminBadgeText: { color: COLORS.indigo, fontWeight: "800", fontSize: 11 },
@@ -229,6 +261,10 @@ const styles = StyleSheet.create({
   prefChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: RADIUS.pill, backgroundColor: "#fff", borderWidth: 1, borderColor: COLORS.border },
   prefChipActive: { backgroundColor: COLORS.indigo, borderColor: COLORS.indigo },
   prefText: { color: COLORS.onSurface, fontWeight: "600", fontSize: 13 },
+
+  pushToggle: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: SPACING.md, backgroundColor: "#fff", borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.indigo, paddingVertical: 12 },
+  pushToggleActive: { backgroundColor: COLORS.indigo },
+  pushToggleText: { color: COLORS.indigo, fontWeight: "700", fontSize: 13 },
 
   segmentRow: { flexDirection: "row", gap: SPACING.sm, marginBottom: SPACING.sm },
   segment: { flex: 1, paddingVertical: 10, borderRadius: RADIUS.pill, alignItems: "center", backgroundColor: "#fff", borderWidth: 1, borderColor: COLORS.border },

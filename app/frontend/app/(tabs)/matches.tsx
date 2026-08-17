@@ -3,21 +3,26 @@ import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, Pr
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 
-import { COLORS, SPACING, RADIUS, FONT } from "@/src/theme";
+import { COLORS, SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
 import { api } from "@/src/api/client";
+import RatingBadge from "@/src/components/RatingBadge";
+import RatingModal from "@/src/components/RatingModal";
 
 type Pool = {
-  pool_id: string; user_name: string; user_email: string;
+  pool_id: string; user_id: string; user_name: string; user_email: string;
   from_location: string; to_location: string; travel_datetime: string;
   gender_preference: string; companions: number; luggage?: string | null; notes?: string | null;
+  user_rating_avg?: number | null; user_rating_count?: number;
 };
 
 export default function MatchesScreen() {
+  const router = useRouter();
   const [items, setItems] = useState<Pool[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [ratingTarget, setRatingTarget] = useState<Pool | null>(null);
 
   const load = useCallback(async () => {
     try { setItems(await api.myMatches()); }
@@ -61,6 +66,9 @@ export default function MatchesScreen() {
                 <Text style={styles.when}>{new Date(item.travel_datetime).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}</Text>
               </View>
               <Text style={styles.name}>{item.user_name}</Text>
+              <View style={{ marginBottom: SPACING.sm }}>
+                <RatingBadge avg={item.user_rating_avg} count={item.user_rating_count} />
+              </View>
               <View style={styles.routeRow}>
                 <Ionicons name="location" size={16} color={COLORS.saffron} />
                 <Text style={styles.route}>{item.from_location}</Text>
@@ -68,16 +76,43 @@ export default function MatchesScreen() {
                 <Text style={styles.route}>{item.to_location}</Text>
               </View>
               {item.notes ? <Text style={styles.notes}>“{item.notes}”</Text> : null}
-              <Pressable
-                testID={`connect-${item.pool_id}`}
-                onPress={() => Linking.openURL(`mailto:${item.user_email}?subject=UniPool%20-%20Cab%20Share&body=Hi%20${encodeURIComponent(item.user_name)},%20saw%20your%20UniPool%20request.%20Want%20to%20share%20the%20cab%3F`)}
-                style={styles.cta}
-              >
-                <Ionicons name="mail" size={16} color="#fff" />
-                <Text style={styles.ctaText}>Email {item.user_name.split(" ")[0]}</Text>
-              </Pressable>
+              <View style={styles.ctaRow}>
+                <Pressable
+                  testID={`message-${item.pool_id}`}
+                  onPress={() => router.push({ pathname: "/chat/[userId]", params: { userId: item.user_id, name: item.user_name } })}
+                  style={[styles.cta, { flex: 1 }]}
+                >
+                  <Ionicons name="chatbubble" size={16} color="#fff" />
+                  <Text style={styles.ctaText}>Message</Text>
+                </Pressable>
+                <Pressable
+                  testID={`connect-${item.pool_id}`}
+                  onPress={() => Linking.openURL(`mailto:${item.user_email}?subject=UniPool%20-%20Cab%20Share&body=Hi%20${encodeURIComponent(item.user_name)},%20saw%20your%20UniPool%20request.%20Want%20to%20share%20the%20cab%3F`)}
+                  style={[styles.cta, styles.ctaGhost]}
+                >
+                  <Ionicons name="mail" size={16} color={COLORS.indigo} />
+                </Pressable>
+                <Pressable
+                  testID={`rate-${item.pool_id}`}
+                  onPress={() => setRatingTarget(item)}
+                  style={[styles.cta, styles.ctaGhost]}
+                >
+                  <Ionicons name="star" size={16} color={COLORS.saffron} />
+                </Pressable>
+              </View>
             </View>
           )}
+        />
+      )}
+
+      {ratingTarget && (
+        <RatingModal
+          visible={!!ratingTarget}
+          onClose={() => setRatingTarget(null)}
+          userId={ratingTarget.user_id}
+          userName={ratingTarget.user_name}
+          poolId={ratingTarget.pool_id}
+          onSubmitted={load}
         />
       )}
     </SafeAreaView>
@@ -87,7 +122,7 @@ export default function MatchesScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.surface },
   header: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.md, paddingBottom: SPACING.lg, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
-  title: { color: "#fff", fontSize: FONT["2xl"], fontWeight: "800" },
+  title: { color: "#fff", fontSize: FONT["2xl"], fontWeight: "800", fontFamily: FONT_DISPLAY },
   sub: { color: "rgba(255,255,255,0.9)", marginTop: 2 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   empty: { alignItems: "center", paddingVertical: 80, paddingHorizontal: SPACING.xl },
@@ -102,6 +137,8 @@ const styles = StyleSheet.create({
   routeRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: SPACING.sm },
   route: { fontSize: FONT.base, color: COLORS.onSurface, fontWeight: "600" },
   notes: { color: COLORS.muted, fontStyle: "italic", marginBottom: SPACING.md },
-  cta: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: COLORS.indigo, paddingVertical: 12, borderRadius: RADIUS.pill, marginTop: SPACING.md },
+  cta: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: COLORS.indigo, paddingVertical: 12, paddingHorizontal: 16, borderRadius: RADIUS.pill },
+  ctaRow: { flexDirection: "row", gap: SPACING.sm, marginTop: SPACING.md },
+  ctaGhost: { backgroundColor: "#fff", borderWidth: 1, borderColor: COLORS.indigo, flex: 0 },
   ctaText: { color: "#fff", fontWeight: "700" },
 });

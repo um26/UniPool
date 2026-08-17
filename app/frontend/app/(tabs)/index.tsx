@@ -6,14 +6,17 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
 
-import { COLORS, SPACING, RADIUS, FONT } from "@/src/theme";
+import { COLORS, SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/auth/AuthContext";
+import PressableScale from "@/src/components/PressableScale";
+import RatingBadge from "@/src/components/RatingBadge";
 
 type Pool = {
   pool_id: string; user_id: string; user_name: string; user_email: string;
   from_location: string; to_location: string; travel_datetime: string;
   gender_preference: string; companions: number; luggage?: string | null; notes?: string | null;
+  user_rating_avg?: number | null; user_rating_count?: number;
 };
 
 const CHIPS = ["All", "Today", "Tomorrow", "Airport", "Railway"];
@@ -103,16 +106,17 @@ export default function HomeFeed() {
         />
       )}
 
-      <Pressable
+      <PressableScale
         testID="create-pool-fab"
         onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); router.push("/post-request"); }}
         style={styles.fab}
+        scaleTo={0.92}
       >
         <LinearGradient colors={[COLORS.saffron, "#F57F17"]} style={styles.fabBg}>
           <Ionicons name="add" size={26} color="#fff" />
           <Text style={styles.fabText}>Post Pool</Text>
         </LinearGradient>
-      </Pressable>
+      </PressableScale>
     </SafeAreaView>
   );
 }
@@ -125,6 +129,9 @@ function PoolCard({ pool, mine }: { pool: Pool; mine: boolean }) {
         <View style={{ flex: 1 }}>
           <Text style={styles.cardName}>{pool.user_name}{mine && <Text style={{ color: COLORS.saffron }}>  (you)</Text>}</Text>
           <Text style={styles.cardWhen}>{formatDT(pool.travel_datetime)}</Text>
+          <View style={{ marginTop: 3 }}>
+            <RatingBadge avg={pool.user_rating_avg} count={pool.user_rating_count} />
+          </View>
         </View>
         {pool.gender_preference === "same" && (
           <View style={styles.badge}><Text style={styles.badgeText}>Same-gender</Text></View>
@@ -151,7 +158,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.surface },
   header: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.md, paddingBottom: SPACING.lg, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
   headerTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  hello: { color: COLORS.cream, fontSize: FONT.xl, fontWeight: "800" },
+  hello: { color: COLORS.cream, fontSize: FONT.xl, fontWeight: "800", fontFamily: FONT_DISPLAY },
   subhello: { color: "rgba(255,236,194,0.8)", marginTop: 2 },
   avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cream, alignItems: "center", justifyContent: "center" },
   chipRow: { paddingTop: SPACING.lg, paddingRight: SPACING.lg, gap: SPACING.sm },
@@ -167,8 +174,8 @@ const styles = StyleSheet.create({
 
   card: {
     backgroundColor: "#fff", borderRadius: RADIUS.lg, padding: SPACING.lg, marginBottom: SPACING.md,
-    borderWidth: 1, borderColor: COLORS.border,
-    shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2,
+    borderWidth: 1, borderColor: "rgba(226,213,201,0.6)",
+    shadowColor: "#1A237E", shadowOpacity: 0.08, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 3,
   },
   cardHeader: { flexDirection: "row", alignItems: "center", gap: SPACING.md, marginBottom: SPACING.md },
   cardAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cream, alignItems: "center", justifyContent: "center" },
