@@ -198,6 +198,13 @@ async def _enrich_with_ratings(pools: list) -> list:
     return pools
 
 
+async def _touch_last_seen(user_id: str) -> None:
+    try:
+        await db.users.update_one({"user_id": user_id}, {"$set": {"last_seen": _now_utc()}})
+    except Exception as e:
+        logger.warning(f"Failed to update last_seen for {user_id}: {e}")
+
+
 async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Missing bearer token")
@@ -214,9 +221,11 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     # Implicit presence heartbeat — every authenticated call (chat polling,
     # feed refreshes, etc.) counts as "active", so no dedicated heartbeat
     # endpoint is needed. Fire-and-forget so it never slows the response.
-    asyncio.create_task(
-        db.users.update_one({"user_id": user["user_id"]}, {"$set": {"last_seen": _now_utc()}})
-    )
+    # NOTE: must wrap in a real `async def` coroutine — passing a Motor
+    # awaitable straight into asyncio.create_task() can raise
+    # "TypeError: a coroutine was expected, got <Future ...>" depending on
+    # the event loop, which took down every authenticated endpoint.
+    asyncio.create_task(_touch_last_seen(user["user_id"]))
     return _with_admin_flag(user)
 
 
