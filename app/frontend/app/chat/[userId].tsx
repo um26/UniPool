@@ -14,7 +14,19 @@ type Msg = {
   to_user_id: string;
   text: string;
   created_at: string;
+  read: boolean;
 };
+
+function timeAgo(iso?: string) {
+  if (!iso) return "";
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
 
 export default function ChatThread() {
   const { userId, name } = useLocalSearchParams<{ userId: string; name?: string }>();
@@ -24,8 +36,12 @@ export default function ChatThread() {
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [otherTyping, setOtherTyping] = useState(false);
+  const [presence, setPresence] = useState<{ online: boolean; last_seen?: string }>({ online: false });
   const listRef = useRef<FlatList>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const presenceRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastTypingPingRef = useRef(0);
 
   const load = useCallback(async (silent = false) => {
     if (!userId) return;
@@ -40,13 +56,36 @@ export default function ChatThread() {
     }
   }, [userId]);
 
+  const pollTypingAndPresence = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const [t, p] = await Promise.all([api.getTyping(userId), api.getPresence(userId)]);
+      setOtherTyping(t.typing);
+      setPresence(p);
+    } catch {}
+  }, [userId]);
+
   useFocusEffect(
     useCallback(() => {
       load();
+      pollTypingAndPresence();
       pollRef.current = setInterval(() => load(true), 4000);
-      return () => { if (pollRef.current) clearInterval(pollRef.current); };
-    }, [load])
+      presenceRef.current = setInterval(pollTypingAndPresence, 3000);
+      return () => {
+        if (pollRef.current) clearInterval(pollRef.current);
+        if (presenceRef.current) clearInterval(presenceRef.current);
+      };
+    }, [load, pollTypingAndPresence])
   );
+
+  const onChangeText = (t: string) => {
+    setText(t);
+    const now = Date.now();
+    if (userId && now - lastTypingPingRef.current > 2000) {
+      lastTypingPingRef.current = now;
+      api.sendTyping(userId).catch(() => {});
+    }
+  };
 
   const send = async () => {
     const t = text.trim();
@@ -64,6 +103,13 @@ export default function ChatThread() {
     }
   };
 
+  const lastMineReadIndex = (() => {
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].from_user_id === user?.user_id) return msgs[i].read ? i : -1;
+    }
+    return -1;
+  })();
+
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
@@ -71,7 +117,21 @@ export default function ChatThread() {
           <Pressable testID="chat-back" onPress={() => router.back()} hitSlop={12}>
             <Ionicons name="chevron-back" size={24} color={COLORS.onSurface} />
           </Pressable>
-          <Text style={styles.headerName}>{name || "Chat"}</Text>
+          <View style={{ alignItems: "center" }}>
+            <Text style={styles.headerName}>{name || "Chat"}</Text>
+            <View style={styles.statusRow}>
+              {otherTyping ? (
+                <Text style={styles.typingText}>typing...</Text>
+              ) : presence.online ? (
+                <>
+                  <View style={styles.onlineDot} />
+                  <Text style={styles.statusText}>Online</Text>
+                </>
+              ) : presence.last_seen ? (
+                <Text style={styles.statusText}>Last seen {timeAgo(presence.last_seen)}</Text>
+              ) : null}
+            </View>
+          </View>
           <View style={{ width: 24 }} />
         </View>
 
@@ -92,16 +152,41 @@ export default function ChatThread() {
                 <Text style={{ color: COLORS.muted, marginTop: SPACING.sm }}>Say hi and coordinate your ride!</Text>
               </View>
             }
-            renderItem={({ item }) => {
+            renderItem={({ item, index }) => {
               const mine = item.from_user_id === user?.user_id;
+              const showRead = mine && index === lastMineReadIndex;
+              const showSent = mine && !showRead && index === msgs.length - 1;
               return (
                 <View style={[styles.bubbleRow, mine && { justifyContent: "flex-end" }]}>
-                  <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs]}>
-                    <Text style={[styles.bubbleText, mine && { color: "#fff" }]}>{item.text}</Text>
+                  <View>
+                    <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs]}>
+                      <Text style={[styles.bubbleText, mine && { color: "#fff" }]}>{item.text}</Text>
+                    </View>
+                    {(showRead || showSent) && (
+                      <View style={styles.receiptRow}>
+                        <Ionicons
+                          name={showRead ? "checkmark-done" : "checkmark"}
+                          size={14}
+                          color={showRead ? COLORS.indigo : COLORS.muted}
+                        />
+                        <Text style={styles.receiptText}>{showRead ? "Read" : "Sent"}</Text>
+                      </View>
+                    )}
                   </View>
                 </View>
               );
             }}
+            ListFooterComponent={
+              otherTyping ? (
+                <View style={[styles.bubbleRow]}>
+                  <View style={[styles.bubble, styles.bubbleTheirs, styles.typingBubble]}>
+                    <View style={styles.typingDot} />
+                    <View style={styles.typingDot} />
+                    <View style={styles.typingDot} />
+                  </View>
+                </View>
+              ) : null
+            }
           />
         )}
 
@@ -109,7 +194,7 @@ export default function ChatThread() {
           <TextInput
             testID="chat-input"
             value={text}
-            onChangeText={setText}
+            onChangeText={onChangeText}
             placeholder="Type a message..."
             placeholderTextColor={COLORS.muted}
             style={styles.input}
@@ -128,11 +213,19 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.surface },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   headerName: { fontSize: FONT.lg, fontWeight: "800", color: COLORS.onSurface },
+  statusRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2, minHeight: 14 },
+  onlineDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.success },
+  statusText: { fontSize: 11, color: COLORS.muted },
+  typingText: { fontSize: 11, color: COLORS.saffron, fontWeight: "700", fontStyle: "italic" },
   bubbleRow: { flexDirection: "row", marginBottom: SPACING.sm },
   bubble: { maxWidth: "78%", borderRadius: RADIUS.lg, paddingHorizontal: 14, paddingVertical: 10 },
   bubbleMine: { backgroundColor: COLORS.indigo, borderBottomRightRadius: 4 },
   bubbleTheirs: { backgroundColor: "#fff", borderWidth: 1, borderColor: COLORS.border, borderBottomLeftRadius: 4 },
   bubbleText: { fontSize: FONT.base, color: COLORS.onSurface },
+  receiptRow: { flexDirection: "row", alignItems: "center", gap: 3, justifyContent: "flex-end", marginTop: 2, marginRight: 4 },
+  receiptText: { fontSize: 10, color: COLORS.muted },
+  typingBubble: { flexDirection: "row", gap: 4, alignItems: "center", paddingVertical: 14 },
+  typingDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.muted },
   inputRow: { flexDirection: "row", alignItems: "flex-end", gap: SPACING.sm, padding: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.border, backgroundColor: COLORS.surface },
   input: { flex: 1, backgroundColor: "#fff", borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 14, paddingVertical: 10, maxHeight: 100, fontSize: FONT.base, color: COLORS.onSurface },
   sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.saffron, alignItems: "center", justifyContent: "center" },

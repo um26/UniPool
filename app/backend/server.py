@@ -164,6 +164,22 @@ def _ensure_aware(dt: datetime) -> datetime:
     return dt
 
 
+ONLINE_THRESHOLD_SECONDS = 60
+
+
+def _is_online(last_seen: Optional[datetime]) -> bool:
+    if not last_seen:
+        return False
+    return (_now_utc() - _ensure_aware(last_seen)).total_seconds() < ONLINE_THRESHOLD_SECONDS
+
+
+# In-memory "is typing" state: {(from_user_id, to_user_id): last_ping_at}.
+# Ephemeral by design — a restart clearing it is harmless, and it avoids
+# writing throwaway data to Mongo on every keystroke.
+TYPING_STATE: dict = {}
+TYPING_TTL_SECONDS = 4
+
+
 async def _enrich_with_ratings(pools: list) -> list:
     """Batch-attach user_rating_avg/user_rating_count to a list of pool dicts."""
     if not pools:
@@ -195,6 +211,12 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    # Implicit presence heartbeat — every authenticated call (chat polling,
+    # feed refreshes, etc.) counts as "active", so no dedicated heartbeat
+    # endpoint is needed. Fire-and-forget so it never slows the response.
+    asyncio.create_task(
+        db.users.update_one({"user_id": user["user_id"]}, {"$set": {"last_seen": _now_utc()}})
+    )
     return _with_admin_flag(user)
 
 
@@ -652,8 +674,39 @@ async def list_conversations(authorization: Optional[str] = Header(None)):
     out = []
     for other_id, convo in seen.items():
         u = umap.get(other_id, {})
-        out.append({**convo, "name": u.get("name", "Unknown"), "picture": u.get("picture")})
+        out.append({
+            **convo,
+            "name": u.get("name", "Unknown"),
+            "picture": u.get("picture"),
+            "online": _is_online(u.get("last_seen")),
+        })
     return out
+
+
+@api.post("/messages/typing")
+async def send_typing(body: dict, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    to_user_id = body.get("to_user_id")
+    if to_user_id:
+        TYPING_STATE[(user["user_id"], to_user_id)] = _now_utc()
+    return {"ok": True}
+
+
+@api.get("/messages/typing/{other_user_id}")
+async def get_typing(other_user_id: str, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    ts = TYPING_STATE.get((other_user_id, user["user_id"]))
+    typing = bool(ts and (_now_utc() - ts).total_seconds() < TYPING_TTL_SECONDS)
+    return {"typing": typing}
+
+
+@api.get("/users/{user_id}/presence")
+async def get_presence(user_id: str, authorization: Optional[str] = Header(None)):
+    await get_current_user(authorization)
+    u = await db.users.find_one({"user_id": user_id}, {"_id": 0, "last_seen": 1})
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"online": _is_online(u.get("last_seen")), "last_seen": u.get("last_seen")}
 
 
 # ---------- Ratings ----------
