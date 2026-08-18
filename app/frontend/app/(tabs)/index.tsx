@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicator, ScrollView } from "react-native";
+import React, { useCallback, useMemo, useState } from "react";
+import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicator, ScrollView, TextInput } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -11,6 +11,7 @@ import { api } from "@/src/api/client";
 import { useAuth } from "@/src/auth/AuthContext";
 import PressableScale from "@/src/components/PressableScale";
 import RatingBadge from "@/src/components/RatingBadge";
+import PoolMapView from "@/src/components/PoolMapView";
 
 type Pool = {
   pool_id: string; user_id: string; user_name: string; user_email: string;
@@ -19,7 +20,7 @@ type Pool = {
   user_rating_avg?: number | null; user_rating_count?: number;
 };
 
-const CHIPS = ["All", "Today", "Tomorrow", "Airport", "Railway"];
+const CHIPS = ["All", "Today", "Tomorrow", "This week", "Airport", "Railway"];
 
 function formatDT(iso: string) {
   const d = new Date(iso);
@@ -38,6 +39,8 @@ export default function HomeFeed() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [chip, setChip] = useState("All");
+  const [search, setSearch] = useState("");
+  const [showMap, setShowMap] = useState(false);
 
   const load = useCallback(async () => {
     try { const list = await api.listPools(); setPools(list); }
@@ -47,14 +50,28 @@ export default function HomeFeed() {
 
   useFocusEffect(useCallback(() => { setLoading(true); load(); }, [load]));
 
-  const filtered = pools.filter((p) => {
-    if (chip === "All") return true;
-    if (chip === "Today") return isSameDay(p.travel_datetime, new Date());
-    if (chip === "Tomorrow") { const t = new Date(); t.setDate(t.getDate() + 1); return isSameDay(p.travel_datetime, t); }
-    if (chip === "Airport") return /airport|blr|del|bom|maa|hyd/i.test(`${p.from_location} ${p.to_location}`);
-    if (chip === "Railway") return /station|railway|junction|jn/i.test(`${p.from_location} ${p.to_location}`);
+  const filtered = useMemo(() => pools.filter((p) => {
+    if (chip === "Today" && !isSameDay(p.travel_datetime, new Date())) return false;
+    if (chip === "Tomorrow") {
+      const t = new Date(); t.setDate(t.getDate() + 1);
+      if (!isSameDay(p.travel_datetime, t)) return false;
+    }
+    if (chip === "This week") {
+      const d = new Date(p.travel_datetime);
+      const now = new Date();
+      const weekOut = new Date(); weekOut.setDate(now.getDate() + 7);
+      if (d < now || d > weekOut) return false;
+    }
+    if (chip === "Airport" && !/airport|blr|del|bom|maa|hyd/i.test(`${p.from_location} ${p.to_location}`)) return false;
+    if (chip === "Railway" && !/station|railway|junction|jn/i.test(`${p.from_location} ${p.to_location}`)) return false;
+
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      const haystack = `${p.from_location} ${p.to_location} ${p.user_name}`.toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
     return true;
-  });
+  }), [pools, chip, search]);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -64,9 +81,26 @@ export default function HomeFeed() {
             <Text style={styles.hello}>Namaste, {user?.name?.split(" ")[0] || "traveller"}</Text>
             <Text style={styles.subhello}>Where's your next journey?</Text>
           </View>
-          <View style={styles.avatar}>
-            <Ionicons name="person" size={18} color={COLORS.indigo} />
-          </View>
+          <Pressable testID="toggle-map-view" onPress={() => { Haptics.selectionAsync(); setShowMap((m) => !m); }} style={styles.avatar}>
+            <Ionicons name={showMap ? "list" : "map"} size={18} color={COLORS.indigo} />
+          </Pressable>
+        </View>
+
+        <View style={styles.searchRow}>
+          <Ionicons name="search" size={16} color="rgba(255,236,194,0.7)" />
+          <TextInput
+            testID="pool-search"
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search route or name..."
+            placeholderTextColor="rgba(255,236,194,0.6)"
+            style={styles.searchInput}
+          />
+          {search.length > 0 && (
+            <Pressable testID="clear-search" onPress={() => setSearch("")} hitSlop={8}>
+              <Ionicons name="close-circle" size={16} color="rgba(255,236,194,0.7)" />
+            </Pressable>
+          )}
         </View>
 
         <ScrollView
@@ -77,7 +111,7 @@ export default function HomeFeed() {
           {CHIPS.map((c) => (
             <Pressable
               key={c}
-              testID={`chip-${c.toLowerCase()}`}
+              testID={`chip-${c.toLowerCase().replace(" ", "-")}`}
               onPress={() => { Haptics.selectionAsync(); setChip(c); }}
               style={[styles.chip, chip === c && styles.chipActive]}
             >
@@ -89,6 +123,8 @@ export default function HomeFeed() {
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={COLORS.indigo} /></View>
+      ) : showMap ? (
+        <PoolMapView pools={filtered} />
       ) : (
         <FlatList
           data={filtered}
@@ -161,7 +197,9 @@ const styles = StyleSheet.create({
   hello: { color: COLORS.cream, fontSize: FONT.xl, fontWeight: "800", fontFamily: FONT_DISPLAY },
   subhello: { color: "rgba(255,236,194,0.8)", marginTop: 2 },
   avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cream, alignItems: "center", justifyContent: "center" },
-  chipRow: { paddingTop: SPACING.lg, paddingRight: SPACING.lg, gap: SPACING.sm },
+  chipRow: { paddingTop: SPACING.md, paddingRight: SPACING.lg, gap: SPACING.sm },
+  searchRow: { flexDirection: "row", alignItems: "center", gap: SPACING.sm, backgroundColor: "rgba(255,236,194,0.12)", borderRadius: RADIUS.pill, paddingHorizontal: 14, paddingVertical: 10, marginTop: SPACING.lg, borderWidth: 1, borderColor: "rgba(255,236,194,0.25)" },
+  searchInput: { flex: 1, color: COLORS.cream, fontSize: FONT.base },
   chip: { flexShrink: 0, height: 36, paddingHorizontal: 14, borderRadius: RADIUS.pill, backgroundColor: "rgba(255,236,194,0.15)", borderWidth: 1, borderColor: "rgba(255,236,194,0.35)", alignItems: "center", justifyContent: "center" },
   chipActive: { backgroundColor: COLORS.saffron, borderColor: COLORS.saffron },
   chipText: { color: COLORS.cream, fontSize: 13, fontWeight: "600" },
