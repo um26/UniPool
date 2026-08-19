@@ -100,6 +100,12 @@ class PushSubscribe(BaseModel):
     keys: dict
 
 
+class ConfirmedTraveler(BaseModel):
+    user_id: str
+    name: str
+    email: EmailStr
+
+
 class PoolRequestOut(BaseModel):
     pool_id: str
     user_id: str
@@ -117,6 +123,26 @@ class PoolRequestOut(BaseModel):
     created_at: datetime
     user_rating_avg: Optional[float] = None
     user_rating_count: int = 0
+    confirmed_travelers: List[ConfirmedTraveler] = []
+    my_request_status: Optional[str] = None  # "pending" | "accepted" | "declined" | None
+
+
+class JoinRequestOut(BaseModel):
+    request_id: str
+    pool_id: str
+    pool_owner_id: str
+    from_location: str
+    to_location: str
+    travel_datetime: datetime
+    requester_id: str
+    requester_name: str
+    requester_email: EmailStr
+    requester_gender: Optional[str] = None
+    requester_rating_avg: Optional[float] = None
+    requester_rating_count: int = 0
+    status: str = "pending"
+    created_at: datetime
+    responded_at: Optional[datetime] = None
 
 
 class ProfileUpdate(BaseModel):
@@ -195,6 +221,21 @@ async def _enrich_with_ratings(pools: list) -> list:
         s = stat_map.get(p["user_id"])
         p["user_rating_avg"] = round(s["avg"], 1) if s else None
         p["user_rating_count"] = s["count"] if s else 0
+    return pools
+
+
+async def _enrich_with_my_request_status(pools: list, user_id: str) -> list:
+    """Attach my_request_status to each pool dict, for the current viewer."""
+    if not pools:
+        return pools
+    pool_ids = [p["pool_id"] for p in pools]
+    cursor = db.join_requests.find(
+        {"pool_id": {"$in": pool_ids}, "requester_id": user_id}, {"_id": 0}
+    )
+    status_map = {r["pool_id"]: r["status"] async for r in cursor}
+    for p in pools:
+        p["my_request_status"] = status_map.get(p["pool_id"])
+        p.setdefault("confirmed_travelers", [])
     return pools
 
 
@@ -298,6 +339,36 @@ def match_email_html(recipient_name: str, match: dict, own: dict) -> str:
           </table>
           <p style="color:#3D352F;font-size:13px;">Your request: {own['from_location']} → {own['to_location']} at {_ensure_aware(own['travel_datetime']).strftime('%d %b %Y, %I:%M %p UTC')}</p>
           <p>Reach out and split the fare. Safe travels!</p>
+          <p style="color:#B05C00;font-weight:600;">— Team UniPool</p>
+        </td></tr>
+      </table>
+    </body></html>
+    """
+
+
+def join_request_email_html(recipient_name: str, requester_name: str, pool: dict, action: str) -> str:
+    """action: 'received' (owner got a new request) | 'accepted' (requester got accepted)"""
+    if action == "received":
+        heading = "New ride request"
+        body = f"<b>{requester_name}</b> wants to travel with you on this pool:"
+    else:
+        heading = "Request accepted!"
+        body = f"<b>{pool['user_name']}</b> accepted your request to travel together:"
+    return f"""
+    <html><body style="font-family:Arial,sans-serif;background:#FFF9F2;padding:24px;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;margin:auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.08);">
+        <tr><td style="background:#1A237E;padding:20px 24px;color:#FFECC2;">
+          <div style="font-size:22px;font-weight:700;color:#FF9933;">UniPool</div>
+          <div style="font-size:14px;opacity:0.9;">{heading}</div>
+        </td></tr>
+        <tr><td style="padding:24px;color:#1C1917;">
+          <p>Namaste {recipient_name},</p>
+          <p>{body}</p>
+          <table cellpadding="8" cellspacing="0" style="background:#FFECC2;border-radius:12px;width:100%;margin:12px 0;">
+            <tr><td>{pool['from_location']} → {pool['to_location']}<br/>
+            <span style="color:#B05C00;">{_ensure_aware(pool['travel_datetime']).strftime('%d %b %Y, %I:%M %p UTC')}</span></td></tr>
+          </table>
+          <p>Open UniPool to {"accept or decline" if action == "received" else "start chatting"}.</p>
           <p style="color:#B05C00;font-weight:600;">— Team UniPool</p>
         </td></tr>
       </table>
@@ -472,6 +543,7 @@ async def create_pool(body: PoolRequestCreate, authorization: Optional[str] = He
         "notes": body.notes,
         "status": "open",
         "created_at": _now_utc(),
+        "confirmed_travelers": [],
     }
     await db.pools.insert_one(doc)
     # Fire-and-forget notify
@@ -481,14 +553,15 @@ async def create_pool(body: PoolRequestCreate, authorization: Optional[str] = He
 
 @api.get("/pools", response_model=List[PoolRequestOut])
 async def list_pools(authorization: Optional[str] = Header(None)):
-    await get_current_user(authorization)
+    user = await get_current_user(authorization)
     now = _now_utc()
     cursor = db.pools.find(
         {"travel_datetime": {"$gte": now - timedelta(hours=2)}, "status": "open"},
         {"_id": 0},
     ).sort("travel_datetime", 1)
     results = await cursor.to_list(200)
-    return await _enrich_with_ratings(results)
+    results = await _enrich_with_ratings(results)
+    return await _enrich_with_my_request_status(results, user["user_id"])
 
 
 @api.get("/pools/mine", response_model=List[PoolRequestOut])
@@ -496,7 +569,8 @@ async def my_pools(authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     cursor = db.pools.find({"user_id": user["user_id"]}, {"_id": 0}).sort("travel_datetime", -1)
     results = await cursor.to_list(200)
-    return await _enrich_with_ratings(results)
+    results = await _enrich_with_ratings(results)
+    return await _enrich_with_my_request_status(results, user["user_id"])
 
 
 @api.patch("/pools/{pool_id}/close", response_model=PoolRequestOut)
@@ -507,6 +581,12 @@ async def close_pool(pool_id: str, authorization: Optional[str] = Header(None)):
     )
     if r.matched_count == 0:
         raise HTTPException(status_code=404, detail="Not found")
+    # Closing a pool means it's no longer taking new travelers — any still-pending
+    # join requests on it are auto-declined so requesters aren't left hanging.
+    await db.join_requests.update_many(
+        {"pool_id": pool_id, "status": "pending"},
+        {"$set": {"status": "declined", "responded_at": _now_utc()}},
+    )
     return _clean(await db.pools.find_one({"pool_id": pool_id}, {"_id": 0}))
 
 
@@ -565,13 +645,170 @@ async def my_matches(authorization: Optional[str] = Header(None)):
         )
         for m in await cursor.to_list(100):
             results[m["pool_id"]] = m
-    return await _enrich_with_ratings(list(results.values()))
+    enriched = await _enrich_with_ratings(list(results.values()))
+    return await _enrich_with_my_request_status(enriched, user["user_id"])
 
 
 @api.delete("/pools/{pool_id}")
 async def delete_pool(pool_id: str, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     r = await db.pools.delete_one({"pool_id": pool_id, "user_id": user["user_id"]})
+    if r.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"ok": True}
+
+
+# ---------- Join Requests ----------
+def _pool_is_joinable(pool: dict) -> bool:
+    if not pool or pool.get("status") != "open":
+        return False
+    return _ensure_aware(pool["travel_datetime"]) > _now_utc()
+
+
+@api.post("/pools/{pool_id}/requests", response_model=JoinRequestOut)
+async def create_join_request(pool_id: str, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    pool = await db.pools.find_one({"pool_id": pool_id}, {"_id": 0})
+    if not pool:
+        raise HTTPException(status_code=404, detail="Pool not found")
+    if pool["user_id"] == user["user_id"]:
+        raise HTTPException(status_code=400, detail="You can't request to join your own pool")
+    if not _pool_is_joinable(pool):
+        raise HTTPException(status_code=400, detail="This pool is no longer accepting requests")
+    if any(t["user_id"] == user["user_id"] for t in pool.get("confirmed_travelers", [])):
+        raise HTTPException(status_code=400, detail="You're already confirmed on this pool")
+
+    existing = await db.join_requests.find_one(
+        {"pool_id": pool_id, "requester_id": user["user_id"], "status": {"$in": ["pending", "accepted"]}},
+        {"_id": 0},
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="You already have a request on this pool")
+
+    doc = {
+        "request_id": f"req_{uuid.uuid4().hex[:12]}",
+        "pool_id": pool_id,
+        "pool_owner_id": pool["user_id"],
+        "from_location": pool["from_location"],
+        "to_location": pool["to_location"],
+        "travel_datetime": pool["travel_datetime"],
+        "requester_id": user["user_id"],
+        "requester_name": user.get("name") or "Traveller",
+        "requester_email": user["email"],
+        "requester_gender": user.get("gender"),
+        "status": "pending",
+        "created_at": _now_utc(),
+        "responded_at": None,
+    }
+    await db.join_requests.insert_one(doc)
+
+    asyncio.create_task(send_push(
+        pool["user_id"], "New ride request",
+        f"{doc['requester_name']} wants to travel with you: {pool['from_location']} → {pool['to_location']}",
+        "/(tabs)/matches",
+    ))
+    asyncio.create_task(send_email(
+        pool["user_email"], "UniPool: New ride request",
+        join_request_email_html(pool["user_name"], doc["requester_name"], pool, "received"),
+    ))
+    return _clean(dict(doc))
+
+
+@api.get("/pools/{pool_id}/requests", response_model=List[JoinRequestOut])
+async def list_pool_requests(pool_id: str, authorization: Optional[str] = Header(None)):
+    """Pool owner only — all requests (any status) for one of their pools."""
+    user = await get_current_user(authorization)
+    pool = await db.pools.find_one({"pool_id": pool_id}, {"_id": 0})
+    if not pool:
+        raise HTTPException(status_code=404, detail="Pool not found")
+    if pool["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not your pool")
+    cursor = db.join_requests.find({"pool_id": pool_id}, {"_id": 0}).sort("created_at", -1)
+    return await cursor.to_list(200)
+
+
+@api.get("/requests/incoming", response_model=List[JoinRequestOut])
+async def incoming_requests(authorization: Optional[str] = Header(None)):
+    """Pending requests on pools I own — for the notification/inbox badge."""
+    user = await get_current_user(authorization)
+    cursor = db.join_requests.find(
+        {"pool_owner_id": user["user_id"], "status": "pending"}, {"_id": 0}
+    ).sort("created_at", -1)
+    return await cursor.to_list(200)
+
+
+@api.get("/requests/mine", response_model=List[JoinRequestOut])
+async def my_requests(authorization: Optional[str] = Header(None)):
+    """Requests I've sent, any status — so I can see pending/accepted/declined."""
+    user = await get_current_user(authorization)
+    cursor = db.join_requests.find(
+        {"requester_id": user["user_id"]}, {"_id": 0}
+    ).sort("created_at", -1)
+    return await cursor.to_list(200)
+
+
+@api.patch("/requests/{request_id}/accept", response_model=JoinRequestOut)
+async def accept_request(request_id: str, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    reqdoc = await db.join_requests.find_one({"request_id": request_id}, {"_id": 0})
+    if not reqdoc:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if reqdoc["pool_owner_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not your pool")
+    if reqdoc["status"] != "pending":
+        raise HTTPException(status_code=400, detail="This request was already responded to")
+
+    pool = await db.pools.find_one({"pool_id": reqdoc["pool_id"]}, {"_id": 0})
+    if not pool:
+        raise HTTPException(status_code=404, detail="Pool not found")
+
+    traveler = {"user_id": reqdoc["requester_id"], "name": reqdoc["requester_name"], "email": reqdoc["requester_email"]}
+    # Keeps adding travelers — 2 confirmed + 1 more accepted just appends, no cap here.
+    await db.pools.update_one(
+        {"pool_id": pool["pool_id"], "confirmed_travelers.user_id": {"$ne": traveler["user_id"]}},
+        {"$push": {"confirmed_travelers": traveler}},
+    )
+    await db.join_requests.update_one(
+        {"request_id": request_id}, {"$set": {"status": "accepted", "responded_at": _now_utc()}}
+    )
+    updated = await db.join_requests.find_one({"request_id": request_id}, {"_id": 0})
+
+    asyncio.create_task(send_push(
+        reqdoc["requester_id"], "Request accepted! 🚗",
+        f"{user.get('name')} accepted you for {pool['from_location']} → {pool['to_location']}",
+        "/(tabs)/matches",
+    ))
+    asyncio.create_task(send_email(
+        reqdoc["requester_email"], "UniPool: Your request was accepted",
+        join_request_email_html(reqdoc["requester_name"], user.get("name") or "", pool, "accepted"),
+    ))
+    return _clean(updated)
+
+
+@api.patch("/requests/{request_id}/decline", response_model=JoinRequestOut)
+async def decline_request(request_id: str, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    reqdoc = await db.join_requests.find_one({"request_id": request_id}, {"_id": 0})
+    if not reqdoc:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if reqdoc["pool_owner_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not your pool")
+    if reqdoc["status"] != "pending":
+        raise HTTPException(status_code=400, detail="This request was already responded to")
+
+    await db.join_requests.update_one(
+        {"request_id": request_id}, {"$set": {"status": "declined", "responded_at": _now_utc()}}
+    )
+    return _clean(await db.join_requests.find_one({"request_id": request_id}, {"_id": 0}))
+
+
+@api.delete("/requests/{request_id}")
+async def cancel_request(request_id: str, authorization: Optional[str] = Header(None)):
+    """Requester withdraws their own pending request."""
+    user = await get_current_user(authorization)
+    r = await db.join_requests.delete_one(
+        {"request_id": request_id, "requester_id": user["user_id"], "status": "pending"}
+    )
     if r.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Not found")
     return {"ok": True}

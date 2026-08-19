@@ -65,4 +65,11 @@ export const api = {
     req("/ratings", { method: "POST", body: JSON.stringify({ rated_user_id, stars, comment, pool_id }) }),
   getUserRatings: (userId: string) => req(`/ratings/user/${userId}`),
   canRate: (userId: string) => req(`/ratings/can-rate/${userId}`),
+  requestToJoin: (poolId: string) => req(`/pools/${poolId}/requests`, { method: "POST" }),
+  listPoolRequests: (poolId: string) => req(`/pools/${poolId}/requests`),
+  incomingRequests: () => req("/requests/incoming"),
+  myRequests: () => req("/requests/mine"),
+  acceptRequest: (requestId: string) => req(`/requests/${requestId}/accept`, { method: "PATCH" }),
+  declineRequest: (requestId: string) => req(`/requests/${requestId}/decline`, { method: "PATCH" }),
+  cancelRequest: (requestId: string) => req(`/requests/${requestId}`, { method: "DELETE" }),
 };

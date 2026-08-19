@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicator, ScrollView, TextInput } from "react-native";
+import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicator, ScrollView, TextInput, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -13,11 +13,15 @@ import PressableScale from "@/src/components/PressableScale";
 import RatingBadge from "@/src/components/RatingBadge";
 import PoolMapView from "@/src/components/PoolMapView";
 
+type ConfirmedTraveler = { user_id: string; name: string; email: string };
+
 type Pool = {
   pool_id: string; user_id: string; user_name: string; user_email: string;
   from_location: string; to_location: string; travel_datetime: string;
   gender_preference: string; companions: number; luggage?: string | null; notes?: string | null;
   user_rating_avg?: number | null; user_rating_count?: number;
+  confirmed_travelers?: ConfirmedTraveler[];
+  my_request_status?: "pending" | "accepted" | "declined" | null;
 };
 
 const CHIPS = ["All", "Today", "Tomorrow", "This week", "Airport", "Railway"];
@@ -41,11 +45,26 @@ export default function HomeFeed() {
   const [chip, setChip] = useState("All");
   const [search, setSearch] = useState("");
   const [showMap, setShowMap] = useState(false);
+  const [requesting, setRequesting] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     try { const list = await api.listPools(); setPools(list); }
     catch (e) { console.warn(e); }
     finally { setLoading(false); setRefreshing(false); }
+  }, []);
+
+  const sendRequest = useCallback(async (pool: Pool) => {
+    setRequesting((s) => new Set(s).add(pool.pool_id));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      await api.requestToJoin(pool.pool_id);
+      setPools((prev) => prev.map((p) => p.pool_id === pool.pool_id ? { ...p, my_request_status: "pending" } : p));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e: any) {
+      Alert.alert("Couldn't send request", e.message || "Please try again.");
+    } finally {
+      setRequesting((s) => { const n = new Set(s); n.delete(pool.pool_id); return n; });
+    }
   }, []);
 
   useFocusEffect(useCallback(() => { setLoading(true); load(); }, [load]));
@@ -138,7 +157,14 @@ export default function HomeFeed() {
               <Text style={styles.emptySub}>Be the first to post a cab-pool for this route.</Text>
             </View>
           }
-          renderItem={({ item }) => <PoolCard pool={item} mine={item.user_id === user?.user_id} />}
+          renderItem={({ item }) => (
+            <PoolCard
+              pool={item}
+              mine={item.user_id === user?.user_id}
+              busy={requesting.has(item.pool_id)}
+              onRequest={() => sendRequest(item)}
+            />
+          )}
         />
       )}
 
@@ -157,7 +183,9 @@ export default function HomeFeed() {
   );
 }
 
-function PoolCard({ pool, mine }: { pool: Pool; mine: boolean }) {
+function PoolCard({ pool, mine, busy, onRequest }: { pool: Pool; mine: boolean; busy: boolean; onRequest: () => void }) {
+  const travelers = pool.confirmed_travelers || [];
+
   return (
     <View style={styles.card} testID={`pool-card-${pool.pool_id}`}>
       <View style={styles.cardHeader}>
@@ -186,7 +214,61 @@ function PoolCard({ pool, mine }: { pool: Pool; mine: boolean }) {
       </View>
 
       {pool.notes ? <Text style={styles.notes}>“{pool.notes}”</Text> : null}
+
+      {travelers.length > 0 && (
+        <View style={styles.travelingRow} testID={`traveling-together-${pool.pool_id}`}>
+          <Ionicons name="car-sport" size={14} color={COLORS.success} />
+          <Text style={styles.travelingText} numberOfLines={1}>
+            Traveling together: {travelers.map((t) => t.name.split(" ")[0]).join(", ")}
+            {mine ? "" : ` +${travelers.length}`}
+          </Text>
+        </View>
+      )}
+
+      {!mine && <RequestCta pool={pool} busy={busy} onRequest={onRequest} />}
     </View>
+  );
+}
+
+function RequestCta({ pool, busy, onRequest }: { pool: Pool; busy: boolean; onRequest: () => void }) {
+  const status = pool.my_request_status;
+
+  if (status === "accepted") {
+    return (
+      <View style={[styles.reqPill, styles.reqPillAccepted]}>
+        <Ionicons name="checkmark-circle" size={16} color="#fff" />
+        <Text style={styles.reqPillTextLight}>You're confirmed for this ride 🚗</Text>
+      </View>
+    );
+  }
+
+  if (status === "pending") {
+    return (
+      <View style={[styles.reqPill, styles.reqPillPending]}>
+        <Ionicons name="time-outline" size={16} color={COLORS.indigo} />
+        <Text style={styles.reqPillText}>Request sent — waiting for response</Text>
+      </View>
+    );
+  }
+
+  return (
+    <Pressable
+      testID={`request-${pool.pool_id}`}
+      onPress={onRequest}
+      disabled={busy}
+      style={[styles.reqPill, styles.reqPillIdle, busy && { opacity: 0.6 }]}
+    >
+      {busy ? (
+        <ActivityIndicator size="small" color="#fff" />
+      ) : (
+        <>
+          <Ionicons name="hand-left-outline" size={16} color="#fff" />
+          <Text style={styles.reqPillTextLight}>
+            {status === "declined" ? "Request again" : "Request to join"}
+          </Text>
+        </>
+      )}
+    </Pressable>
   );
 }
 
@@ -232,6 +314,16 @@ const styles = StyleSheet.create({
   metaPill: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: COLORS.cream, borderRadius: RADIUS.pill, paddingHorizontal: 10, paddingVertical: 6 },
   metaText: { fontSize: 12, color: COLORS.onCream, fontWeight: "600" },
   notes: { marginTop: SPACING.md, color: COLORS.muted, fontStyle: "italic" },
+
+  travelingRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: SPACING.md, backgroundColor: "rgba(46,125,50,0.08)", borderRadius: RADIUS.pill, paddingHorizontal: 12, paddingVertical: 8 },
+  travelingText: { color: COLORS.success, fontSize: 12, fontWeight: "700", flex: 1 },
+
+  reqPill: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: SPACING.md, borderRadius: RADIUS.pill, paddingVertical: 12 },
+  reqPillIdle: { backgroundColor: COLORS.indigo },
+  reqPillPending: { backgroundColor: COLORS.cream },
+  reqPillAccepted: { backgroundColor: COLORS.success },
+  reqPillText: { color: COLORS.onCream, fontWeight: "700", fontSize: 13 },
+  reqPillTextLight: { color: "#fff", fontWeight: "700", fontSize: 13 },
 
   fab: { position: "absolute", right: SPACING.lg, bottom: 90, borderRadius: RADIUS.pill, overflow: "hidden", shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 8 },
   fabBg: { flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingVertical: 14, gap: 6 },

@@ -12,6 +12,8 @@ import { useAuth } from "@/src/auth/AuthContext";
 import BrandFooter from "@/src/components/BrandFooter";
 import { usePushNotifications } from "@/src/hooks/use-push-notifications";
 
+type ConfirmedTraveler = { user_id: string; name: string; email: string };
+
 type Pool = {
   pool_id: string;
   from_location: string;
@@ -21,6 +23,21 @@ type Pool = {
   status?: string;
   user_name?: string;
   user_email?: string;
+  confirmed_travelers?: ConfirmedTraveler[];
+};
+
+type JoinRequest = {
+  request_id: string;
+  pool_id: string;
+  from_location: string;
+  to_location: string;
+  travel_datetime: string;
+  requester_id: string;
+  requester_name: string;
+  requester_rating_avg?: number | null;
+  requester_rating_count?: number;
+  status: string;
+  created_at: string;
 };
 
 function fmt(dt: string) {
@@ -34,6 +51,8 @@ export default function ProfileScreen() {
   const [myPools, setMyPools] = useState<Pool[]>([]);
   const [gender, setGender] = useState<string>(user?.gender || "any");
   const [tab, setTab] = useState<"open" | "closed">("open");
+  const [incoming, setIncoming] = useState<JoinRequest[]>([]);
+  const [respondingId, setRespondingId] = useState<string | null>(null);
 
   const [adminOpen, setAdminOpen] = useState(false);
   const [adminStats, setAdminStats] = useState<any>(null);
@@ -41,10 +60,28 @@ export default function ProfileScreen() {
   const [adminLoading, setAdminLoading] = useState(false);
 
   const load = useCallback(async () => {
-    try { setMyPools(await api.myPools()); } catch {}
+    try {
+      const [pools, reqs] = await Promise.all([api.myPools(), api.incomingRequests()]);
+      setMyPools(pools);
+      setIncoming(reqs);
+    } catch {}
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  const respond = async (requestId: string, action: "accept" | "decline") => {
+    setRespondingId(requestId);
+    try {
+      if (action === "accept") await api.acceptRequest(requestId);
+      else await api.declineRequest(requestId);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await load();
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
+    } finally {
+      setRespondingId(null);
+    }
+  };
 
   const saveGender = async (g: string) => {
     setGender(g);
@@ -146,6 +183,43 @@ export default function ProfileScreen() {
               </Pressable>
             )}
 
+            {incoming.length > 0 && (
+              <>
+                <Text style={styles.sectionLabel}>Ride Requests</Text>
+                {incoming.map((r) => (
+                  <View key={r.request_id} style={styles.reqCard} testID={`incoming-${r.request_id}`}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.reqName}>{r.requester_name}</Text>
+                      <Text style={styles.reqRoute}>{r.from_location} → {r.to_location}</Text>
+                      <Text style={styles.reqWhen}>{fmt(r.travel_datetime)}</Text>
+                    </View>
+                    {respondingId === r.request_id ? (
+                      <ActivityIndicator color={COLORS.indigo} />
+                    ) : (
+                      <View style={{ flexDirection: "row", gap: SPACING.sm }}>
+                        <Pressable
+                          testID={`decline-${r.request_id}`}
+                          onPress={() => respond(r.request_id, "decline")}
+                          style={[styles.reqBtn, styles.reqBtnDecline]}
+                          hitSlop={8}
+                        >
+                          <Ionicons name="close" size={18} color={COLORS.error} />
+                        </Pressable>
+                        <Pressable
+                          testID={`accept-${r.request_id}`}
+                          onPress={() => respond(r.request_id, "accept")}
+                          style={[styles.reqBtn, styles.reqBtnAccept]}
+                          hitSlop={8}
+                        >
+                          <Ionicons name="checkmark" size={18} color="#fff" />
+                        </Pressable>
+                      </View>
+                    )}
+                  </View>
+                ))}
+              </>
+            )}
+
             <Text style={styles.sectionLabel}>My Queries</Text>
             <View style={styles.segmentRow}>
               <Pressable testID="mine-tab-open" onPress={() => setTab("open")} style={[styles.segment, tab === "open" && styles.segmentActive]}>
@@ -162,6 +236,14 @@ export default function ProfileScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.mineRoute}>{item.from_location} → {item.to_location}</Text>
               <Text style={styles.mineWhen}>{fmt(item.travel_datetime)}</Text>
+              {(item.confirmed_travelers?.length ?? 0) > 0 && (
+                <View style={styles.mineTravelingRow}>
+                  <Ionicons name="car-sport" size={12} color={COLORS.success} />
+                  <Text style={styles.mineTravelingText} numberOfLines={1}>
+                    Traveling with {item.confirmed_travelers!.map((t) => t.name.split(" ")[0]).join(", ")}
+                  </Text>
+                </View>
+              )}
             </View>
             {tab === "open" ? (
               <>
@@ -275,8 +357,18 @@ const styles = StyleSheet.create({
   mine: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: COLORS.border, gap: SPACING.sm },
   mineRoute: { fontSize: FONT.base, fontWeight: "700", color: COLORS.onSurface },
   mineWhen: { color: COLORS.muted, marginTop: 2, fontSize: FONT.sm },
+  mineTravelingRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
+  mineTravelingText: { color: COLORS.success, fontSize: 11, fontWeight: "700", flex: 1 },
   actionBtn: { padding: 4 },
   emptyMine: { color: COLORS.muted, padding: SPACING.md, textAlign: "center" },
+
+  reqCard: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: COLORS.saffron, gap: SPACING.sm },
+  reqName: { fontSize: FONT.base, fontWeight: "700", color: COLORS.onSurface },
+  reqRoute: { color: COLORS.onSurface, marginTop: 2, fontSize: FONT.sm, fontWeight: "600" },
+  reqWhen: { color: COLORS.muted, marginTop: 1, fontSize: FONT.sm },
+  reqBtn: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+  reqBtnAccept: { backgroundColor: COLORS.success },
+  reqBtnDecline: { backgroundColor: "#fff", borderWidth: 1, borderColor: COLORS.error },
 
   adminToggle: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#fff", borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.border, paddingVertical: 12, paddingHorizontal: SPACING.lg, justifyContent: "center" },
   adminToggleText: { color: COLORS.indigo, fontWeight: "700", flex: 1, textAlign: "center" },
