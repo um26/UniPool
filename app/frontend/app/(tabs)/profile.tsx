@@ -41,7 +41,7 @@ type JoinRequest = {
 };
 
 function fmt(dt: string) {
-  return new Date(dt).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  return new Date(dt).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 }
 
 export default function ProfileScreen() {

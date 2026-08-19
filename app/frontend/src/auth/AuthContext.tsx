@@ -9,6 +9,8 @@ export type UniUser = {
   picture?: string | null;
   gender?: string | null;
   phone?: string | null;
+  username?: string | null;
+  is_admin?: boolean;
 };
 
 type AuthCtx = {
@@ -25,6 +27,9 @@ type AuthCtx = {
   refresh: () => Promise<void>;
   // Web-only: mount a Google button into a DOM node.
   renderGoogleButton: (containerId: string) => void;
+  // Email/username + password auth.
+  signInWithPassword: (identifier: string, password: string) => Promise<void>;
+  signUpWithPassword: (email: string, password: string, name: string, username?: string) => Promise<void>;
 };
 
 const Ctx = createContext<AuthCtx>({} as any);
@@ -169,8 +174,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const signInWithPassword = useCallback(async (identifier: string, password: string) => {
+    setSigningIn(true);
+    setSignInError(null);
+    try {
+      const res = await api.emailLogin(identifier, password);
+      await setToken(res.session_token);
+      setUser(res.user);
+    } catch (e: any) {
+      setSignInError(e?.message || "Sign-in failed. Please check your details and try again.");
+      throw e;
+    } finally {
+      setSigningIn(false);
+    }
+  }, []);
+
+  const signUpWithPassword = useCallback(async (email: string, password: string, name: string, username?: string) => {
+    setSigningIn(true);
+    setSignInError(null);
+    try {
+      const res = await api.emailSignup(email, password, name, username);
+      await setToken(res.session_token);
+      setUser(res.user);
+    } catch (e: any) {
+      setSignInError(e?.message || "Couldn't create your account. Please try again.");
+      throw e;
+    } finally {
+      setSigningIn(false);
+    }
+  }, []);
+
   return (
-    <Ctx.Provider value={{ user, loading, signingIn, signInError, signIn, signOut, refresh, renderGoogleButton }}>
+    <Ctx.Provider value={{ user, loading, signingIn, signInError, signIn, signOut, refresh, renderGoogleButton, signInWithPassword, signUpWithPassword }}>
       {children}
     </Ctx.Provider>
   );

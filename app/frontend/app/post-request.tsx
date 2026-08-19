@@ -8,7 +8,26 @@ import * as Haptics from "expo-haptics";
 import { COLORS, SPACING, RADIUS, FONT } from "@/src/theme";
 import { api } from "@/src/api/client";
 
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
 function pad(n: number) { return n < 10 ? `0${n}` : `${n}`; }
+
+/** Extracts the IST wall-clock date/time components from a real UTC instant,
+ *  regardless of what timezone the device itself is set to. */
+function toISTParts(d: Date) {
+  const shifted = new Date(d.getTime() + IST_OFFSET_MS);
+  return {
+    date: `${shifted.getUTCFullYear()}-${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())}`,
+    time: `${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}`,
+  };
+}
+
+/** Treats the given date/time strings as an IST wall-clock moment and
+ *  returns the equivalent UTC ISO string — independent of device timezone. */
+function istPartsToUTCISO(date: string, time: string) {
+  const asUTC = new Date(`${date}T${time}:00.000Z`).getTime();
+  return new Date(asUTC - IST_OFFSET_MS).toISOString();
+}
 
 export default function PostRequestScreen() {
   const router = useRouter();
@@ -16,10 +35,11 @@ export default function PostRequestScreen() {
   const isEditing = !!edit;
   const now = new Date();
   const defaultDate = new Date(now.getTime() + 60 * 60 * 1000);
+  const defaultIst = toISTParts(defaultDate);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [date, setDate] = useState(defaultDate.toISOString().slice(0, 10));
-  const [time, setTime] = useState(`${pad(defaultDate.getHours())}:${pad(defaultDate.getMinutes())}`);
+  const [date, setDate] = useState(defaultIst.date);
+  const [time, setTime] = useState(defaultIst.time);
   const [genderPref, setGenderPref] = useState<"any" | "same">("any");
   const [companions, setCompanions] = useState(0);
   const [luggage, setLuggage] = useState("");
@@ -37,8 +57,9 @@ export default function PostRequestScreen() {
         setFrom(pool.from_location);
         setTo(pool.to_location);
         const dt = new Date(pool.travel_datetime);
-        setDate(dt.toISOString().slice(0, 10));
-        setTime(`${pad(dt.getHours())}:${pad(dt.getMinutes())}`);
+        const ist = toISTParts(dt);
+        setDate(ist.date);
+        setTime(ist.time);
         setGenderPref(pool.gender_preference || "any");
         setCompanions(pool.companions || 0);
         setLuggage(pool.luggage || "");
@@ -56,7 +77,7 @@ export default function PostRequestScreen() {
     if (!from.trim() || !to.trim()) return Alert.alert("Missing", "From & To are required");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return Alert.alert("Invalid", "Date must be YYYY-MM-DD");
     if (!/^\d{2}:\d{2}$/.test(time)) return Alert.alert("Invalid", "Time must be HH:MM");
-    const iso = new Date(`${date}T${time}:00`).toISOString();
+    const iso = istPartsToUTCISO(date, time);
     setSubmitting(true);
     try {
       const payload = {
@@ -105,10 +126,10 @@ export default function PostRequestScreen() {
           </Field>
 
           <View style={{ flexDirection: "row", gap: SPACING.md }}>
-            <Field style={{ flex: 1 }} label="Date" testID="input-date">
+            <Field style={{ flex: 1 }} label="Date (IST)" testID="input-date">
               <TextInput testID="date-input" value={date} onChangeText={setDate} placeholder="YYYY-MM-DD" style={styles.input} placeholderTextColor={COLORS.muted} />
             </Field>
-            <Field style={{ flex: 1 }} label="Time" testID="input-time">
+            <Field style={{ flex: 1 }} label="Time (IST)" testID="input-time">
               <TextInput testID="time-input" value={time} onChangeText={setTime} placeholder="HH:MM" style={styles.input} placeholderTextColor={COLORS.muted} />
             </Field>
           </View>

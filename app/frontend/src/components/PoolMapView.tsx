@@ -89,24 +89,40 @@ export default function PoolMapView({ pools }: { pools: Pool[] }) {
         markersRef.current = [];
         setResolvedCount(0);
 
-        const uniquePools = pools.slice(0, 25); // keep Nominatim usage sane
+        const uniquePools = pools.slice(0, 15); // two geocodes per pool now — keep Nominatim usage sane
         const bounds: [number, number][] = [];
 
         for (const pool of uniquePools) {
           if (cancelled) return;
-          const coords = await geocode(pool.from_location);
-          if (coords && window.L && mapRef.current) {
-            const marker = window.L.marker([coords.lat, coords.lng]).addTo(mapRef.current);
-            const ratingText = pool.user_rating_avg ? `★ ${pool.user_rating_avg}` : "New traveller";
-            marker.bindPopup(
+          const [fromCoords, toCoords] = await Promise.all([geocode(pool.from_location), geocode(pool.to_location)]);
+          if (!cancelled) await new Promise((r) => setTimeout(r, 250)); // Nominatim's ~1 req/sec policy
+
+          if (fromCoords && window.L && mapRef.current) {
+            const ratingText = pool.user_rating_avg ? `★ ${pool.user_rating_avg}/10` : "New traveller";
+            const fromMarker = window.L.circleMarker([fromCoords.lat, fromCoords.lng], {
+              radius: 8, color: "#F57F17", fillColor: "#F57F17", fillOpacity: 0.9, weight: 2,
+            }).addTo(mapRef.current);
+            fromMarker.bindPopup(
               `<strong>${pool.user_name}</strong><br/>${pool.from_location} → ${pool.to_location}<br/><span style="color:#888">${ratingText}</span>`
             );
-            markersRef.current.push(marker);
-            bounds.push([coords.lat, coords.lng]);
+            markersRef.current.push(fromMarker);
+            bounds.push([fromCoords.lat, fromCoords.lng]);
+
+            if (toCoords) {
+              const toMarker = window.L.circleMarker([toCoords.lat, toCoords.lng], {
+                radius: 6, color: "#3949AB", fillColor: "#3949AB", fillOpacity: 0.9, weight: 2,
+              }).addTo(mapRef.current);
+              toMarker.bindPopup(`<strong>Drop:</strong> ${pool.to_location}`);
+              markersRef.current.push(toMarker);
+              bounds.push([toCoords.lat, toCoords.lng]);
+
+              const line = window.L.polyline([[fromCoords.lat, fromCoords.lng], [toCoords.lat, toCoords.lng]], {
+                color: "#3949AB", weight: 2, opacity: 0.55, dashArray: "6 6",
+              }).addTo(mapRef.current);
+              markersRef.current.push(line);
+            }
           }
           setResolvedCount((c) => c + 1);
-          // Nominatim's usage policy: max ~1 request/sec for uncached lookups.
-          await new Promise((r) => setTimeout(r, 250));
         }
 
         if (bounds.length > 0 && mapRef.current) {
@@ -136,7 +152,7 @@ export default function PoolMapView({ pools }: { pools: Pool[] }) {
       {status === "loading" && (
         <View style={styles.overlay} pointerEvents="none">
           <ActivityIndicator color={COLORS.indigo} />
-          <Text style={styles.overlayText}>Locating {resolvedCount}/{Math.min(pools.length, 25)} routes…</Text>
+          <Text style={styles.overlayText}>Locating {resolvedCount}/{Math.min(pools.length, 15)} routes…</Text>
         </View>
       )}
       {status === "error" && (

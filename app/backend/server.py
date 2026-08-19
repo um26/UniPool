@@ -12,6 +12,7 @@ from typing import List, Optional
 from datetime import datetime, timezone, timedelta
 
 import httpx
+import bcrypt
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
 
@@ -32,6 +33,11 @@ EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "UniPool")
 ADMIN_EMAILS = {
     e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()
 }
+
+# Seeded username/password admin account — created on startup if missing.
+SEED_ADMIN_USERNAME = "BBadmin"
+SEED_ADMIN_PASSWORD = "BB@unipool123"
+SEED_ADMIN_EMAIL = "bbadmin@unipool.internal"
 
 VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
 VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
@@ -150,6 +156,18 @@ class ProfileUpdate(BaseModel):
     phone: Optional[str] = None
 
 
+class SignupRequest(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+    username: Optional[str] = None
+
+
+class LoginRequest(BaseModel):
+    identifier: str  # email or username
+    password: str
+
+
 class ScoreSubmit(BaseModel):
     game: str
     score: int
@@ -180,7 +198,7 @@ def _is_admin(email: str) -> bool:
 
 def _with_admin_flag(user: dict) -> dict:
     if user:
-        user["is_admin"] = _is_admin(user.get("email", ""))
+        user["is_admin"] = _is_admin(user.get("email", "")) or bool(user.get("is_admin_override"))
     return user
 
 
@@ -188,6 +206,15 @@ def _ensure_aware(dt: datetime) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt
+
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _fmt_ist(dt: datetime) -> str:
+    """Format a stored (UTC) datetime as an IST wall-clock string for emails —
+    all UniPool users are in India, so times should never surface as UTC."""
+    return _ensure_aware(dt).astimezone(IST).strftime("%d %b %Y, %I:%M %p IST")
 
 
 ONLINE_THRESHOLD_SECONDS = 60
@@ -256,7 +283,7 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     exp = _ensure_aware(session["expires_at"])
     if exp < _now_utc():
         raise HTTPException(status_code=401, detail="Session expired")
-    user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
+    user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0, "password_hash": 0})
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     # Implicit presence heartbeat — every authenticated call (chat polling,
@@ -334,10 +361,10 @@ def match_email_html(recipient_name: str, match: dict, own: dict) -> str:
           <p>Good news — someone on UniPool just posted a cab-pool request that overlaps with yours within a 1-hour window.</p>
           <table cellpadding="8" cellspacing="0" style="background:#FFECC2;border-radius:12px;width:100%;margin:12px 0;">
             <tr><td><b>{match['user_name']}</b><br/>{match['from_location']} → {match['to_location']}<br/>
-            <span style="color:#B05C00;">{_ensure_aware(match['travel_datetime']).strftime('%d %b %Y, %I:%M %p UTC')}</span><br/>
+            <span style="color:#B05C00;">{_fmt_ist(match['travel_datetime'])}</span><br/>
             Reply to: <a href="mailto:{match['user_email']}">{match['user_email']}</a></td></tr>
           </table>
-          <p style="color:#3D352F;font-size:13px;">Your request: {own['from_location']} → {own['to_location']} at {_ensure_aware(own['travel_datetime']).strftime('%d %b %Y, %I:%M %p UTC')}</p>
+          <p style="color:#3D352F;font-size:13px;">Your request: {own['from_location']} → {own['to_location']} at {_fmt_ist(own['travel_datetime'])}</p>
           <p>Reach out and split the fare. Safe travels!</p>
           <p style="color:#B05C00;font-weight:600;">— Team UniPool</p>
         </td></tr>
@@ -366,7 +393,7 @@ def join_request_email_html(recipient_name: str, requester_name: str, pool: dict
           <p>{body}</p>
           <table cellpadding="8" cellspacing="0" style="background:#FFECC2;border-radius:12px;width:100%;margin:12px 0;">
             <tr><td>{pool['from_location']} → {pool['to_location']}<br/>
-            <span style="color:#B05C00;">{_ensure_aware(pool['travel_datetime']).strftime('%d %b %Y, %I:%M %p UTC')}</span></td></tr>
+            <span style="color:#B05C00;">{_fmt_ist(pool['travel_datetime'])}</span></td></tr>
           </table>
           <p>Open UniPool to {"accept or decline" if action == "received" else "start chatting"}.</p>
           <p style="color:#B05C00;font-weight:600;">— Team UniPool</p>
@@ -420,6 +447,30 @@ class GoogleSignIn(BaseModel):
     id_token: str
 
 
+def _hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def _verify_password(password: str, password_hash: str) -> bool:
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    except Exception:
+        return False
+
+
+async def _create_session_token(user_id: str) -> str:
+    session_token = uuid.uuid4().hex
+    await db.user_sessions.insert_one(
+        {
+            "session_token": session_token,
+            "user_id": user_id,
+            "expires_at": _now_utc() + timedelta(days=7),
+            "created_at": _now_utc(),
+        }
+    )
+    return session_token
+
+
 async def _create_session_for_user(email: str, name: str, picture: Optional[str]) -> dict:
     """Shared logic: upsert the user, mint a session token, return {session_token, user}."""
     existing_user = await db.users.find_one({"email": email}, {"_id": 0})
@@ -444,16 +495,8 @@ async def _create_session_for_user(email: str, name: str, picture: Optional[str]
             }
         )
 
-    session_token = uuid.uuid4().hex
-    await db.user_sessions.insert_one(
-        {
-            "session_token": session_token,
-            "user_id": user_id,
-            "expires_at": _now_utc() + timedelta(days=7),
-            "created_at": _now_utc(),
-        }
-    )
-    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    session_token = await _create_session_token(user_id)
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
     return {"session_token": session_token, "user": _with_admin_flag(user_doc)}
 
 
@@ -478,6 +521,51 @@ async def google_sign_in(body: GoogleSignIn):
     return await _create_session_for_user(email, name, picture)
 
 
+@api.post("/auth/signup")
+async def signup(body: SignupRequest):
+    email = body.email.strip().lower()
+    if len(body.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    if await db.users.find_one({"email": email}, {"_id": 0}):
+        raise HTTPException(status_code=409, detail="An account with this email already exists")
+    username = (body.username or "").strip() or None
+    if username:
+        if await db.users.find_one({"username": username}, {"_id": 0}):
+            raise HTTPException(status_code=409, detail="That username is already taken")
+
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    await db.users.insert_one({
+        "user_id": user_id,
+        "email": email,
+        "username": username,
+        "name": body.name.strip() or email.split("@")[0],
+        "picture": None,
+        "password_hash": _hash_password(body.password),
+        "gender": None,
+        "phone": None,
+        "created_at": _now_utc(),
+        "last_login": _now_utc(),
+    })
+    session_token = await _create_session_token(user_id)
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+    return {"session_token": session_token, "user": _with_admin_flag(user_doc)}
+
+
+@api.post("/auth/login")
+async def login(body: LoginRequest):
+    identifier = body.identifier.strip()
+    user = await db.users.find_one(
+        {"$or": [{"email": identifier.lower()}, {"username": identifier}]}, {"_id": 0}
+    )
+    if not user or not user.get("password_hash") or not _verify_password(body.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Incorrect email/username or password")
+
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"last_login": _now_utc()}})
+    session_token = await _create_session_token(user["user_id"])
+    user_doc = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "password_hash": 0})
+    return {"session_token": session_token, "user": _with_admin_flag(user_doc)}
+
+
 @api.get("/auth/me")
 async def me(user=None, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
@@ -498,7 +586,7 @@ async def update_profile(body: ProfileUpdate, authorization: Optional[str] = Hea
     updates = {k: v for k, v in body.dict().items() if v is not None}
     if updates:
         await db.users.update_one({"user_id": user["user_id"]}, {"$set": updates})
-    updated = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    updated = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "password_hash": 0})
     return updated
 
 
@@ -932,7 +1020,7 @@ async def send_message(body: MessageCreate, authorization: Optional[str] = Heade
     if recent_msgs >= 30:
         raise HTTPException(status_code=429, detail="You're sending messages too fast. Slow down a bit.")
 
-    to_user = await db.users.find_one({"user_id": body.to_user_id}, {"_id": 0})
+    to_user = await db.users.find_one({"user_id": body.to_user_id}, {"_id": 0, "password_hash": 0})
     if not to_user:
         raise HTTPException(status_code=404, detail="Recipient not found")
     doc = {
@@ -1042,7 +1130,7 @@ async def submit_rating(body: RatingCreate, authorization: Optional[str] = Heade
         raise HTTPException(status_code=400, detail="You can't rate yourself")
     if not (1 <= body.stars <= 10):
         raise HTTPException(status_code=400, detail="Rating must be between 1 and 10")
-    rated_user = await db.users.find_one({"user_id": body.rated_user_id}, {"_id": 0})
+    rated_user = await db.users.find_one({"user_id": body.rated_user_id}, {"_id": 0, "password_hash": 0})
     if not rated_user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -1057,6 +1145,7 @@ async def submit_rating(body: RatingCreate, authorization: Optional[str] = Heade
             "comment": (body.comment or "").strip()[:500] or None,
             "pool_id": body.pool_id,
             "created_at": _now_utc(),
+            "scale": 10,
         }},
         upsert=True,
     )
@@ -1125,6 +1214,19 @@ async def admin_delete_pool(pool_id: str, authorization: Optional[str] = Header(
     if r.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Not found")
     return {"ok": True}
+
+
+@api.post("/admin/migrate-ratings-scale")
+async def admin_migrate_ratings_scale(authorization: Optional[str] = Header(None)):
+    """One-time, idempotent migration: rescale ratings submitted on the old
+    1-5 scale to the current 1-10 scale (stars * 2, capped at 10). Safe to
+    call more than once — only touches docs without a 'scale' marker."""
+    await require_admin(authorization)
+    result = await db.ratings.update_many(
+        {"scale": {"$exists": False}},
+        [{"$set": {"stars": {"$min": [{"$multiply": ["$stars", 2]}, 10]}, "scale": 10}}],
+    )
+    return {"ok": True, "matched": result.matched_count, "modified": result.modified_count}
 
 
 # ---------- Game Leaderboards ----------
@@ -1244,6 +1346,7 @@ async def _startup():
     try:
         await db.users.create_index("email", unique=True)
         await db.users.create_index("user_id", unique=True)
+        await db.users.create_index("username", unique=True, sparse=True)
         await db.user_sessions.create_index("session_token", unique=True)
         await db.user_sessions.create_index("user_id")
         await db.user_sessions.create_index("expires_at", expireAfterSeconds=0)
@@ -1252,6 +1355,26 @@ async def _startup():
         logger.info("Indexes created")
     except Exception as e:
         logger.warning(f"Index setup issue: {e}")
+
+    try:
+        existing_admin = await db.users.find_one({"username": SEED_ADMIN_USERNAME}, {"_id": 0})
+        if not existing_admin:
+            await db.users.insert_one({
+                "user_id": f"user_{uuid.uuid4().hex[:12]}",
+                "email": SEED_ADMIN_EMAIL,
+                "username": SEED_ADMIN_USERNAME,
+                "name": "BB Admin",
+                "picture": None,
+                "password_hash": _hash_password(SEED_ADMIN_PASSWORD),
+                "gender": None,
+                "phone": None,
+                "is_admin_override": True,
+                "created_at": _now_utc(),
+                "last_login": None,
+            })
+            logger.info(f"Seeded admin account '{SEED_ADMIN_USERNAME}'")
+    except Exception as e:
+        logger.warning(f"Admin seed issue: {e}")
 
 
 @app.on_event("shutdown")

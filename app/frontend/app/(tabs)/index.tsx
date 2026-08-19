@@ -28,7 +28,7 @@ const CHIPS = ["All", "Today", "Tomorrow", "This week", "Airport", "Railway"];
 
 function formatDT(iso: string) {
   const d = new Date(iso);
-  return d.toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  return d.toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 }
 
 function isSameDay(iso: string, ref: Date) {

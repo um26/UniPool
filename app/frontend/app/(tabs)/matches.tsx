@@ -26,7 +26,7 @@ type ConfirmedRide = {
 };
 
 function fmtWhen(iso: string) {
-  return new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  return new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 }
 
 export default function MatchesScreen() {
