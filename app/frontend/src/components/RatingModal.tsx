@@ -45,7 +45,7 @@ export default function RatingModal({
   }, [visible, userId]);
 
   const submit = async () => {
-    if (stars < 1) return Alert.alert("Pick a rating", "Tap a star to rate first.");
+    if (stars < 1) return Alert.alert("Pick a rating", "Tap a number to rate first.");
     setSubmitting(true);
     try {
       await api.submitRating(userId, stars, comment.trim() || undefined, poolId);
@@ -75,19 +75,16 @@ export default function RatingModal({
             <ActivityIndicator color={COLORS.indigo} style={{ marginVertical: SPACING.lg }} />
           ) : (
             <>
-              <View style={styles.starsRow}>
-                {[1, 2, 3, 4, 5].map((n) => (
+              {stars > 0 && <Text style={styles.scoreLabel}>{stars}/10</Text>}
+              <View style={styles.numsGrid}>
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
                   <Pressable
                     key={n}
-                    testID={`star-${n}`}
+                    testID={`rating-${n}`}
                     onPress={() => { setStars(n); Haptics.selectionAsync(); }}
-                    hitSlop={6}
+                    style={[styles.numChip, n <= stars && styles.numChipActive]}
                   >
-                    <Ionicons
-                      name={n <= stars ? "star" : "star-outline"}
-                      size={36}
-                      color={n <= stars ? COLORS.saffron : COLORS.borderStrong}
-                    />
+                    <Text style={[styles.numChipText, n <= stars && styles.numChipTextActive]}>{n}</Text>
                   </Pressable>
                 ))}
               </View>
@@ -119,7 +116,12 @@ const styles = StyleSheet.create({
   closeBtn: { position: "absolute", top: SPACING.md, right: SPACING.md },
   title: { fontSize: FONT.xl, fontWeight: "800", color: COLORS.onSurface, marginTop: SPACING.sm, fontFamily: FONT_DISPLAY },
   sub: { color: COLORS.muted, textAlign: "center", marginTop: 4, marginBottom: SPACING.lg },
-  starsRow: { flexDirection: "row", gap: SPACING.sm, marginBottom: SPACING.lg },
+  scoreLabel: { fontSize: FONT.xl, fontWeight: "800", color: COLORS.saffron, marginBottom: SPACING.sm },
+  numsGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8, marginBottom: SPACING.lg },
+  numChip: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
+  numChipActive: { backgroundColor: COLORS.saffron, borderColor: COLORS.saffron },
+  numChipText: { fontWeight: "700", color: COLORS.onSurface, fontSize: 13 },
+  numChipTextActive: { color: "#fff" },
   input: { alignSelf: "stretch", backgroundColor: COLORS.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, padding: SPACING.md, minHeight: 60, textAlignVertical: "top", color: COLORS.onSurface, marginBottom: SPACING.lg },
   submitBtn: { alignSelf: "stretch", backgroundColor: COLORS.indigo, borderRadius: RADIUS.pill, paddingVertical: 14, alignItems: "center" },
   submitText: { color: "#fff", fontWeight: "800", fontSize: FONT.lg },

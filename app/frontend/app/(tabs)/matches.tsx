@@ -1,12 +1,14 @@
 import React, { useCallback, useState } from "react";
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, Pressable, Linking } from "react-native";
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, Pressable, Linking, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
+import * as Haptics from "expo-haptics";
 
 import { COLORS, SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
 import { api } from "@/src/api/client";
+import { useAuth } from "@/src/auth/AuthContext";
 import RatingBadge from "@/src/components/RatingBadge";
 import RatingModal from "@/src/components/RatingModal";
 
@@ -17,20 +19,63 @@ type Pool = {
   user_rating_avg?: number | null; user_rating_count?: number;
 };
 
+type ConfirmedRide = {
+  pool_id: string; from_location: string; to_location: string; travel_datetime: string;
+  pool_status: string; other_user_id: string; other_user_name: string; other_user_email: string;
+  other_user_rating_avg?: number | null; other_user_rating_count?: number; my_role: "owner" | "traveler";
+};
+
+function fmtWhen(iso: string) {
+  return new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+}
+
 export default function MatchesScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const [items, setItems] = useState<Pool[]>([]);
+  const [confirmed, setConfirmed] = useState<ConfirmedRide[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [ratingTarget, setRatingTarget] = useState<Pool | null>(null);
+  const [ratingTarget, setRatingTarget] = useState<{ user_id: string; user_name: string; pool_id: string } | null>(null);
+  const [removingKey, setRemovingKey] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    try { setItems(await api.myMatches()); }
+    try {
+      const [matches, rides] = await Promise.all([api.myMatches(), api.confirmedMatches()]);
+      setItems(matches);
+      setConfirmed(rides);
+    }
     catch (e) { console.warn(e); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
   useFocusEffect(useCallback(() => { setLoading(true); load(); }, [load]));
+
+  const removeTraveler = (ride: ConfirmedRide) => {
+    Alert.alert(
+      "Remove this ride?",
+      `You'll no longer be traveling together with ${ride.other_user_name.split(" ")[0]} on this pool.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove", style: "destructive", onPress: async () => {
+            const key = `${ride.pool_id}:${ride.other_user_id}`;
+            setRemovingKey(key);
+            try {
+              const removeId = ride.my_role === "owner" ? ride.other_user_id : (user?.user_id as string);
+              await api.removeTraveler(ride.pool_id, removeId);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              await load();
+            } catch (e: any) {
+              Alert.alert("Couldn't remove", e.message || "Try again");
+            } finally {
+              setRemovingKey(null);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -52,6 +97,60 @@ export default function MatchesScreen() {
           keyExtractor={(i) => i.pool_id}
           contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 140 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
+          ListHeaderComponent={
+            confirmed.length > 0 ? (
+              <>
+                <Text style={styles.sectionLabel}>Traveling Together</Text>
+                {confirmed.map((ride) => {
+                  const key = `${ride.pool_id}:${ride.other_user_id}`;
+                  return (
+                    <View key={key} style={styles.rideCard} testID={`confirmed-${key}`}>
+                      <View style={styles.rowTop}>
+                        <View style={styles.confirmedBadge}><Ionicons name="car-sport" size={12} color="#fff" /><Text style={styles.confirmedBadgeText}>CONFIRMED</Text></View>
+                        <Text style={styles.when}>{fmtWhen(ride.travel_datetime)}</Text>
+                      </View>
+                      <Text style={styles.name}>{ride.other_user_name}</Text>
+                      <View style={{ marginBottom: SPACING.sm }}>
+                        <RatingBadge avg={ride.other_user_rating_avg} count={ride.other_user_rating_count} />
+                      </View>
+                      <View style={styles.routeRow}>
+                        <Ionicons name="location" size={16} color={COLORS.saffron} />
+                        <Text style={styles.route}>{ride.from_location}</Text>
+                        <Ionicons name="arrow-forward" size={14} color={COLORS.muted} />
+                        <Text style={styles.route}>{ride.to_location}</Text>
+                      </View>
+                      <View style={styles.ctaRow}>
+                        <Pressable
+                          testID={`chat-${key}`}
+                          onPress={() => router.push({ pathname: "/chat/[userId]", params: { userId: ride.other_user_id, name: ride.other_user_name } })}
+                          style={[styles.cta, { flex: 1 }]}
+                        >
+                          <Ionicons name="chatbubble" size={16} color="#fff" />
+                          <Text style={styles.ctaText}>Chat</Text>
+                        </Pressable>
+                        <Pressable
+                          testID={`rate-confirmed-${key}`}
+                          onPress={() => setRatingTarget({ user_id: ride.other_user_id, user_name: ride.other_user_name, pool_id: ride.pool_id })}
+                          style={[styles.cta, styles.ctaGhost]}
+                        >
+                          <Ionicons name="star" size={16} color={COLORS.saffron} />
+                        </Pressable>
+                        <Pressable
+                          testID={`remove-${key}`}
+                          onPress={() => removeTraveler(ride)}
+                          disabled={removingKey === key}
+                          style={[styles.cta, styles.ctaDanger]}
+                        >
+                          {removingKey === key ? <ActivityIndicator size="small" color={COLORS.error} /> : <Ionicons name="close-circle-outline" size={16} color={COLORS.error} />}
+                        </Pressable>
+                      </View>
+                    </View>
+                  );
+                })}
+                <Text style={[styles.sectionLabel, { marginTop: SPACING.lg }]}>Route Matches</Text>
+              </>
+            ) : null
+          }
           ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="calendar-clear-outline" size={64} color={COLORS.borderStrong} />
@@ -63,7 +162,7 @@ export default function MatchesScreen() {
             <View style={styles.card} testID={`match-card-${item.pool_id}`}>
               <View style={styles.rowTop}>
                 <View style={styles.matchBadge}><Ionicons name="flash" size={12} color="#fff" /><Text style={styles.matchBadgeText}>MATCH</Text></View>
-                <Text style={styles.when}>{new Date(item.travel_datetime).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}</Text>
+                <Text style={styles.when}>{fmtWhen(item.travel_datetime)}</Text>
               </View>
               <Text style={styles.name}>{item.user_name}</Text>
               <View style={{ marginBottom: SPACING.sm }}>
@@ -94,7 +193,7 @@ export default function MatchesScreen() {
                 </Pressable>
                 <Pressable
                   testID={`rate-${item.pool_id}`}
-                  onPress={() => setRatingTarget(item)}
+                  onPress={() => setRatingTarget({ user_id: item.user_id, user_name: item.user_name, pool_id: item.pool_id })}
                   style={[styles.cta, styles.ctaGhost]}
                 >
                   <Ionicons name="star" size={16} color={COLORS.saffron} />
@@ -128,10 +227,14 @@ const styles = StyleSheet.create({
   empty: { alignItems: "center", paddingVertical: 80, paddingHorizontal: SPACING.xl },
   emptyTitle: { marginTop: SPACING.md, fontSize: FONT.xl, fontWeight: "700", color: COLORS.onSurface },
   emptySub: { marginTop: 4, color: COLORS.muted, textAlign: "center" },
+  sectionLabel: { fontSize: FONT.sm, fontWeight: "700", color: COLORS.muted, marginBottom: SPACING.sm, letterSpacing: 0.8, textTransform: "uppercase" },
   card: { backgroundColor: "#fff", borderRadius: RADIUS.lg, padding: SPACING.lg, marginBottom: SPACING.md, borderWidth: 1, borderColor: COLORS.border, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
+  rideCard: { backgroundColor: "#fff", borderRadius: RADIUS.lg, padding: SPACING.lg, marginBottom: SPACING.md, borderWidth: 1, borderColor: COLORS.success, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
   rowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: SPACING.sm },
   matchBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: COLORS.success, paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.pill },
   matchBadgeText: { color: "#fff", fontSize: 11, fontWeight: "800", letterSpacing: 0.5 },
+  confirmedBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: COLORS.indigo, paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.pill },
+  confirmedBadgeText: { color: "#fff", fontSize: 11, fontWeight: "800", letterSpacing: 0.5 },
   when: { color: COLORS.muted, fontWeight: "600" },
   name: { fontSize: FONT.lg, fontWeight: "700", color: COLORS.onSurface, marginBottom: 6 },
   routeRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: SPACING.sm },
@@ -140,5 +243,6 @@ const styles = StyleSheet.create({
   cta: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: COLORS.indigo, paddingVertical: 12, paddingHorizontal: 16, borderRadius: RADIUS.pill },
   ctaRow: { flexDirection: "row", gap: SPACING.sm, marginTop: SPACING.md },
   ctaGhost: { backgroundColor: "#fff", borderWidth: 1, borderColor: COLORS.indigo, flex: 0 },
+  ctaDanger: { backgroundColor: "#fff", borderWidth: 1, borderColor: COLORS.error, flex: 0 },
   ctaText: { color: "#fff", fontWeight: "700" },
 });

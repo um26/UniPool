@@ -72,4 +72,6 @@ export const api = {
   acceptRequest: (requestId: string) => req(`/requests/${requestId}/accept`, { method: "PATCH" }),
   declineRequest: (requestId: string) => req(`/requests/${requestId}/decline`, { method: "PATCH" }),
   cancelRequest: (requestId: string) => req(`/requests/${requestId}`, { method: "DELETE" }),
+  confirmedMatches: () => req("/matches/confirmed"),
+  removeTraveler: (poolId: string, travelerUserId: string) => req(`/pools/${poolId}/travelers/${travelerUserId}`, { method: "DELETE" }),
 };

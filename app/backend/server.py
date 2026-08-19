@@ -814,6 +814,85 @@ async def cancel_request(request_id: str, authorization: Optional[str] = Header(
     return {"ok": True}
 
 
+# ---------- Confirmed Rides (accepted requests, from both sides) ----------
+@api.get("/matches/confirmed")
+async def confirmed_matches(authorization: Optional[str] = Header(None)):
+    """Every 'traveling together' pairing involving me — whether I'm the pool
+    owner or a confirmed traveler on someone else's pool."""
+    user = await get_current_user(authorization)
+    uid = user["user_id"]
+    results = []
+
+    owner_pools = await db.pools.find(
+        {"user_id": uid, "confirmed_travelers.0": {"$exists": True}}, {"_id": 0}
+    ).to_list(200)
+    for p in owner_pools:
+        for t in p.get("confirmed_travelers", []):
+            results.append({
+                "pool_id": p["pool_id"], "from_location": p["from_location"], "to_location": p["to_location"],
+                "travel_datetime": p["travel_datetime"], "pool_status": p.get("status", "open"),
+                "other_user_id": t["user_id"], "other_user_name": t["name"], "other_user_email": t["email"],
+                "my_role": "owner",
+            })
+
+    traveler_pools = await db.pools.find({"confirmed_travelers.user_id": uid}, {"_id": 0}).to_list(200)
+    for p in traveler_pools:
+        results.append({
+            "pool_id": p["pool_id"], "from_location": p["from_location"], "to_location": p["to_location"],
+            "travel_datetime": p["travel_datetime"], "pool_status": p.get("status", "open"),
+            "other_user_id": p["user_id"], "other_user_name": p["user_name"], "other_user_email": p["user_email"],
+            "my_role": "traveler",
+        })
+
+    if not results:
+        return []
+    other_ids = list({r["other_user_id"] for r in results})
+    pipeline = [
+        {"$match": {"rated_user_id": {"$in": other_ids}}},
+        {"$group": {"_id": "$rated_user_id", "avg": {"$avg": "$stars"}, "count": {"$sum": 1}}},
+    ]
+    stats = await db.ratings.aggregate(pipeline).to_list(len(other_ids))
+    stat_map = {s["_id"]: s for s in stats}
+    for r in results:
+        s = stat_map.get(r["other_user_id"])
+        r["other_user_rating_avg"] = round(s["avg"], 1) if s else None
+        r["other_user_rating_count"] = s["count"] if s else 0
+    results.sort(key=lambda r: r["travel_datetime"], reverse=True)
+    return results
+
+
+@api.delete("/pools/{pool_id}/travelers/{traveler_user_id}")
+async def remove_confirmed_traveler(pool_id: str, traveler_user_id: str, authorization: Optional[str] = Header(None)):
+    """Either the pool owner or the confirmed traveler themselves can undo a
+    'traveling together' pairing at any time — no questions asked."""
+    user = await get_current_user(authorization)
+    pool = await db.pools.find_one({"pool_id": pool_id}, {"_id": 0})
+    if not pool:
+        raise HTTPException(status_code=404, detail="Pool not found")
+    if user["user_id"] not in (pool["user_id"], traveler_user_id):
+        raise HTTPException(status_code=403, detail="Not part of this ride")
+    if not any(t["user_id"] == traveler_user_id for t in pool.get("confirmed_travelers", [])):
+        raise HTTPException(status_code=404, detail="Not a confirmed traveler on this pool")
+
+    await db.pools.update_one(
+        {"pool_id": pool_id}, {"$pull": {"confirmed_travelers": {"user_id": traveler_user_id}}}
+    )
+    await db.join_requests.update_many(
+        {"pool_id": pool_id, "requester_id": traveler_user_id, "status": "accepted"},
+        {"$set": {"status": "removed", "responded_at": _now_utc()}},
+    )
+
+    other_user_id = pool["user_id"] if user["user_id"] == traveler_user_id else traveler_user_id
+    asyncio.create_task(send_push(
+        other_user_id, "Ride update",
+        f"{user.get('name')} removed themselves from {pool['from_location']} → {pool['to_location']}"
+        if user["user_id"] == traveler_user_id else
+        f"You were removed from {pool['from_location']} → {pool['to_location']}",
+        "/(tabs)/matches",
+    ))
+    return {"ok": True}
+
+
 # ---------- Push ----------
 @api.get("/push/vapid-public-key")
 async def vapid_public_key():
@@ -961,8 +1040,8 @@ async def submit_rating(body: RatingCreate, authorization: Optional[str] = Heade
     user = await get_current_user(authorization)
     if body.rated_user_id == user["user_id"]:
         raise HTTPException(status_code=400, detail="You can't rate yourself")
-    if not (1 <= body.stars <= 5):
-        raise HTTPException(status_code=400, detail="Stars must be between 1 and 5")
+    if not (1 <= body.stars <= 10):
+        raise HTTPException(status_code=400, detail="Rating must be between 1 and 10")
     rated_user = await db.users.find_one({"user_id": body.rated_user_id}, {"_id": 0})
     if not rated_user:
         raise HTTPException(status_code=404, detail="User not found")

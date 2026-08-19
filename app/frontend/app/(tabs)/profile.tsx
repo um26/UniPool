@@ -53,6 +53,8 @@ export default function ProfileScreen() {
   const [tab, setTab] = useState<"open" | "closed">("open");
   const [incoming, setIncoming] = useState<JoinRequest[]>([]);
   const [respondingId, setRespondingId] = useState<string | null>(null);
+  const [removingTraveler, setRemovingTraveler] = useState<string | null>(null);
+  const [myRating, setMyRating] = useState<{ average: number | null; count: number }>({ average: null, count: 0 });
 
   const [adminOpen, setAdminOpen] = useState(false);
   const [adminStats, setAdminStats] = useState<any>(null);
@@ -65,7 +67,13 @@ export default function ProfileScreen() {
       setMyPools(pools);
       setIncoming(reqs);
     } catch {}
-  }, []);
+    if (user?.user_id) {
+      try {
+        const r = await api.getUserRatings(user.user_id);
+        setMyRating({ average: r.average, count: r.count });
+      } catch {}
+    }
+  }, [user?.user_id]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -81,6 +89,31 @@ export default function ProfileScreen() {
     } finally {
       setRespondingId(null);
     }
+  };
+
+  const removeTraveler = (poolId: string, travelerId: string, travelerName: string) => {
+    Alert.alert(
+      "Remove this traveler?",
+      `${travelerName.split(" ")[0]} will no longer be traveling together with you on this pool.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove", style: "destructive", onPress: async () => {
+            const key = `${poolId}:${travelerId}`;
+            setRemovingTraveler(key);
+            try {
+              await api.removeTraveler(poolId, travelerId);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              await load();
+            } catch (e: any) {
+              Alert.alert("Error", e.message);
+            } finally {
+              setRemovingTraveler(null);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const saveGender = async (g: string) => {
@@ -131,6 +164,14 @@ export default function ProfileScreen() {
         <View style={styles.avatar}><Text style={styles.avatarText}>{user?.name?.[0]?.toUpperCase() || "U"}</Text></View>
         <Text style={styles.name}>{user?.name}</Text>
         <Text style={styles.email}>{user?.email}</Text>
+        <View style={styles.myRatingRow} testID="my-rating">
+          <Ionicons name="star" size={14} color={COLORS.saffron} />
+          {myRating.average != null ? (
+            <Text style={styles.myRatingText}>{myRating.average.toFixed(1)}/10 · {myRating.count} rating{myRating.count === 1 ? "" : "s"}</Text>
+          ) : (
+            <Text style={styles.myRatingText}>No ratings yet</Text>
+          )}
+        </View>
         {user?.is_admin ? (
           <View style={styles.adminBadge}><Ionicons name="shield-checkmark" size={12} color={COLORS.indigo} /><Text style={styles.adminBadgeText}>Admin</Text></View>
         ) : null}
@@ -237,11 +278,28 @@ export default function ProfileScreen() {
               <Text style={styles.mineRoute}>{item.from_location} → {item.to_location}</Text>
               <Text style={styles.mineWhen}>{fmt(item.travel_datetime)}</Text>
               {(item.confirmed_travelers?.length ?? 0) > 0 && (
-                <View style={styles.mineTravelingRow}>
-                  <Ionicons name="car-sport" size={12} color={COLORS.success} />
-                  <Text style={styles.mineTravelingText} numberOfLines={1}>
-                    Traveling with {item.confirmed_travelers!.map((t) => t.name.split(" ")[0]).join(", ")}
-                  </Text>
+                <View style={styles.mineTravelersWrap}>
+                  {item.confirmed_travelers!.map((t) => {
+                    const key = `${item.pool_id}:${t.user_id}`;
+                    return (
+                      <View key={key} style={styles.mineTravelerChip} testID={`mine-traveler-${key}`}>
+                        <Ionicons name="car-sport" size={11} color={COLORS.success} />
+                        <Text style={styles.mineTravelingText}>{t.name.split(" ")[0]}</Text>
+                        <Pressable
+                          testID={`mine-remove-${key}`}
+                          onPress={() => removeTraveler(item.pool_id, t.user_id, t.name)}
+                          disabled={removingTraveler === key}
+                          hitSlop={6}
+                        >
+                          {removingTraveler === key ? (
+                            <ActivityIndicator size="small" color={COLORS.error} />
+                          ) : (
+                            <Ionicons name="close" size={12} color={COLORS.error} />
+                          )}
+                        </Pressable>
+                      </View>
+                    );
+                  })}
                 </View>
               )}
             </View>
@@ -336,6 +394,8 @@ const styles = StyleSheet.create({
   avatarText: { color: COLORS.indigo, fontSize: 28, fontWeight: "800" },
   name: { color: "#fff", fontSize: FONT.xl, fontWeight: "800", fontFamily: FONT_DISPLAY },
   email: { color: "rgba(255,236,194,0.9)", marginTop: 4 },
+  myRatingRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8, backgroundColor: "rgba(255,236,194,0.15)", borderRadius: RADIUS.pill, paddingHorizontal: 12, paddingVertical: 5 },
+  myRatingText: { color: COLORS.cream, fontSize: 12, fontWeight: "700" },
   adminBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: COLORS.cream, borderRadius: RADIUS.pill, paddingHorizontal: 10, paddingVertical: 4, marginTop: SPACING.sm },
   adminBadgeText: { color: COLORS.indigo, fontWeight: "800", fontSize: 11 },
   sectionLabel: { fontSize: FONT.sm, fontWeight: "700", color: COLORS.muted, marginTop: SPACING.lg, marginBottom: SPACING.sm, letterSpacing: 0.8, textTransform: "uppercase" },
@@ -357,8 +417,9 @@ const styles = StyleSheet.create({
   mine: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: COLORS.border, gap: SPACING.sm },
   mineRoute: { fontSize: FONT.base, fontWeight: "700", color: COLORS.onSurface },
   mineWhen: { color: COLORS.muted, marginTop: 2, fontSize: FONT.sm },
-  mineTravelingRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
-  mineTravelingText: { color: COLORS.success, fontSize: 11, fontWeight: "700", flex: 1 },
+  mineTravelersWrap: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
+  mineTravelerChip: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(46,125,50,0.08)", borderRadius: RADIUS.pill, paddingHorizontal: 8, paddingVertical: 4 },
+  mineTravelingText: { color: COLORS.success, fontSize: 11, fontWeight: "700" },
   actionBtn: { padding: 4 },
   emptyMine: { color: COLORS.muted, padding: SPACING.md, textAlign: "center" },
 
