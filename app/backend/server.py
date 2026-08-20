@@ -800,8 +800,9 @@ async def verify_college_id(authorization: Optional[str] = Header(None)):
     an explicit opt-in action (shown as a button in Profile) rather than
     something granted automatically just for having the right email domain."""
     user = await get_current_user(authorization)
-    email = (user.get("email") or "").lower()
+    email = (user.get("email") or "").strip().lower()
     if "@" not in email or email.split("@", 1)[1] != COLLEGE_EMAIL_DOMAIN:
+        logger.info(f"College ID verify rejected (domain mismatch) for {email}")
         raise HTTPException(
             status_code=400,
             detail=f"Please sign in with your @{COLLEGE_EMAIL_DOMAIN} college email to verify your ID.",
@@ -809,6 +810,7 @@ async def verify_college_id(authorization: Optional[str] = Header(None)):
     local_part = email.split("@", 1)[0]
     decoded = _decode_roll_number(local_part)
     if not decoded:
+        logger.info(f"College ID verify rejected (format mismatch) for {email}")
         raise HTTPException(
             status_code=400,
             detail="Couldn't recognize your roll number format from this email. Please reach out if you think this is a mistake.",

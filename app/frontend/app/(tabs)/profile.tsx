@@ -140,12 +140,17 @@ export default function ProfileScreen() {
   const verifyCollegeId = async () => {
     setVerifying(true);
     try {
-      await api.verifyCollegeId();
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const result = await api.verifyCollegeId();
+      try { await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
       await refresh();
       await load();
+      Alert.alert(
+        "You're verified! 🎉",
+        `Roll number: ${result.roll_number}\n${result.school_name || ""}${result.branch_name ? " · " + result.branch_name : ""}${result.batch_year ? " · Batch " + result.batch_year : ""}`
+      );
     } catch (e: any) {
-      Alert.alert("Couldn't verify", e.message || "Please try again.");
+      console.error("verify-college-id failed:", e);
+      Alert.alert("Couldn't verify", e?.message || "Something went wrong — please try again.");
     } finally {
       setVerifying(false);
     }
