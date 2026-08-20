@@ -33,6 +33,8 @@ RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
 EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "UniPool")
 GMAIL_ADDRESS = os.environ.get("GMAIL_ADDRESS", "")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
+SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
+SENDGRID_FROM_EMAIL = os.environ.get("SENDGRID_FROM_EMAIL", GMAIL_ADDRESS)
 TURNSTILE_SECRET_KEY = os.environ.get("TURNSTILE_SECRET_KEY", "")
 
 ADMIN_EMAILS = {
@@ -479,38 +481,36 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
 
 
 # ---------- Email ----------
-def _send_via_gmail_smtp(to_email: str, subject: str, html_content: str) -> tuple:
-    """Blocking SMTP send — run via asyncio.to_thread. Uses a Gmail App
-    Password (not the account password) so it can send to any recipient,
-    unlike Resend's sandbox sender which is locked to one address."""
-    import smtplib
-    from email.mime.multipart import MIMEMultipart
-    from email.mime.text import MIMEText
-
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = f"{EMAIL_FROM_NAME} <{GMAIL_ADDRESS}>"
-    msg["To"] = to_email
-    msg.attach(MIMEText(html_content, "html"))
-    try:
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=20) as server:
-            server.starttls()
-            server.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
-            server.sendmail(GMAIL_ADDRESS, [to_email], msg.as_string())
-        return True, ""
-    except Exception as e:
-        return False, str(e)
-
-
+# Note: Render blocks outbound SMTP ports (25/465/587) on its network as a
+# standard anti-spam measure, so a direct Gmail-SMTP send from this service
+# can never succeed here — always [Errno 101] Network unreachable, no matter
+# how correct the SMTP code is. SendGrid's HTTP API (port 443) is unaffected,
+# which is why it's the primary path below.
 async def send_email(to_email: str, subject: str, html_content: str) -> bool:
-    if GMAIL_ADDRESS and GMAIL_APP_PASSWORD:
-        ok, err = await asyncio.to_thread(_send_via_gmail_smtp, to_email, subject, html_content)
-        if not ok:
-            logger.error(f"Gmail SMTP send failed to {to_email}: {err}")
-        return ok
+    if SENDGRID_API_KEY and SENDGRID_FROM_EMAIL:
+        payload = {
+            "personalizations": [{"to": [{"email": to_email}]}],
+            "from": {"email": SENDGRID_FROM_EMAIL, "name": EMAIL_FROM_NAME},
+            "subject": subject,
+            "content": [{"type": "text/html", "value": html_content}],
+        }
+        try:
+            async with httpx.AsyncClient(timeout=20) as http:
+                resp = await http.post(
+                    "https://api.sendgrid.com/v3/mail/send",
+                    headers={"Authorization": f"Bearer {SENDGRID_API_KEY}"},
+                    json=payload,
+                )
+            if resp.status_code >= 400:
+                logger.error(f"SendGrid send failed to {to_email}: {resp.status_code} {resp.text}")
+                return False
+            return True
+        except Exception as e:
+            logger.error(f"SendGrid send failed to {to_email}: {e}")
+            return False
 
     if not RESEND_API_KEY:
-        logger.warning("No email credentials configured (GMAIL_ADDRESS/GMAIL_APP_PASSWORD or RESEND_API_KEY) — skipping email send")
+        logger.warning("No email credentials configured (SENDGRID_API_KEY or RESEND_API_KEY) — skipping email send")
         return False
     payload = {
         "from": f"{EMAIL_FROM_NAME} <{RESEND_FROM_EMAIL}>",
