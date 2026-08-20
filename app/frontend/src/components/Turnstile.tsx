@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { View, Platform, StyleSheet } from "react-native";
 
-const TURNSTILE_SITE_KEY = process.env.EXPO_PUBLIC_TURNSTILE_SITE_KEY || "";
+const TURNSTILE_SITE_KEY = process.env.EXPO_PUBLIC_TURNSTILE_SITE_KEY || "0x4AAAAAAEW9d6UO_KrklE2M";
 
 declare global {
   interface Window {
