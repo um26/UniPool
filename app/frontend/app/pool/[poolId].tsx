@@ -22,6 +22,7 @@ type Pool = {
   gender_preference: string; companions: number; luggage?: string | null; notes?: string | null;
   user_rating_avg?: number | null; user_rating_count?: number;
   user_badges?: { id: string; label: string; icon: string }[];
+  user_college_id?: { roll_number: string; school_name: string; degree_level_name: string; branch_name: string; batch_year: number } | null;
   confirmed_travelers?: ConfirmedTraveler[];
   my_request_status?: "pending" | "accepted" | "declined" | null;
 };
@@ -113,6 +114,11 @@ export default function PoolDetailScreen() {
             <Text style={styles.ownerName}>{pool.user_name}{mine ? "  (you)" : ""}</Text>
             <RatingBadge avg={pool.user_rating_avg} count={pool.user_rating_count} />
             <UserBadges badges={pool.user_badges} />
+            {pool.user_college_id ? (
+              <Text style={styles.ownerRoll} testID="owner-roll-number">
+                {pool.user_college_id.roll_number} · {pool.user_college_id.school_name} · Batch {pool.user_college_id.batch_year}
+              </Text>
+            ) : null}
           </View>
           {pool.gender_preference === "same" && (
             <View style={styles.badge}><Text style={styles.badgeText}>Same-gender</Text></View>
@@ -213,6 +219,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border, backgroundColor: "#fff" },
   headerTitle: { fontSize: FONT.lg, fontWeight: "800", color: COLORS.onSurface },
   ownerRow: { flexDirection: "row", alignItems: "center", gap: SPACING.md, marginBottom: SPACING.lg },
+  ownerRoll: { fontSize: 11, color: COLORS.muted, fontWeight: "600", marginTop: 4 },
   avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: COLORS.cream, alignItems: "center", justifyContent: "center" },
   ownerName: { fontSize: FONT.lg, fontWeight: "800", color: COLORS.onSurface, marginBottom: 2, fontFamily: FONT_DISPLAY },
   badge: { backgroundColor: COLORS.indigo, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.pill },

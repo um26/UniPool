@@ -5,6 +5,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 import uuid
+import re
 import asyncio
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
@@ -53,9 +54,60 @@ def _is_verified_domain(email: str) -> bool:
     return any(email.endswith(suffix) for suffix in DEFAULT_VERIFIED_SUFFIXES)
 
 
-def _compute_badges(email: str, rating_avg: Optional[float], rating_count: int, rides_completed: int) -> List[dict]:
+# ---------- College ID verification & roll-number decoding ----------
+# Mahindra University roll numbers embed structured info in the email's
+# local part, e.g. "se22ucam015@mahindrauniversity.edu.in":
+#   se   -> school            (2 letters)
+#   22   -> joining year      (2 digits, batch = 2000 + yy)
+#   u    -> degree level      (1 letter: u/m/p)
+#   cam  -> branch            (variable-length letters)
+#   015  -> serial number     (3 digits)
+# These maps are intentionally easy to extend — send more codes any time.
+COLLEGE_EMAIL_DOMAIN = "mahindrauniversity.edu.in"
+ROLL_NUMBER_RE = re.compile(r"^([a-z]{2})(\d{2})([ump])([a-z]+)(\d{3})$")
+SCHOOL_CODES = {"se": "School of Engineering", "sm": "School of Management", "sl": "School of Law"}
+DEGREE_LEVEL_NAMES = {"u": "Undergraduate", "m": "Masters", "p": "PhD"}
+BRANCH_CODES = {
+    "cam": "Computer Science & Applied Mathematics",
+    "cse": "Computer Science",
+    "ece": "Electronics & Communication",
+    "ari": "Artificial Intelligence",
+    "cie": "Civil Engineering",
+}
+
+
+def _decode_roll_number(local_part: str) -> Optional[dict]:
+    m = ROLL_NUMBER_RE.match(local_part.lower())
+    if not m:
+        return None
+    school_code, yy, degree_code, branch_code, serial = m.groups()
+    return {
+        "roll_number": local_part.upper(),
+        "school_code": school_code.upper(),
+        "school_name": SCHOOL_CODES.get(school_code, school_code.upper()),
+        "batch_year": 2000 + int(yy),
+        "degree_level_code": degree_code.upper(),
+        "degree_level_name": DEGREE_LEVEL_NAMES.get(degree_code, degree_code.upper()),
+        "branch_code": branch_code.upper(),
+        "branch_name": BRANCH_CODES.get(branch_code, branch_code.upper()),
+        "serial": serial,
+    }
+
+
+async def _college_info_map(user_ids: list) -> dict:
+    """Batch-fetch verified college-ID info for a set of user_ids."""
+    if not user_ids:
+        return {}
+    cursor = db.users.find(
+        {"user_id": {"$in": user_ids}, "college_verified": True},
+        {"_id": 0, "user_id": 1, "roll_number": 1, "school_name": 1, "degree_level_name": 1, "branch_name": 1, "batch_year": 1},
+    )
+    return {u["user_id"]: u async for u in cursor}
+
+
+def _compute_badges(college_verified: bool, rating_avg: Optional[float], rating_count: int, rides_completed: int) -> List[dict]:
     badges = []
-    if _is_verified_domain(email):
+    if college_verified:
         badges.append({"id": "verified", "label": "Verified Student", "icon": "shield-checkmark"})
     if rating_avg is not None and rating_avg >= 8.5 and rating_count >= 3:
         badges.append({"id": "top_rated", "label": "Top Rated", "icon": "trophy"})
@@ -85,17 +137,23 @@ async def _rides_completed_map(user_ids: list) -> dict:
     return counts
 
 
-async def _attach_badges(items: list, id_field: str, email_field: str, avg_field: str, count_field: str, out_field: str) -> list:
-    """Batch-attach a 'badges' list to each dict in items, using rating stats
-    already present on that dict plus a fresh rides-completed lookup."""
+async def _attach_badges(items: list, id_field: str, email_field: str, avg_field: str, count_field: str, out_field: str, roll_field: Optional[str] = None) -> list:
+    """Batch-attach a 'badges' list (and optionally verified college-ID info)
+    to each dict in items, using rating stats already present on that dict
+    plus a fresh rides-completed + college-verification lookup."""
     if not items:
         return items
     user_ids = list({it[id_field] for it in items if it.get(id_field)})
     rides_map = await _rides_completed_map(user_ids)
+    college_map = await _college_info_map(user_ids)
     for it in items:
+        uid = it.get(id_field)
+        info = college_map.get(uid)
         it[out_field] = _compute_badges(
-            it.get(email_field, ""), it.get(avg_field), it.get(count_field) or 0, rides_map.get(it.get(id_field), 0)
+            info is not None, it.get(avg_field), it.get(count_field) or 0, rides_map.get(uid, 0)
         )
+        if roll_field:
+            it[roll_field] = info
     return items
 
 # Seeded username/password admin account — created on startup if missing.
@@ -194,6 +252,7 @@ class PoolRequestOut(BaseModel):
     user_rating_avg: Optional[float] = None
     user_rating_count: int = 0
     user_badges: List[dict] = []
+    user_college_id: Optional[dict] = None
     confirmed_travelers: List[ConfirmedTraveler] = []
     my_request_status: Optional[str] = None  # "pending" | "accepted" | "declined" | None
 
@@ -212,6 +271,7 @@ class JoinRequestOut(BaseModel):
     requester_rating_avg: Optional[float] = None
     requester_rating_count: int = 0
     requester_badges: List[dict] = []
+    requester_college_id: Optional[dict] = None
     status: str = "pending"
     created_at: datetime
     responded_at: Optional[datetime] = None
@@ -345,7 +405,7 @@ async def _enrich_with_ratings(pools: list) -> list:
         s = stat_map.get(p["user_id"])
         p["user_rating_avg"] = round(s["avg"], 1) if s else None
         p["user_rating_count"] = s["count"] if s else 0
-    return await _attach_badges(pools, "user_id", "user_email", "user_rating_avg", "user_rating_count", "user_badges")
+    return await _attach_badges(pools, "user_id", "user_email", "user_rating_avg", "user_rating_count", "user_badges", "user_college_id")
 
 
 async def _attach_requester_ratings(requests: list) -> list:
@@ -733,6 +793,34 @@ async def update_profile(body: ProfileUpdate, authorization: Optional[str] = Hea
     return updated
 
 
+@api.post("/profile/verify-college-id")
+async def verify_college_id(authorization: Optional[str] = Header(None)):
+    """Verifies the signed-in user's college email and, if it matches the
+    roll-number format, decodes and stores school/branch/batch info. This is
+    an explicit opt-in action (shown as a button in Profile) rather than
+    something granted automatically just for having the right email domain."""
+    user = await get_current_user(authorization)
+    email = (user.get("email") or "").lower()
+    if "@" not in email or email.split("@", 1)[1] != COLLEGE_EMAIL_DOMAIN:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Please sign in with your @{COLLEGE_EMAIL_DOMAIN} college email to verify your ID.",
+        )
+    local_part = email.split("@", 1)[0]
+    decoded = _decode_roll_number(local_part)
+    if not decoded:
+        raise HTTPException(
+            status_code=400,
+            detail="Couldn't recognize your roll number format from this email. Please reach out if you think this is a mistake.",
+        )
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {**decoded, "college_verified": True, "college_verified_at": _now_utc()}},
+    )
+    updated = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "password_hash": 0})
+    return _with_admin_flag(updated)
+
+
 # ---------- Pool Routes ----------
 MAX_OPEN_POOLS_PER_USER = 5
 MAX_POOLS_PER_HOUR = 10
@@ -983,7 +1071,7 @@ async def incoming_requests(authorization: Optional[str] = Header(None)):
     ).sort("created_at", -1)
     results = await cursor.to_list(200)
     results = await _attach_requester_ratings(results)
-    return await _attach_badges(results, "requester_id", "requester_email", "requester_rating_avg", "requester_rating_count", "requester_badges")
+    return await _attach_badges(results, "requester_id", "requester_email", "requester_rating_avg", "requester_rating_count", "requester_badges", "requester_college_id")
 
 
 @api.get("/requests/mine", response_model=List[JoinRequestOut])
@@ -995,7 +1083,7 @@ async def my_requests(authorization: Optional[str] = Header(None)):
     ).sort("created_at", -1)
     results = await cursor.to_list(200)
     results = await _attach_requester_ratings(results)
-    return await _attach_badges(results, "requester_id", "requester_email", "requester_rating_avg", "requester_rating_count", "requester_badges")
+    return await _attach_badges(results, "requester_id", "requester_email", "requester_rating_avg", "requester_rating_count", "requester_badges", "requester_college_id")
 
 
 @api.patch("/requests/{request_id}/accept", response_model=JoinRequestOut)
@@ -1108,7 +1196,7 @@ async def confirmed_matches(authorization: Optional[str] = Header(None)):
         s = stat_map.get(r["other_user_id"])
         r["other_user_rating_avg"] = round(s["avg"], 1) if s else None
         r["other_user_rating_count"] = s["count"] if s else 0
-    results = await _attach_badges(results, "other_user_id", "other_user_email", "other_user_rating_avg", "other_user_rating_count", "other_user_badges")
+    results = await _attach_badges(results, "other_user_id", "other_user_email", "other_user_rating_avg", "other_user_rating_count", "other_user_badges", "other_user_college_id")
     results.sort(key=lambda r: r["travel_datetime"], reverse=True)
     return results
 
@@ -1330,10 +1418,10 @@ async def get_user_ratings(user_id: str, authorization: Optional[str] = Header(N
     cursor = db.ratings.find({"rated_user_id": user_id}, {"_id": 0}).sort("created_at", -1)
     ratings = await cursor.to_list(100)
     avg = round(sum(r["stars"] for r in ratings) / len(ratings), 1) if ratings else None
-    target = await db.users.find_one({"user_id": user_id}, {"_id": 0, "email": 1})
+    college_map = await _college_info_map([user_id])
     rides_map = await _rides_completed_map([user_id])
-    badges = _compute_badges(target.get("email", "") if target else "", avg, len(ratings), rides_map.get(user_id, 0))
-    return {"average": avg, "count": len(ratings), "ratings": ratings, "badges": badges}
+    badges = _compute_badges(user_id in college_map, avg, len(ratings), rides_map.get(user_id, 0))
+    return {"average": avg, "count": len(ratings), "ratings": ratings, "badges": badges, "college_id": college_map.get(user_id)}
 
 
 @api.get("/ratings/can-rate/{user_id}")

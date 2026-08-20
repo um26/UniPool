@@ -11,6 +11,12 @@ export type UniUser = {
   phone?: string | null;
   username?: string | null;
   is_admin?: boolean;
+  college_verified?: boolean;
+  roll_number?: string | null;
+  school_name?: string | null;
+  degree_level_name?: string | null;
+  branch_name?: string | null;
+  batch_year?: number | null;
 };
 
 type AuthCtx = {

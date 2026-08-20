@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { View, Text, StyleSheet, Pressable, FlatList, Alert, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, Pressable, FlatList, Alert, ActivityIndicator, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -47,7 +47,7 @@ function fmt(dt: string) {
 }
 
 export default function ProfileScreen() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, refresh } = useAuth();
   const router = useRouter();
   const push = usePushNotifications();
   const [myPools, setMyPools] = useState<Pool[]>([]);
@@ -58,6 +58,7 @@ export default function ProfileScreen() {
   const [removingTraveler, setRemovingTraveler] = useState<string | null>(null);
   const [myRating, setMyRating] = useState<{ average: number | null; count: number }>({ average: null, count: 0 });
   const [myBadges, setMyBadges] = useState<{ id: string; label: string; icon: string }[]>([]);
+  const [verifying, setVerifying] = useState(false);
   const [blocked, setBlocked] = useState<{ user_id: string; name: string }[]>([]);
   const [unblockingId, setUnblockingId] = useState<string | null>(null);
 
@@ -136,6 +137,20 @@ export default function ProfileScreen() {
     }
   };
 
+  const verifyCollegeId = async () => {
+    setVerifying(true);
+    try {
+      await api.verifyCollegeId();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await refresh();
+      await load();
+    } catch (e: any) {
+      Alert.alert("Couldn't verify", e.message || "Please try again.");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   const saveGender = async (g: string) => {
     setGender(g);
     try { await api.updateProfile({ gender: g }); Haptics.selectionAsync(); } catch {}
@@ -201,6 +216,39 @@ export default function ProfileScreen() {
           <View style={styles.adminBadge}><Ionicons name="shield-checkmark" size={12} color={COLORS.indigo} /><Text style={styles.adminBadgeText}>Admin</Text></View>
         ) : null}
       </LinearGradient>
+
+      {user?.college_verified ? (
+        <View style={styles.collegeCard} testID="college-id-card">
+          <View style={styles.collegeCardHeader}>
+            <Ionicons name="shield-checkmark" size={18} color={COLORS.success} />
+            <Text style={styles.collegeCardTitle}>College ID Verified</Text>
+          </View>
+          <Text style={styles.rollNumber}>{user.roll_number}</Text>
+          <View style={styles.collegeDetailsRow}>
+            {user.school_name ? <Text style={styles.collegeDetail}>{user.school_name}</Text> : null}
+            {user.branch_name ? <Text style={styles.collegeDetail}>· {user.branch_name}</Text> : null}
+            {user.batch_year ? <Text style={styles.collegeDetail}>· Batch {user.batch_year}</Text> : null}
+          </View>
+        </View>
+      ) : (
+        <View style={styles.collegeCard} testID="college-id-verify-prompt">
+          <View style={styles.collegeCardHeader}>
+            <Ionicons name="shield-outline" size={18} color={COLORS.muted} />
+            <Text style={styles.collegeCardTitle}>Get the Verified Student badge</Text>
+          </View>
+          <Text style={styles.verifySub}>
+            Verify your college ID from your @mahindrauniversity.edu.in email — we'll auto-fill your school, branch and batch.
+          </Text>
+          <Pressable testID="verify-college-id-btn" onPress={verifyCollegeId} disabled={verifying} style={[styles.verifyBtn, verifying && { opacity: 0.6 }]}>
+            {verifying ? <ActivityIndicator color="#fff" /> : (
+              <>
+                <Ionicons name="shield-checkmark-outline" size={16} color="#fff" />
+                <Text style={styles.verifyBtnText}>Verify college ID</Text>
+              </>
+            )}
+          </Pressable>
+        </View>
+      )}
 
       <FlatList
         data={filtered}
@@ -447,6 +495,15 @@ const styles = StyleSheet.create({
   myRatingText: { color: COLORS.cream, fontSize: 12, fontWeight: "700" },
   adminBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: COLORS.cream, borderRadius: RADIUS.pill, paddingHorizontal: 10, paddingVertical: 4, marginTop: SPACING.sm },
   adminBadgeText: { color: COLORS.indigo, fontWeight: "800", fontSize: 11 },
+  collegeCard: { backgroundColor: "#fff", marginHorizontal: SPACING.lg, marginTop: SPACING.lg, borderRadius: RADIUS.lg, padding: SPACING.lg, borderWidth: 1, borderColor: COLORS.border },
+  collegeCardHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
+  collegeCardTitle: { fontSize: FONT.base, fontWeight: "800", color: COLORS.onSurface },
+  rollNumber: { fontSize: FONT.lg, fontWeight: "800", color: COLORS.indigo, letterSpacing: 1, fontFamily: Platform.select({ ios: "Courier", android: "monospace", default: "monospace" }) },
+  collegeDetailsRow: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 4 },
+  collegeDetail: { fontSize: FONT.sm, color: COLORS.muted, fontWeight: "600" },
+  verifySub: { fontSize: FONT.sm, color: COLORS.muted, marginBottom: SPACING.md, lineHeight: 18 },
+  verifyBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: COLORS.indigo, borderRadius: RADIUS.pill, paddingVertical: 12 },
+  verifyBtnText: { color: "#fff", fontWeight: "700", fontSize: FONT.sm },
   sectionLabel: { fontSize: FONT.sm, fontWeight: "700", color: COLORS.muted, marginTop: SPACING.lg, marginBottom: SPACING.sm, letterSpacing: 0.8, textTransform: "uppercase" },
   prefRow: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.sm },
   prefChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: RADIUS.pill, backgroundColor: "#fff", borderWidth: 1, borderColor: COLORS.border },
