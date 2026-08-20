@@ -10,6 +10,7 @@ import { COLORS, SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/auth/AuthContext";
 import BrandFooter from "@/src/components/BrandFooter";
+import UserBadges from "@/src/components/UserBadges";
 import { usePushNotifications } from "@/src/hooks/use-push-notifications";
 
 type ConfirmedTraveler = { user_id: string; name: string; email: string };
@@ -36,6 +37,7 @@ type JoinRequest = {
   requester_name: string;
   requester_rating_avg?: number | null;
   requester_rating_count?: number;
+  requester_badges?: { id: string; label: string; icon: string }[];
   status: string;
   created_at: string;
 };
@@ -55,6 +57,7 @@ export default function ProfileScreen() {
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [removingTraveler, setRemovingTraveler] = useState<string | null>(null);
   const [myRating, setMyRating] = useState<{ average: number | null; count: number }>({ average: null, count: 0 });
+  const [myBadges, setMyBadges] = useState<{ id: string; label: string; icon: string }[]>([]);
   const [blocked, setBlocked] = useState<{ user_id: string; name: string }[]>([]);
   const [unblockingId, setUnblockingId] = useState<string | null>(null);
 
@@ -74,6 +77,7 @@ export default function ProfileScreen() {
       try {
         const r = await api.getUserRatings(user.user_id);
         setMyRating({ average: r.average, count: r.count });
+        setMyBadges(r.badges || []);
       } catch {}
     }
   }, [user?.user_id]);
@@ -188,6 +192,11 @@ export default function ProfileScreen() {
             <Text style={styles.myRatingText}>No ratings yet</Text>
           )}
         </View>
+        {myBadges.length > 0 && (
+          <View style={{ marginTop: 8 }}>
+            <UserBadges badges={myBadges} />
+          </View>
+        )}
         {user?.is_admin ? (
           <View style={styles.adminBadge}><Ionicons name="shield-checkmark" size={12} color={COLORS.indigo} /><Text style={styles.adminBadgeText}>Admin</Text></View>
         ) : null}
@@ -270,6 +279,7 @@ export default function ProfileScreen() {
                   <View key={r.request_id} style={styles.reqCard} testID={`incoming-${r.request_id}`}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.reqName}>{r.requester_name}</Text>
+                      <UserBadges badges={r.requester_badges} compact />
                       <Text style={styles.reqRoute}>{r.from_location} → {r.to_location}</Text>
                       <Text style={styles.reqWhen}>{fmt(r.travel_datetime)}</Text>
                     </View>

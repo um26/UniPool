@@ -9,6 +9,7 @@ import { COLORS, SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/auth/AuthContext";
 import RatingBadge from "@/src/components/RatingBadge";
+import UserBadges from "@/src/components/UserBadges";
 import PoolMapView from "@/src/components/PoolMapView";
 import ReportBlockModal from "@/src/components/ReportBlockModal";
 
@@ -20,6 +21,7 @@ type Pool = {
   from_location: string; to_location: string; travel_datetime: string;
   gender_preference: string; companions: number; luggage?: string | null; notes?: string | null;
   user_rating_avg?: number | null; user_rating_count?: number;
+  user_badges?: { id: string; label: string; icon: string }[];
   confirmed_travelers?: ConfirmedTraveler[];
   my_request_status?: "pending" | "accepted" | "declined" | null;
 };
@@ -110,6 +112,7 @@ export default function PoolDetailScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.ownerName}>{pool.user_name}{mine ? "  (you)" : ""}</Text>
             <RatingBadge avg={pool.user_rating_avg} count={pool.user_rating_count} />
+            <UserBadges badges={pool.user_badges} />
           </View>
           {pool.gender_preference === "same" && (
             <View style={styles.badge}><Text style={styles.badgeText}>Same-gender</Text></View>

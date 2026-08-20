@@ -34,6 +34,70 @@ ADMIN_EMAILS = {
     e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()
 }
 
+# Domains that auto-grant the "Verified Student" badge. Generic Indian/global
+# academic suffixes are trusted by default; ADD your specific college domain
+# via the VERIFIED_EMAIL_DOMAINS env var (comma-separated, e.g. "mycollege.ac.in").
+DEFAULT_VERIFIED_SUFFIXES = (".edu", ".edu.in", ".ac.in")
+VERIFIED_EMAIL_DOMAINS = {
+    d.strip().lower() for d in os.environ.get("VERIFIED_EMAIL_DOMAINS", "").split(",") if d.strip()
+}
+
+
+def _is_verified_domain(email: str) -> bool:
+    email = (email or "").lower()
+    if "@" not in email:
+        return False
+    domain = email.split("@", 1)[1]
+    if domain in VERIFIED_EMAIL_DOMAINS:
+        return True
+    return any(email.endswith(suffix) for suffix in DEFAULT_VERIFIED_SUFFIXES)
+
+
+def _compute_badges(email: str, rating_avg: Optional[float], rating_count: int, rides_completed: int) -> List[dict]:
+    badges = []
+    if _is_verified_domain(email):
+        badges.append({"id": "verified", "label": "Verified Student", "icon": "shield-checkmark"})
+    if rating_avg is not None and rating_avg >= 8.5 and rating_count >= 3:
+        badges.append({"id": "top_rated", "label": "Top Rated", "icon": "trophy"})
+    if rides_completed >= 5:
+        badges.append({"id": "frequent", "label": "Frequent Traveller", "icon": "flame"})
+    return badges
+
+
+async def _rides_completed_map(user_ids: list) -> dict:
+    """How many confirmed ride-pairings each user has been part of, whether
+    as the pool owner or as an accepted traveler — used for the 'Frequent
+    Traveller' badge."""
+    if not user_ids:
+        return {}
+    as_requester = await db.join_requests.aggregate([
+        {"$match": {"requester_id": {"$in": user_ids}, "status": "accepted"}},
+        {"$group": {"_id": "$requester_id", "c": {"$sum": 1}}},
+    ]).to_list(len(user_ids))
+    as_owner = await db.pools.aggregate([
+        {"$match": {"user_id": {"$in": user_ids}, "confirmed_travelers.0": {"$exists": True}}},
+        {"$project": {"user_id": 1, "n": {"$size": "$confirmed_travelers"}}},
+        {"$group": {"_id": "$user_id", "c": {"$sum": "$n"}}},
+    ]).to_list(len(user_ids))
+    counts: dict = {}
+    for row in as_requester + as_owner:
+        counts[row["_id"]] = counts.get(row["_id"], 0) + row["c"]
+    return counts
+
+
+async def _attach_badges(items: list, id_field: str, email_field: str, avg_field: str, count_field: str, out_field: str) -> list:
+    """Batch-attach a 'badges' list to each dict in items, using rating stats
+    already present on that dict plus a fresh rides-completed lookup."""
+    if not items:
+        return items
+    user_ids = list({it[id_field] for it in items if it.get(id_field)})
+    rides_map = await _rides_completed_map(user_ids)
+    for it in items:
+        it[out_field] = _compute_badges(
+            it.get(email_field, ""), it.get(avg_field), it.get(count_field) or 0, rides_map.get(it.get(id_field), 0)
+        )
+    return items
+
 # Seeded username/password admin account — created on startup if missing.
 SEED_ADMIN_USERNAME = "BBadmin"
 SEED_ADMIN_PASSWORD = "BB@unipool123"
@@ -129,6 +193,7 @@ class PoolRequestOut(BaseModel):
     created_at: datetime
     user_rating_avg: Optional[float] = None
     user_rating_count: int = 0
+    user_badges: List[dict] = []
     confirmed_travelers: List[ConfirmedTraveler] = []
     my_request_status: Optional[str] = None  # "pending" | "accepted" | "declined" | None
 
@@ -146,6 +211,7 @@ class JoinRequestOut(BaseModel):
     requester_gender: Optional[str] = None
     requester_rating_avg: Optional[float] = None
     requester_rating_count: int = 0
+    requester_badges: List[dict] = []
     status: str = "pending"
     created_at: datetime
     responded_at: Optional[datetime] = None
@@ -279,7 +345,25 @@ async def _enrich_with_ratings(pools: list) -> list:
         s = stat_map.get(p["user_id"])
         p["user_rating_avg"] = round(s["avg"], 1) if s else None
         p["user_rating_count"] = s["count"] if s else 0
-    return pools
+    return await _attach_badges(pools, "user_id", "user_email", "user_rating_avg", "user_rating_count", "user_badges")
+
+
+async def _attach_requester_ratings(requests: list) -> list:
+    """Batch-attach requester_rating_avg/count to a list of join_request dicts."""
+    if not requests:
+        return requests
+    user_ids = list({r["requester_id"] for r in requests})
+    pipeline = [
+        {"$match": {"rated_user_id": {"$in": user_ids}}},
+        {"$group": {"_id": "$rated_user_id", "avg": {"$avg": "$stars"}, "count": {"$sum": 1}}},
+    ]
+    stats = await db.ratings.aggregate(pipeline).to_list(len(user_ids))
+    stat_map = {s["_id"]: s for s in stats}
+    for r in requests:
+        s = stat_map.get(r["requester_id"])
+        r["requester_rating_avg"] = round(s["avg"], 1) if s else None
+        r["requester_rating_count"] = s["count"] if s else 0
+    return requests
 
 
 async def _enrich_with_my_request_status(pools: list, user_id: str) -> list:
@@ -897,7 +981,9 @@ async def incoming_requests(authorization: Optional[str] = Header(None)):
     cursor = db.join_requests.find(
         {"pool_owner_id": user["user_id"], "status": "pending"}, {"_id": 0}
     ).sort("created_at", -1)
-    return await cursor.to_list(200)
+    results = await cursor.to_list(200)
+    results = await _attach_requester_ratings(results)
+    return await _attach_badges(results, "requester_id", "requester_email", "requester_rating_avg", "requester_rating_count", "requester_badges")
 
 
 @api.get("/requests/mine", response_model=List[JoinRequestOut])
@@ -907,7 +993,9 @@ async def my_requests(authorization: Optional[str] = Header(None)):
     cursor = db.join_requests.find(
         {"requester_id": user["user_id"]}, {"_id": 0}
     ).sort("created_at", -1)
-    return await cursor.to_list(200)
+    results = await cursor.to_list(200)
+    results = await _attach_requester_ratings(results)
+    return await _attach_badges(results, "requester_id", "requester_email", "requester_rating_avg", "requester_rating_count", "requester_badges")
 
 
 @api.patch("/requests/{request_id}/accept", response_model=JoinRequestOut)
@@ -1020,6 +1108,7 @@ async def confirmed_matches(authorization: Optional[str] = Header(None)):
         s = stat_map.get(r["other_user_id"])
         r["other_user_rating_avg"] = round(s["avg"], 1) if s else None
         r["other_user_rating_count"] = s["count"] if s else 0
+    results = await _attach_badges(results, "other_user_id", "other_user_email", "other_user_rating_avg", "other_user_rating_count", "other_user_badges")
     results.sort(key=lambda r: r["travel_datetime"], reverse=True)
     return results
 
@@ -1241,7 +1330,10 @@ async def get_user_ratings(user_id: str, authorization: Optional[str] = Header(N
     cursor = db.ratings.find({"rated_user_id": user_id}, {"_id": 0}).sort("created_at", -1)
     ratings = await cursor.to_list(100)
     avg = round(sum(r["stars"] for r in ratings) / len(ratings), 1) if ratings else None
-    return {"average": avg, "count": len(ratings), "ratings": ratings}
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0, "email": 1})
+    rides_map = await _rides_completed_map([user_id])
+    badges = _compute_badges(target.get("email", "") if target else "", avg, len(ratings), rides_map.get(user_id, 0))
+    return {"average": avg, "count": len(ratings), "ratings": ratings, "badges": badges}
 
 
 @api.get("/ratings/can-rate/{user_id}")

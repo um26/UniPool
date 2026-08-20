@@ -11,6 +11,7 @@ import { api } from "@/src/api/client";
 import { useAuth } from "@/src/auth/AuthContext";
 import PressableScale from "@/src/components/PressableScale";
 import RatingBadge from "@/src/components/RatingBadge";
+import UserBadges from "@/src/components/UserBadges";
 import PoolMapView from "@/src/components/PoolMapView";
 import { PoolFeedSkeleton } from "@/src/components/Skeleton";
 import ReportBlockModal from "@/src/components/ReportBlockModal";
@@ -22,6 +23,7 @@ type Pool = {
   from_location: string; to_location: string; travel_datetime: string;
   gender_preference: string; companions: number; luggage?: string | null; notes?: string | null;
   user_rating_avg?: number | null; user_rating_count?: number;
+  user_badges?: { id: string; label: string; icon: string }[];
   confirmed_travelers?: ConfirmedTraveler[];
   my_request_status?: "pending" | "accepted" | "declined" | null;
 };
@@ -217,6 +219,7 @@ function PoolCard({ pool, mine, busy, onRequest, onOpenReport }: { pool: Pool; m
           <View style={{ marginTop: 3 }}>
             <RatingBadge avg={pool.user_rating_avg} count={pool.user_rating_count} />
           </View>
+          <UserBadges badges={pool.user_badges} compact />
         </View>
         {pool.gender_preference === "same" && (
           <View style={styles.badge}><Text style={styles.badgeText}>Same-gender</Text></View>

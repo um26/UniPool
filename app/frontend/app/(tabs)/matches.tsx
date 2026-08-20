@@ -10,6 +10,7 @@ import { COLORS, SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/auth/AuthContext";
 import RatingBadge from "@/src/components/RatingBadge";
+import UserBadges from "@/src/components/UserBadges";
 import RatingModal from "@/src/components/RatingModal";
 import ReportBlockModal from "@/src/components/ReportBlockModal";
 import { PoolFeedSkeleton } from "@/src/components/Skeleton";
@@ -19,12 +20,14 @@ type Pool = {
   from_location: string; to_location: string; travel_datetime: string;
   gender_preference: string; companions: number; luggage?: string | null; notes?: string | null;
   user_rating_avg?: number | null; user_rating_count?: number;
+  user_badges?: { id: string; label: string; icon: string }[];
 };
 
 type ConfirmedRide = {
   pool_id: string; from_location: string; to_location: string; travel_datetime: string;
   pool_status: string; other_user_id: string; other_user_name: string; other_user_email: string;
   other_user_rating_avg?: number | null; other_user_rating_count?: number; my_role: "owner" | "traveler";
+  other_user_badges?: { id: string; label: string; icon: string }[];
 };
 
 function fmtWhen(iso: string) {
@@ -122,6 +125,7 @@ export default function MatchesScreen() {
                       <Text style={styles.name}>{ride.other_user_name}</Text>
                       <View style={{ marginBottom: SPACING.sm }}>
                         <RatingBadge avg={ride.other_user_rating_avg} count={ride.other_user_rating_count} />
+                        <UserBadges badges={ride.other_user_badges} compact />
                       </View>
                       <View style={styles.routeRow}>
                         <Ionicons name="location" size={16} color={COLORS.saffron} />
@@ -182,6 +186,7 @@ export default function MatchesScreen() {
               <Text style={styles.name}>{item.user_name}</Text>
               <View style={{ marginBottom: SPACING.sm }}>
                 <RatingBadge avg={item.user_rating_avg} count={item.user_rating_count} />
+                <UserBadges badges={item.user_badges} compact />
               </View>
               <View style={styles.routeRow}>
                 <Ionicons name="location" size={16} color={COLORS.saffron} />
