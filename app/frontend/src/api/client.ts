@@ -84,5 +84,6 @@ export const api = {
   listBlocked: () => req("/users/me/blocked"),
   submitReport: (reportedUserId: string, reason: string, details?: string, poolId?: string) =>
     req("/reports", { method: "POST", body: JSON.stringify({ reported_user_id: reportedUserId, reason, details, pool_id: poolId }) }),
-  verifyCollegeId: () => req("/profile/verify-college-id", { method: "POST" }),
+  verifyCollegeIdStart: (collegeEmail: string) => req("/profile/verify-college-id/start", { method: "POST", body: JSON.stringify({ college_email: collegeEmail }) }),
+  verifyCollegeIdConfirm: (code: string) => req("/profile/verify-college-id/confirm", { method: "POST", body: JSON.stringify({ code }) }),
 };

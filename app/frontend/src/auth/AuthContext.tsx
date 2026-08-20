@@ -12,6 +12,7 @@ export type UniUser = {
   username?: string | null;
   is_admin?: boolean;
   college_verified?: boolean;
+  college_email?: string | null;
   roll_number?: string | null;
   school_name?: string | null;
   degree_level_name?: string | null;

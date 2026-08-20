@@ -6,6 +6,7 @@ import os
 import logging
 import uuid
 import re
+import secrets
 import asyncio
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
@@ -793,32 +794,86 @@ async def update_profile(body: ProfileUpdate, authorization: Optional[str] = Hea
     return updated
 
 
-@api.post("/profile/verify-college-id")
-async def verify_college_id(authorization: Optional[str] = Header(None)):
-    """Verifies the signed-in user's college email and, if it matches the
-    roll-number format, decodes and stores school/branch/batch info. This is
-    an explicit opt-in action (shown as a button in Profile) rather than
-    something granted automatically just for having the right email domain."""
+class CollegeVerifyStart(BaseModel):
+    college_email: EmailStr
+
+
+class CollegeVerifyConfirm(BaseModel):
+    code: str
+
+
+@api.post("/profile/verify-college-id/start")
+async def verify_college_id_start(body: CollegeVerifyStart, authorization: Optional[str] = Header(None)):
+    """Step 1: user types their @mahindrauniversity.edu.in address (which may
+    differ from their login email, e.g. if they signed up via a personal
+    Google account). We validate the format, then email a 6-digit code to
+    that address to confirm they actually own it before granting the badge."""
     user = await get_current_user(authorization)
-    email = (user.get("email") or "").strip().lower()
+    email = body.college_email.strip().lower()
     if "@" not in email or email.split("@", 1)[1] != COLLEGE_EMAIL_DOMAIN:
-        logger.info(f"College ID verify rejected (domain mismatch) for {email}")
-        raise HTTPException(
-            status_code=400,
-            detail=f"Please sign in with your @{COLLEGE_EMAIL_DOMAIN} college email to verify your ID.",
-        )
+        raise HTTPException(status_code=400, detail=f"Please enter your @{COLLEGE_EMAIL_DOMAIN} college email.")
     local_part = email.split("@", 1)[0]
     decoded = _decode_roll_number(local_part)
     if not decoded:
-        logger.info(f"College ID verify rejected (format mismatch) for {email}")
         raise HTTPException(
             status_code=400,
             detail="Couldn't recognize your roll number format from this email. Please reach out if you think this is a mistake.",
         )
+    existing_owner = await db.users.find_one(
+        {"roll_number": decoded["roll_number"], "college_verified": True, "user_id": {"$ne": user["user_id"]}},
+        {"_id": 0},
+    )
+    if existing_owner:
+        raise HTTPException(status_code=409, detail="This roll number is already verified on another account.")
+
+    code = f"{secrets.randbelow(1000000):06d}"
+    await db.college_verifications.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {
+            "user_id": user["user_id"], "college_email": email, "code": code,
+            "expires_at": _now_utc() + timedelta(minutes=15), "attempts": 0, "created_at": _now_utc(),
+        }},
+        upsert=True,
+    )
+    sent = await send_email(
+        email, "Your UniPool verification code",
+        f"""<html><body style="font-family:Arial,sans-serif;background:#FFF9F2;padding:24px;">
+        <div style="max-width:420px;margin:0 auto;background:#fff;border-radius:16px;padding:32px;text-align:center;">
+        <h2 style="color:#1A237E;margin-bottom:8px;">Verify your college ID</h2>
+        <p style="color:#3D352F;">Enter this code in UniPool to verify {decoded['roll_number']}:</p>
+        <div style="font-size:36px;font-weight:800;letter-spacing:8px;color:#F57F17;margin:24px 0;">{code}</div>
+        <p style="color:#8A8178;font-size:13px;">This code expires in 15 minutes. If you didn't request this, you can ignore this email.</p>
+        </div></body></html>""",
+    )
+    if not sent:
+        raise HTTPException(status_code=502, detail="Couldn't send the verification email — please try again in a moment.")
+    return {"ok": True, "sent_to": email}
+
+
+@api.post("/profile/verify-college-id/confirm")
+async def verify_college_id_confirm(body: CollegeVerifyConfirm, authorization: Optional[str] = Header(None)):
+    """Step 2: user enters the code we emailed them."""
+    user = await get_current_user(authorization)
+    record = await db.college_verifications.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not record:
+        raise HTTPException(status_code=400, detail="No verification in progress — please start again.")
+    if _ensure_aware(record["expires_at"]) < _now_utc():
+        raise HTTPException(status_code=400, detail="That code has expired — please request a new one.")
+    if record.get("attempts", 0) >= 5:
+        raise HTTPException(status_code=429, detail="Too many attempts — please request a new code.")
+    if body.code.strip() != record["code"]:
+        await db.college_verifications.update_one({"user_id": user["user_id"]}, {"$inc": {"attempts": 1}})
+        raise HTTPException(status_code=400, detail="Incorrect code — please check and try again.")
+
+    decoded = _decode_roll_number(record["college_email"].split("@", 1)[0])
     await db.users.update_one(
         {"user_id": user["user_id"]},
-        {"$set": {**decoded, "college_verified": True, "college_verified_at": _now_utc()}},
+        {"$set": {
+            **decoded, "college_email": record["college_email"],
+            "college_verified": True, "college_verified_at": _now_utc(),
+        }},
     )
+    await db.college_verifications.delete_one({"user_id": user["user_id"]})
     updated = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "password_hash": 0})
     return _with_admin_flag(updated)
 
@@ -1692,6 +1747,8 @@ async def _startup():
         await db.pools.create_index([("from_location", 1), ("to_location", 1), ("travel_datetime", 1)])
         await db.blocks.create_index([("blocker_id", 1), ("blocked_id", 1)], unique=True)
         await db.reports.create_index("created_at")
+        await db.college_verifications.create_index("user_id", unique=True)
+        await db.users.create_index("roll_number", sparse=True)
         logger.info("Indexes created")
     except Exception as e:
         logger.warning(f"Index setup issue: {e}")

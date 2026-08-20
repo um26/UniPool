@@ -11,6 +11,8 @@ import { api } from "@/src/api/client";
 import { useAuth } from "@/src/auth/AuthContext";
 import BrandFooter from "@/src/components/BrandFooter";
 import UserBadges from "@/src/components/UserBadges";
+import CollegeIdCard from "@/src/components/CollegeIdCard";
+import VerifyCollegeIdModal from "@/src/components/VerifyCollegeIdModal";
 import { usePushNotifications } from "@/src/hooks/use-push-notifications";
 
 type ConfirmedTraveler = { user_id: string; name: string; email: string };
@@ -58,7 +60,7 @@ export default function ProfileScreen() {
   const [removingTraveler, setRemovingTraveler] = useState<string | null>(null);
   const [myRating, setMyRating] = useState<{ average: number | null; count: number }>({ average: null, count: 0 });
   const [myBadges, setMyBadges] = useState<{ id: string; label: string; icon: string }[]>([]);
-  const [verifying, setVerifying] = useState(false);
+  const [verifyModalOpen, setVerifyModalOpen] = useState(false);
   const [blocked, setBlocked] = useState<{ user_id: string; name: string }[]>([]);
   const [unblockingId, setUnblockingId] = useState<string | null>(null);
 
@@ -137,25 +139,6 @@ export default function ProfileScreen() {
     }
   };
 
-  const verifyCollegeId = async () => {
-    setVerifying(true);
-    try {
-      const result = await api.verifyCollegeId();
-      try { await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
-      await refresh();
-      await load();
-      Alert.alert(
-        "You're verified! 🎉",
-        `Roll number: ${result.roll_number}\n${result.school_name || ""}${result.branch_name ? " · " + result.branch_name : ""}${result.batch_year ? " · Batch " + result.batch_year : ""}`
-      );
-    } catch (e: any) {
-      console.error("verify-college-id failed:", e);
-      Alert.alert("Couldn't verify", e?.message || "Something went wrong — please try again.");
-    } finally {
-      setVerifying(false);
-    }
-  };
-
   const saveGender = async (g: string) => {
     setGender(g);
     try { await api.updateProfile({ gender: g }); Haptics.selectionAsync(); } catch {}
@@ -223,37 +206,41 @@ export default function ProfileScreen() {
       </LinearGradient>
 
       {user?.college_verified ? (
-        <View style={styles.collegeCard} testID="college-id-card">
-          <View style={styles.collegeCardHeader}>
-            <Ionicons name="shield-checkmark" size={18} color={COLORS.success} />
-            <Text style={styles.collegeCardTitle}>College ID Verified</Text>
-          </View>
-          <Text style={styles.rollNumber}>{user.roll_number}</Text>
-          <View style={styles.collegeDetailsRow}>
-            {user.school_name ? <Text style={styles.collegeDetail}>{user.school_name}</Text> : null}
-            {user.branch_name ? <Text style={styles.collegeDetail}>· {user.branch_name}</Text> : null}
-            {user.batch_year ? <Text style={styles.collegeDetail}>· Batch {user.batch_year}</Text> : null}
-          </View>
+        <View style={styles.idCardWrap}>
+          <CollegeIdCard
+            name={user.name}
+            rollNumber={user.roll_number || ""}
+            schoolName={user.school_name}
+            branchName={user.branch_name}
+            batchYear={user.batch_year}
+            degreeLevelName={user.degree_level_name}
+          />
         </View>
       ) : (
         <View style={styles.collegeCard} testID="college-id-verify-prompt">
           <View style={styles.collegeCardHeader}>
             <Ionicons name="shield-outline" size={18} color={COLORS.muted} />
-            <Text style={styles.collegeCardTitle}>Get the Verified Student badge</Text>
+            <Text style={styles.collegeCardTitle}>Get your digital Student ID</Text>
           </View>
           <Text style={styles.verifySub}>
-            Verify your college ID from your @mahindrauniversity.edu.in email — we'll auto-fill your school, branch and batch.
+            Verify your @mahindrauniversity.edu.in email — even if you signed in a different way — to unlock the Verified Student badge and a shareable digital ID card.
           </Text>
-          <Pressable testID="verify-college-id-btn" onPress={verifyCollegeId} disabled={verifying} style={[styles.verifyBtn, verifying && { opacity: 0.6 }]}>
-            {verifying ? <ActivityIndicator color="#fff" /> : (
-              <>
-                <Ionicons name="shield-checkmark-outline" size={16} color="#fff" />
-                <Text style={styles.verifyBtnText}>Verify college ID</Text>
-              </>
-            )}
+          <Pressable testID="verify-college-id-btn" onPress={() => setVerifyModalOpen(true)} style={styles.verifyBtn}>
+            <Ionicons name="shield-checkmark-outline" size={16} color="#fff" />
+            <Text style={styles.verifyBtnText}>Verify college ID</Text>
           </Pressable>
         </View>
       )}
+
+      <VerifyCollegeIdModal
+        visible={verifyModalOpen}
+        onClose={() => setVerifyModalOpen(false)}
+        onVerified={async () => {
+          setVerifyModalOpen(false);
+          await refresh();
+          await load();
+        }}
+      />
 
       <FlatList
         data={filtered}
@@ -503,9 +490,7 @@ const styles = StyleSheet.create({
   collegeCard: { backgroundColor: "#fff", marginHorizontal: SPACING.lg, marginTop: SPACING.lg, borderRadius: RADIUS.lg, padding: SPACING.lg, borderWidth: 1, borderColor: COLORS.border },
   collegeCardHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
   collegeCardTitle: { fontSize: FONT.base, fontWeight: "800", color: COLORS.onSurface },
-  rollNumber: { fontSize: FONT.lg, fontWeight: "800", color: COLORS.indigo, letterSpacing: 1, fontFamily: Platform.select({ ios: "Courier", android: "monospace", default: "monospace" }) },
-  collegeDetailsRow: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 4 },
-  collegeDetail: { fontSize: FONT.sm, color: COLORS.muted, fontWeight: "600" },
+  idCardWrap: { marginHorizontal: SPACING.lg, marginTop: SPACING.lg },
   verifySub: { fontSize: FONT.sm, color: COLORS.muted, marginBottom: SPACING.md, lineHeight: 18 },
   verifyBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: COLORS.indigo, borderRadius: RADIUS.pill, paddingVertical: 12 },
   verifyBtnText: { color: "#fff", fontWeight: "700", fontSize: FONT.sm },
