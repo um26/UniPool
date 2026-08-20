@@ -180,6 +180,13 @@ class RatingCreate(BaseModel):
     pool_id: Optional[str] = None
 
 
+class ReportCreate(BaseModel):
+    reported_user_id: str
+    reason: str  # short category, e.g. "no-show", "unsafe", "harassment", "spam", "other"
+    details: Optional[str] = None
+    pool_id: Optional[str] = None
+
+
 # ---------- Helpers ----------
 def _clean(doc: dict) -> dict:
     if not doc:
@@ -215,6 +222,30 @@ def _fmt_ist(dt: datetime) -> str:
     """Format a stored (UTC) datetime as an IST wall-clock string for emails —
     all UniPool users are in India, so times should never surface as UTC."""
     return _ensure_aware(dt).astimezone(IST).strftime("%d %b %Y, %I:%M %p IST")
+
+
+async def _blocked_user_ids(user_id: str) -> set:
+    """Everyone blocked in EITHER direction relative to this user — used to
+    hide their pools from the feed and prevent messaging/requests."""
+    cursor = db.blocks.find(
+        {"$or": [{"blocker_id": user_id}, {"blocked_id": user_id}]}, {"_id": 0}
+    )
+    pairs = await cursor.to_list(2000)
+    ids = set()
+    for p in pairs:
+        ids.add(p["blocked_id"] if p["blocker_id"] == user_id else p["blocker_id"])
+    return ids
+
+
+async def _is_blocked_pair(user_a: str, user_b: str) -> bool:
+    doc = await db.blocks.find_one(
+        {"$or": [
+            {"blocker_id": user_a, "blocked_id": user_b},
+            {"blocker_id": user_b, "blocked_id": user_a},
+        ]},
+        {"_id": 0},
+    )
+    return doc is not None
 
 
 ONLINE_THRESHOLD_SECONDS = 60
@@ -346,6 +377,34 @@ async def send_push(user_id: str, title: str, body: str, url: str = "/") -> None
                 await db.push_subscriptions.delete_one({"endpoint": sub["endpoint"]})
         except Exception as e:
             logger.warning(f"Push error for {user_id}: {e}")
+
+
+async def _leaving_soon_reminder_loop():
+    """Runs continuously while the service is awake. Every 5 minutes, finds
+    open pools departing within the next ~35 minutes that haven't been
+    reminded yet, and pushes a nudge to the owner + all confirmed travelers."""
+    while True:
+        try:
+            now = _now_utc()
+            window_end = now + timedelta(minutes=35)
+            cursor = db.pools.find(
+                {"status": "open", "travel_datetime": {"$gte": now, "$lte": window_end}, "reminder_sent": {"$ne": True}},
+                {"_id": 0},
+            )
+            pools = await cursor.to_list(200)
+            for p in pools:
+                minutes_left = max(1, int((_ensure_aware(p["travel_datetime"]) - now).total_seconds() // 60))
+                recipients = {p["user_id"]} | {t["user_id"] for t in p.get("confirmed_travelers", [])}
+                for uid in recipients:
+                    asyncio.create_task(send_push(
+                        uid, "Ride leaving soon 🚗",
+                        f"{p['from_location']} → {p['to_location']} in about {minutes_left} min",
+                        "/(tabs)/matches",
+                    ))
+                await db.pools.update_one({"pool_id": p["pool_id"]}, {"$set": {"reminder_sent": True}})
+        except Exception as e:
+            logger.warning(f"Leaving-soon reminder loop error: {e}")
+        await asyncio.sleep(300)
 
 
 def match_email_html(recipient_name: str, match: dict, own: dict) -> str:
@@ -643,10 +702,11 @@ async def create_pool(body: PoolRequestCreate, authorization: Optional[str] = He
 async def list_pools(authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     now = _now_utc()
-    cursor = db.pools.find(
-        {"travel_datetime": {"$gte": now - timedelta(hours=2)}, "status": "open"},
-        {"_id": 0},
-    ).sort("travel_datetime", 1)
+    blocked_ids = await _blocked_user_ids(user["user_id"])
+    query = {"travel_datetime": {"$gte": now - timedelta(hours=2)}, "status": "open"}
+    if blocked_ids:
+        query["user_id"] = {"$nin": list(blocked_ids)}
+    cursor = db.pools.find(query, {"_id": 0}).sort("travel_datetime", 1)
     results = await cursor.to_list(200)
     results = await _enrich_with_ratings(results)
     return await _enrich_with_my_request_status(results, user["user_id"])
@@ -659,6 +719,19 @@ async def my_pools(authorization: Optional[str] = Header(None)):
     results = await cursor.to_list(200)
     results = await _enrich_with_ratings(results)
     return await _enrich_with_my_request_status(results, user["user_id"])
+
+
+@api.get("/pools/{pool_id}", response_model=PoolRequestOut)
+async def get_pool(pool_id: str, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    pool = await db.pools.find_one({"pool_id": pool_id}, {"_id": 0})
+    if not pool:
+        raise HTTPException(status_code=404, detail="Pool not found")
+    if await _is_blocked_pair(user["user_id"], pool["user_id"]):
+        raise HTTPException(status_code=404, detail="Pool not found")
+    results = await _enrich_with_ratings([pool])
+    results = await _enrich_with_my_request_status(results, user["user_id"])
+    return results[0]
 
 
 @api.patch("/pools/{pool_id}/close", response_model=PoolRequestOut)
@@ -765,6 +838,8 @@ async def create_join_request(pool_id: str, authorization: Optional[str] = Heade
         raise HTTPException(status_code=400, detail="This pool is no longer accepting requests")
     if any(t["user_id"] == user["user_id"] for t in pool.get("confirmed_travelers", [])):
         raise HTTPException(status_code=400, detail="You're already confirmed on this pool")
+    if await _is_blocked_pair(user["user_id"], pool["user_id"]):
+        raise HTTPException(status_code=403, detail="You can't request to join this pool")
 
     existing = await db.join_requests.find_one(
         {"pool_id": pool_id, "requester_id": user["user_id"], "status": {"$in": ["pending", "accepted"]}},
@@ -1023,6 +1098,8 @@ async def send_message(body: MessageCreate, authorization: Optional[str] = Heade
     to_user = await db.users.find_one({"user_id": body.to_user_id}, {"_id": 0, "password_hash": 0})
     if not to_user:
         raise HTTPException(status_code=404, detail="Recipient not found")
+    if await _is_blocked_pair(user["user_id"], body.to_user_id):
+        raise HTTPException(status_code=403, detail="You can't message this user")
     doc = {
         "message_id": f"msg_{uuid.uuid4().hex[:12]}",
         "from_user_id": user["user_id"],
@@ -1177,6 +1254,69 @@ async def can_rate(user_id: str, authorization: Optional[str] = Header(None)):
     return {"already_rated": existing is not None, "existing": existing}
 
 
+# ---------- Safety: Block & Report ----------
+@api.post("/users/{user_id}/block")
+async def block_user(user_id: str, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    if user_id == user["user_id"]:
+        raise HTTPException(status_code=400, detail="You can't block yourself")
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    await db.blocks.update_one(
+        {"blocker_id": user["user_id"], "blocked_id": user_id},
+        {"$setOnInsert": {"blocker_id": user["user_id"], "blocked_id": user_id, "created_at": _now_utc()}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api.delete("/users/{user_id}/block")
+async def unblock_user(user_id: str, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    await db.blocks.delete_one({"blocker_id": user["user_id"], "blocked_id": user_id})
+    return {"ok": True}
+
+
+@api.get("/users/me/blocked")
+async def list_blocked(authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    cursor = db.blocks.find({"blocker_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1)
+    rows = await cursor.to_list(500)
+    ids = [r["blocked_id"] for r in rows]
+    if not ids:
+        return []
+    users = await db.users.find({"user_id": {"$in": ids}}, {"_id": 0, "password_hash": 0}).to_list(500)
+    u_map = {u["user_id"]: u for u in users}
+    return [
+        {"user_id": r["blocked_id"], "name": u_map.get(r["blocked_id"], {}).get("name", "Unknown"), "blocked_at": r["created_at"]}
+        for r in rows
+    ]
+
+
+@api.post("/reports")
+async def submit_report(body: ReportCreate, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    if body.reported_user_id == user["user_id"]:
+        raise HTTPException(status_code=400, detail="You can't report yourself")
+    target = await db.users.find_one({"user_id": body.reported_user_id}, {"_id": 0, "password_hash": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    await db.reports.insert_one({
+        "report_id": f"rpt_{uuid.uuid4().hex[:12]}",
+        "reporter_id": user["user_id"],
+        "reporter_name": user.get("name"),
+        "reported_user_id": body.reported_user_id,
+        "reported_user_name": target.get("name"),
+        "reason": body.reason.strip()[:60],
+        "details": (body.details or "").strip()[:1000] or None,
+        "pool_id": body.pool_id,
+        "status": "open",
+        "created_at": _now_utc(),
+    })
+    return {"ok": True}
+
+
 # ---------- Admin ----------
 async def require_admin(authorization: Optional[str] = Header(None)) -> dict:
     user = await get_current_user(authorization)
@@ -1227,6 +1367,22 @@ async def admin_migrate_ratings_scale(authorization: Optional[str] = Header(None
         [{"$set": {"stars": {"$min": [{"$multiply": ["$stars", 2]}, 10]}, "scale": 10}}],
     )
     return {"ok": True, "matched": result.matched_count, "modified": result.modified_count}
+
+
+@api.get("/admin/reports")
+async def admin_list_reports(authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    cursor = db.reports.find({}, {"_id": 0}).sort("created_at", -1)
+    return await cursor.to_list(500)
+
+
+@api.patch("/admin/reports/{report_id}/resolve")
+async def admin_resolve_report(report_id: str, authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    r = await db.reports.update_one({"report_id": report_id}, {"$set": {"status": "resolved"}})
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"ok": True}
 
 
 # ---------- Game Leaderboards ----------
@@ -1352,6 +1508,8 @@ async def _startup():
         await db.user_sessions.create_index("expires_at", expireAfterSeconds=0)
         await db.pools.create_index("pool_id", unique=True)
         await db.pools.create_index([("from_location", 1), ("to_location", 1), ("travel_datetime", 1)])
+        await db.blocks.create_index([("blocker_id", 1), ("blocked_id", 1)], unique=True)
+        await db.reports.create_index("created_at")
         logger.info("Indexes created")
     except Exception as e:
         logger.warning(f"Index setup issue: {e}")
@@ -1375,6 +1533,8 @@ async def _startup():
             logger.info(f"Seeded admin account '{SEED_ADMIN_USERNAME}'")
     except Exception as e:
         logger.warning(f"Admin seed issue: {e}")
+
+    asyncio.create_task(_leaving_soon_reminder_loop())
 
 
 @app.on_event("shutdown")

@@ -12,6 +12,8 @@ import { useAuth } from "@/src/auth/AuthContext";
 import PressableScale from "@/src/components/PressableScale";
 import RatingBadge from "@/src/components/RatingBadge";
 import PoolMapView from "@/src/components/PoolMapView";
+import { PoolFeedSkeleton } from "@/src/components/Skeleton";
+import ReportBlockModal from "@/src/components/ReportBlockModal";
 
 type ConfirmedTraveler = { user_id: string; name: string; email: string };
 
@@ -46,6 +48,7 @@ export default function HomeFeed() {
   const [search, setSearch] = useState("");
   const [showMap, setShowMap] = useState(false);
   const [requesting, setRequesting] = useState<Set<string>>(new Set());
+  const [reportTarget, setReportTarget] = useState<{ user_id: string; user_name: string } | null>(null);
 
   const load = useCallback(async () => {
     try { const list = await api.listPools(); setPools(list); }
@@ -141,7 +144,9 @@ export default function HomeFeed() {
       </LinearGradient>
 
       {loading ? (
-        <View style={styles.center}><ActivityIndicator color={COLORS.indigo} /></View>
+        <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 140 }}>
+          <PoolFeedSkeleton />
+        </ScrollView>
       ) : showMap ? (
         <PoolMapView pools={filtered} />
       ) : (
@@ -163,6 +168,7 @@ export default function HomeFeed() {
               mine={item.user_id === user?.user_id}
               busy={requesting.has(item.pool_id)}
               onRequest={() => sendRequest(item)}
+              onOpenReport={() => setReportTarget({ user_id: item.user_id, user_name: item.user_name })}
             />
           )}
         />
@@ -179,15 +185,30 @@ export default function HomeFeed() {
           <Text style={styles.fabText}>Post Pool</Text>
         </LinearGradient>
       </PressableScale>
+
+      {reportTarget && (
+        <ReportBlockModal
+          visible={!!reportTarget}
+          onClose={() => setReportTarget(null)}
+          userId={reportTarget.user_id}
+          userName={reportTarget.user_name}
+          onBlocked={load}
+        />
+      )}
     </SafeAreaView>
   );
 }
 
-function PoolCard({ pool, mine, busy, onRequest }: { pool: Pool; mine: boolean; busy: boolean; onRequest: () => void }) {
+function PoolCard({ pool, mine, busy, onRequest, onOpenReport }: { pool: Pool; mine: boolean; busy: boolean; onRequest: () => void; onOpenReport: () => void }) {
   const travelers = pool.confirmed_travelers || [];
+  const router = useRouter();
 
   return (
-    <View style={styles.card} testID={`pool-card-${pool.pool_id}`}>
+    <Pressable
+      testID={`pool-card-${pool.pool_id}`}
+      onPress={() => router.push({ pathname: "/pool/[poolId]", params: { poolId: pool.pool_id } })}
+      style={styles.card}
+    >
       <View style={styles.cardHeader}>
         <View style={styles.cardAvatar}><Text style={{ color: COLORS.indigo, fontWeight: "700" }}>{pool.user_name?.[0]?.toUpperCase() || "U"}</Text></View>
         <View style={{ flex: 1 }}>
@@ -199,6 +220,11 @@ function PoolCard({ pool, mine, busy, onRequest }: { pool: Pool; mine: boolean; 
         </View>
         {pool.gender_preference === "same" && (
           <View style={styles.badge}><Text style={styles.badgeText}>Same-gender</Text></View>
+        )}
+        {!mine && (
+          <Pressable testID={`more-${pool.pool_id}`} onPress={(e) => { e.stopPropagation(); onOpenReport(); }} hitSlop={10} style={{ marginLeft: 6 }}>
+            <Ionicons name="ellipsis-vertical" size={18} color={COLORS.muted} />
+          </Pressable>
         )}
       </View>
 
@@ -226,7 +252,7 @@ function PoolCard({ pool, mine, busy, onRequest }: { pool: Pool; mine: boolean; 
       )}
 
       {!mine && <RequestCta pool={pool} busy={busy} onRequest={onRequest} />}
-    </View>
+    </Pressable>
   );
 }
 
@@ -254,7 +280,7 @@ function RequestCta({ pool, busy, onRequest }: { pool: Pool; busy: boolean; onRe
   return (
     <Pressable
       testID={`request-${pool.pool_id}`}
-      onPress={onRequest}
+      onPress={(e) => { e.stopPropagation(); onRequest(); }}
       disabled={busy}
       style={[styles.reqPill, styles.reqPillIdle, busy && { opacity: 0.6 }]}
     >

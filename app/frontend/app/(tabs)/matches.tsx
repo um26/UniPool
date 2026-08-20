@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, Pressable, Linking, Alert } from "react-native";
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, Pressable, Linking, Alert, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -11,6 +11,8 @@ import { api } from "@/src/api/client";
 import { useAuth } from "@/src/auth/AuthContext";
 import RatingBadge from "@/src/components/RatingBadge";
 import RatingModal from "@/src/components/RatingModal";
+import ReportBlockModal from "@/src/components/ReportBlockModal";
+import { PoolFeedSkeleton } from "@/src/components/Skeleton";
 
 type Pool = {
   pool_id: string; user_id: string; user_name: string; user_email: string;
@@ -38,6 +40,7 @@ export default function MatchesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [ratingTarget, setRatingTarget] = useState<{ user_id: string; user_name: string; pool_id: string } | null>(null);
   const [removingKey, setRemovingKey] = useState<string | null>(null);
+  const [reportTarget, setReportTarget] = useState<{ user_id: string; user_name: string } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -90,7 +93,9 @@ export default function MatchesScreen() {
       </LinearGradient>
 
       {loading ? (
-        <View style={styles.center}><ActivityIndicator color={COLORS.indigo} /></View>
+        <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 140 }}>
+          <PoolFeedSkeleton count={3} />
+        </ScrollView>
       ) : (
         <FlatList
           data={items}
@@ -107,7 +112,12 @@ export default function MatchesScreen() {
                     <View key={key} style={styles.rideCard} testID={`confirmed-${key}`}>
                       <View style={styles.rowTop}>
                         <View style={styles.confirmedBadge}><Ionicons name="car-sport" size={12} color="#fff" /><Text style={styles.confirmedBadgeText}>CONFIRMED</Text></View>
-                        <Text style={styles.when}>{fmtWhen(ride.travel_datetime)}</Text>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.sm }}>
+                          <Text style={styles.when}>{fmtWhen(ride.travel_datetime)}</Text>
+                          <Pressable testID={`more-confirmed-${key}`} onPress={() => setReportTarget({ user_id: ride.other_user_id, user_name: ride.other_user_name })} hitSlop={8}>
+                            <Ionicons name="ellipsis-vertical" size={16} color={COLORS.muted} />
+                          </Pressable>
+                        </View>
                       </View>
                       <Text style={styles.name}>{ride.other_user_name}</Text>
                       <View style={{ marginBottom: SPACING.sm }}>
@@ -162,7 +172,12 @@ export default function MatchesScreen() {
             <View style={styles.card} testID={`match-card-${item.pool_id}`}>
               <View style={styles.rowTop}>
                 <View style={styles.matchBadge}><Ionicons name="flash" size={12} color="#fff" /><Text style={styles.matchBadgeText}>MATCH</Text></View>
-                <Text style={styles.when}>{fmtWhen(item.travel_datetime)}</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.sm }}>
+                  <Text style={styles.when}>{fmtWhen(item.travel_datetime)}</Text>
+                  <Pressable testID={`more-match-${item.pool_id}`} onPress={() => setReportTarget({ user_id: item.user_id, user_name: item.user_name })} hitSlop={8}>
+                    <Ionicons name="ellipsis-vertical" size={16} color={COLORS.muted} />
+                  </Pressable>
+                </View>
               </View>
               <Text style={styles.name}>{item.user_name}</Text>
               <View style={{ marginBottom: SPACING.sm }}>
@@ -212,6 +227,16 @@ export default function MatchesScreen() {
           userName={ratingTarget.user_name}
           poolId={ratingTarget.pool_id}
           onSubmitted={load}
+        />
+      )}
+
+      {reportTarget && (
+        <ReportBlockModal
+          visible={!!reportTarget}
+          onClose={() => setReportTarget(null)}
+          userId={reportTarget.user_id}
+          userName={reportTarget.user_name}
+          onBlocked={load}
         />
       )}
     </SafeAreaView>

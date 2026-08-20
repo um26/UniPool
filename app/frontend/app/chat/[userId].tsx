@@ -7,6 +7,7 @@ import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { COLORS, SPACING, RADIUS, FONT } from "@/src/theme";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/auth/AuthContext";
+import ReportBlockModal from "@/src/components/ReportBlockModal";
 
 type Msg = {
   message_id: string;
@@ -38,6 +39,7 @@ export default function ChatThread() {
   const [sending, setSending] = useState(false);
   const [otherTyping, setOtherTyping] = useState(false);
   const [presence, setPresence] = useState<{ online: boolean; last_seen?: string }>({ online: false });
+  const [showReport, setShowReport] = useState(false);
   const listRef = useRef<FlatList>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const presenceRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -132,7 +134,9 @@ export default function ChatThread() {
               ) : null}
             </View>
           </View>
-          <View style={{ width: 24 }} />
+          <Pressable testID="chat-more" onPress={() => setShowReport(true)} hitSlop={12}>
+            <Ionicons name="ellipsis-vertical" size={22} color={COLORS.onSurface} />
+          </Pressable>
         </View>
 
         {loading ? (
@@ -205,6 +209,14 @@ export default function ChatThread() {
           </Pressable>
         </View>
       </KeyboardAvoidingView>
+
+      <ReportBlockModal
+        visible={showReport}
+        onClose={() => setShowReport(false)}
+        userId={userId as string}
+        userName={(name as string) || "this user"}
+        onBlocked={() => router.back()}
+      />
     </SafeAreaView>
   );
 }

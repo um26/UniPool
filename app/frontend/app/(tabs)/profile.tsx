@@ -55,6 +55,8 @@ export default function ProfileScreen() {
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [removingTraveler, setRemovingTraveler] = useState<string | null>(null);
   const [myRating, setMyRating] = useState<{ average: number | null; count: number }>({ average: null, count: 0 });
+  const [blocked, setBlocked] = useState<{ user_id: string; name: string }[]>([]);
+  const [unblockingId, setUnblockingId] = useState<string | null>(null);
 
   const [adminOpen, setAdminOpen] = useState(false);
   const [adminStats, setAdminStats] = useState<any>(null);
@@ -67,6 +69,7 @@ export default function ProfileScreen() {
       setMyPools(pools);
       setIncoming(reqs);
     } catch {}
+    try { setBlocked(await api.listBlocked()); } catch {}
     if (user?.user_id) {
       try {
         const r = await api.getUserRatings(user.user_id);
@@ -114,6 +117,19 @@ export default function ProfileScreen() {
         },
       ]
     );
+  };
+
+  const unblock = async (userId: string) => {
+    setUnblockingId(userId);
+    try {
+      await api.unblockUser(userId);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await load();
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
+    } finally {
+      setUnblockingId(null);
+    }
   };
 
   const saveGender = async (g: string) => {
@@ -222,6 +238,29 @@ export default function ProfileScreen() {
                     : "Enable push notifications"}
                 </Text>
               </Pressable>
+            )}
+
+            {blocked.length > 0 && (
+              <>
+                <Text style={styles.sectionLabel}>Blocked Users ({blocked.length})</Text>
+                {blocked.map((b) => (
+                  <View key={b.user_id} style={styles.blockedRow} testID={`blocked-${b.user_id}`}>
+                    <Text style={styles.blockedName}>{b.name}</Text>
+                    <Pressable
+                      testID={`unblock-${b.user_id}`}
+                      onPress={() => unblock(b.user_id)}
+                      disabled={unblockingId === b.user_id}
+                      style={styles.unblockBtn}
+                    >
+                      {unblockingId === b.user_id ? (
+                        <ActivityIndicator size="small" color={COLORS.indigo} />
+                      ) : (
+                        <Text style={styles.unblockText}>Unblock</Text>
+                      )}
+                    </Pressable>
+                  </View>
+                ))}
+              </>
             )}
 
             {incoming.length > 0 && (
@@ -430,6 +469,10 @@ const styles = StyleSheet.create({
   reqBtn: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
   reqBtnAccept: { backgroundColor: COLORS.success },
   reqBtnDecline: { backgroundColor: "#fff", borderWidth: 1, borderColor: COLORS.error },
+  blockedRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#fff", borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: COLORS.border },
+  blockedName: { fontSize: FONT.base, fontWeight: "600", color: COLORS.onSurface },
+  unblockBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.indigo },
+  unblockText: { color: COLORS.indigo, fontWeight: "700", fontSize: 12 },
 
   adminToggle: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#fff", borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.border, paddingVertical: 12, paddingHorizontal: SPACING.lg, justifyContent: "center" },
   adminToggleText: { color: COLORS.indigo, fontWeight: "700", flex: 1, textAlign: "center" },

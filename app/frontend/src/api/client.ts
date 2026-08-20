@@ -78,4 +78,10 @@ export const api = {
   cancelRequest: (requestId: string) => req(`/requests/${requestId}`, { method: "DELETE" }),
   confirmedMatches: () => req("/matches/confirmed"),
   removeTraveler: (poolId: string, travelerUserId: string) => req(`/pools/${poolId}/travelers/${travelerUserId}`, { method: "DELETE" }),
+  getPool: (poolId: string) => req(`/pools/${poolId}`),
+  blockUser: (userId: string) => req(`/users/${userId}/block`, { method: "POST" }),
+  unblockUser: (userId: string) => req(`/users/${userId}/block`, { method: "DELETE" }),
+  listBlocked: () => req("/users/me/blocked"),
+  submitReport: (reportedUserId: string, reason: string, details?: string, poolId?: string) =>
+    req("/reports", { method: "POST", body: JSON.stringify({ reported_user_id: reportedUserId, reason, details, pool_id: poolId }) }),
 };
