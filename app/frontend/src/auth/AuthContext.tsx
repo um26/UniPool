@@ -35,8 +35,8 @@ type AuthCtx = {
   // Web-only: mount a Google button into a DOM node.
   renderGoogleButton: (containerId: string) => void;
   // Email/username + password auth.
-  signInWithPassword: (identifier: string, password: string) => Promise<void>;
-  signUpWithPassword: (email: string, password: string, name: string, username?: string) => Promise<void>;
+  signInWithPassword: (identifier: string, password: string, turnstileToken?: string | null) => Promise<void>;
+  signUpWithPassword: (email: string, password: string, name: string, username?: string, turnstileToken?: string | null) => Promise<void>;
 };
 
 const Ctx = createContext<AuthCtx>({} as any);
@@ -181,11 +181,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const signInWithPassword = useCallback(async (identifier: string, password: string) => {
+  const signInWithPassword = useCallback(async (identifier: string, password: string, turnstileToken?: string | null) => {
     setSigningIn(true);
     setSignInError(null);
     try {
-      const res = await api.emailLogin(identifier, password);
+      const res = await api.emailLogin(identifier, password, turnstileToken);
       await setToken(res.session_token);
       setUser(res.user);
     } catch (e: any) {
@@ -196,11 +196,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const signUpWithPassword = useCallback(async (email: string, password: string, name: string, username?: string) => {
+  const signUpWithPassword = useCallback(async (email: string, password: string, name: string, username?: string, turnstileToken?: string | null) => {
     setSigningIn(true);
     setSignInError(null);
     try {
-      const res = await api.emailSignup(email, password, name, username);
+      const res = await api.emailSignup(email, password, name, username, turnstileToken);
       await setToken(res.session_token);
       setUser(res.user);
     } catch (e: any) {

@@ -31,6 +31,9 @@ GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
 EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "UniPool")
+GMAIL_ADDRESS = os.environ.get("GMAIL_ADDRESS", "")
+GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
+TURNSTILE_SECRET_KEY = os.environ.get("TURNSTILE_SECRET_KEY", "")
 
 ADMIN_EMAILS = {
     e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()
@@ -288,11 +291,13 @@ class SignupRequest(BaseModel):
     password: str
     name: str
     username: Optional[str] = None
+    turnstile_token: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
     identifier: str  # email or username
     password: str
+    turnstile_token: Optional[str] = None
 
 
 class ScoreSubmit(BaseModel):
@@ -474,9 +479,38 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
 
 
 # ---------- Email ----------
+def _send_via_gmail_smtp(to_email: str, subject: str, html_content: str) -> tuple:
+    """Blocking SMTP send — run via asyncio.to_thread. Uses a Gmail App
+    Password (not the account password) so it can send to any recipient,
+    unlike Resend's sandbox sender which is locked to one address."""
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"{EMAIL_FROM_NAME} <{GMAIL_ADDRESS}>"
+    msg["To"] = to_email
+    msg.attach(MIMEText(html_content, "html"))
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=20) as server:
+            server.starttls()
+            server.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
+            server.sendmail(GMAIL_ADDRESS, [to_email], msg.as_string())
+        return True, ""
+    except Exception as e:
+        return False, str(e)
+
+
 async def send_email(to_email: str, subject: str, html_content: str) -> bool:
+    if GMAIL_ADDRESS and GMAIL_APP_PASSWORD:
+        ok, err = await asyncio.to_thread(_send_via_gmail_smtp, to_email, subject, html_content)
+        if not ok:
+            logger.error(f"Gmail SMTP send failed to {to_email}: {err}")
+        return ok
+
     if not RESEND_API_KEY:
-        logger.warning("RESEND_API_KEY missing — skipping email send")
+        logger.warning("No email credentials configured (GMAIL_ADDRESS/GMAIL_APP_PASSWORD or RESEND_API_KEY) — skipping email send")
         return False
     payload = {
         "from": f"{EMAIL_FROM_NAME} <{RESEND_FROM_EMAIL}>",
@@ -497,6 +531,27 @@ async def send_email(to_email: str, subject: str, html_content: str) -> bool:
         return True
     except Exception as e:
         logger.error(f"Email send failed to {to_email}: {e}")
+        return False
+
+
+async def _verify_turnstile(token: Optional[str], remote_ip: Optional[str]) -> bool:
+    """Verifies a Cloudflare Turnstile token. If no secret key is configured
+    yet, verification is skipped (open) so this can be deployed ahead of the
+    Cloudflare setup being finished — flip it on the moment the key is set."""
+    if not TURNSTILE_SECRET_KEY:
+        return True
+    if not token:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=10) as http:
+            resp = await http.post(
+                "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+                data={"secret": TURNSTILE_SECRET_KEY, "response": token, "remoteip": remote_ip or ""},
+            )
+        data = resp.json()
+        return bool(data.get("success"))
+    except Exception as e:
+        logger.error(f"Turnstile verification error: {e}")
         return False
 
 
@@ -728,7 +783,9 @@ async def google_sign_in(body: GoogleSignIn):
 
 
 @api.post("/auth/signup")
-async def signup(body: SignupRequest):
+async def signup(body: SignupRequest, request: Request):
+    if not await _verify_turnstile(body.turnstile_token, request.client.host if request.client else None):
+        raise HTTPException(status_code=400, detail="Bot check failed — please try again.")
     email = body.email.strip().lower()
     if len(body.password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
@@ -758,7 +815,9 @@ async def signup(body: SignupRequest):
 
 
 @api.post("/auth/login")
-async def login(body: LoginRequest):
+async def login(body: LoginRequest, request: Request):
+    if not await _verify_turnstile(body.turnstile_token, request.client.host if request.client else None):
+        raise HTTPException(status_code=400, detail="Bot check failed — please try again.")
     identifier = body.identifier.strip()
     user = await db.users.find_one(
         {"$or": [{"email": identifier.lower()}, {"username": identifier}]}, {"_id": 0}

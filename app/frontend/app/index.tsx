@@ -9,6 +9,7 @@ import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Eas
 import { useAuth } from "@/src/auth/AuthContext";
 import { COLORS, SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
 import BrandFooter from "@/src/components/BrandFooter";
+import Turnstile from "@/src/components/Turnstile";
 
 const { width } = Dimensions.get("window");
 
@@ -23,6 +24,8 @@ export default function LoginScreen() {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
 
   useEffect(() => {
     planeX.value = withRepeat(
@@ -53,13 +56,15 @@ export default function LoginScreen() {
     }
     try {
       if (mode === "login") {
-        await signInWithPassword(identifier.trim(), password);
+        await signInWithPassword(identifier.trim(), password, turnstileToken);
       } else {
         if (!name.trim()) { setLocalError("Please enter your name."); return; }
-        await signUpWithPassword(identifier.trim(), password, name.trim());
+        await signUpWithPassword(identifier.trim(), password, name.trim(), undefined, turnstileToken);
       }
     } catch {
       // signInError from context already surfaces the message
+    } finally {
+      setTurnstileResetKey((k) => k + 1);
     }
   };
 
@@ -208,6 +213,8 @@ export default function LoginScreen() {
               {(localError || signInError) ? (
                 <Text testID="password-auth-error" style={styles.errorText}>{localError || signInError}</Text>
               ) : null}
+
+              <Turnstile onToken={setTurnstileToken} resetKey={turnstileResetKey} />
 
               <Pressable
                 testID="password-auth-submit"

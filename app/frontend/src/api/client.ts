@@ -34,10 +34,10 @@ async function req(path: string, opts: RequestInit = {}) {
 
 export const api = {
   googleSignIn: (id_token: string) => req("/auth/google", { method: "POST", body: JSON.stringify({ id_token }) }),
-  emailSignup: (email: string, password: string, name: string, username?: string) =>
-    req("/auth/signup", { method: "POST", body: JSON.stringify({ email, password, name, username }) }),
-  emailLogin: (identifier: string, password: string) =>
-    req("/auth/login", { method: "POST", body: JSON.stringify({ identifier, password }) }),
+  emailSignup: (email: string, password: string, name: string, username?: string, turnstileToken?: string | null) =>
+    req("/auth/signup", { method: "POST", body: JSON.stringify({ email, password, name, username, turnstile_token: turnstileToken }) }),
+  emailLogin: (identifier: string, password: string, turnstileToken?: string | null) =>
+    req("/auth/login", { method: "POST", body: JSON.stringify({ identifier, password, turnstile_token: turnstileToken }) }),
   me: () => req("/auth/me"),
   logout: () => req("/auth/logout", { method: "POST" }),
   updateProfile: (patch: any) => req("/profile", { method: "PATCH", body: JSON.stringify(patch) }),
