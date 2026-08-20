@@ -491,7 +491,9 @@ async def send_email(to_email: str, subject: str, html_content: str) -> bool:
                 headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
                 json=payload,
             )
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            logger.error(f"Email send failed to {to_email}: {resp.status_code} {resp.text}")
+            return False
         return True
     except Exception as e:
         logger.error(f"Email send failed to {to_email}: {e}")
