@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useState, useRef } from "react";
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, Pressable, Linking, Alert, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -12,6 +12,7 @@ import { useAuth } from "@/src/auth/AuthContext";
 import RatingBadge from "@/src/components/RatingBadge";
 import UserBadges from "@/src/components/UserBadges";
 import RatingModal from "@/src/components/RatingModal";
+import Confetti from "@/src/components/Confetti";
 import ReportBlockModal from "@/src/components/ReportBlockModal";
 import { PoolFeedSkeleton } from "@/src/components/Skeleton";
 
@@ -44,12 +45,21 @@ export default function MatchesScreen() {
   const [ratingTarget, setRatingTarget] = useState<{ user_id: string; user_name: string; pool_id: string } | null>(null);
   const [removingKey, setRemovingKey] = useState<string | null>(null);
   const [reportTarget, setReportTarget] = useState<{ user_id: string; user_name: string } | null>(null);
+  const [confettiKey, setConfettiKey] = useState(0);
+  const knownConfirmedKeys = useRef<Set<string> | null>(null);
 
   const load = useCallback(async () => {
     try {
       const [matches, rides] = await Promise.all([api.myMatches(), api.confirmedMatches()]);
       setItems(matches);
       setConfirmed(rides);
+
+      const keysNow = new Set<string>(rides.map((r: ConfirmedRide) => `${r.pool_id}:${r.other_user_id}`));
+      if (knownConfirmedKeys.current) {
+        const grew = [...keysNow].some((k) => !knownConfirmedKeys.current!.has(k));
+        if (grew) setConfettiKey((k) => k + 1);
+      }
+      knownConfirmedKeys.current = keysNow;
     }
     catch (e) { console.warn(e); }
     finally { setLoading(false); setRefreshing(false); }
@@ -85,6 +95,7 @@ export default function MatchesScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
+      <Confetti burstKey={confettiKey} />
       <LinearGradient colors={[COLORS.saffron, "#F57F17"]} style={styles.header}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.md }}>
           <Ionicons name="sparkles" size={26} color="#fff" />

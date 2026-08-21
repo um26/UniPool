@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useState, useRef } from "react";
 import { View, Text, StyleSheet, Pressable, FlatList, Alert, ActivityIndicator, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -12,6 +12,7 @@ import { useAuth } from "@/src/auth/AuthContext";
 import BrandFooter from "@/src/components/BrandFooter";
 import UserBadges from "@/src/components/UserBadges";
 import CollegeIdCard from "@/src/components/CollegeIdCard";
+import Confetti from "@/src/components/Confetti";
 import VerifyCollegeIdModal from "@/src/components/VerifyCollegeIdModal";
 import { usePushNotifications } from "@/src/hooks/use-push-notifications";
 
@@ -69,6 +70,8 @@ export default function ProfileScreen() {
   const [adminStats, setAdminStats] = useState<any>(null);
   const [adminPools, setAdminPools] = useState<Pool[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
+  const [confettiKey, setConfettiKey] = useState(0);
+  const knownBadgeIds = useRef<Set<string> | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -83,6 +86,13 @@ export default function ProfileScreen() {
         setMyRating({ average: r.average, count: r.count });
         setMyBadges(r.badges || []);
         setRidesCompleted(r.rides_completed || 0);
+
+        const newIds = new Set<string>((r.badges || []).map((b: any) => b.id));
+        if (knownBadgeIds.current) {
+          const gainedNew = [...newIds].some((id) => !knownBadgeIds.current!.has(id));
+          if (gainedNew) setConfettiKey((k) => k + 1);
+        }
+        knownBadgeIds.current = newIds;
       } catch {}
     }
   }, [user?.user_id]);
@@ -95,6 +105,7 @@ export default function ProfileScreen() {
       if (action === "accept") await api.acceptRequest(requestId);
       else await api.declineRequest(requestId);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (action === "accept") setConfettiKey((k) => k + 1);
       await load();
     } catch (e: any) {
       Alert.alert("Error", e.message);
@@ -185,6 +196,7 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
+      <Confetti burstKey={confettiKey} />
       <VerifyCollegeIdModal
         visible={verifyModalOpen}
         onClose={() => setVerifyModalOpen(false)}

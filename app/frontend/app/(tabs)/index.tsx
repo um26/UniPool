@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState, useRef } from "react";
 import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicator, ScrollView, TextInput, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -15,6 +15,7 @@ import UserBadges from "@/src/components/UserBadges";
 import PoolMapView from "@/src/components/PoolMapView";
 import { PoolFeedSkeleton } from "@/src/components/Skeleton";
 import ReportBlockModal from "@/src/components/ReportBlockModal";
+import Confetti from "@/src/components/Confetti";
 
 type ConfirmedTraveler = { user_id: string; name: string; email: string };
 
@@ -51,9 +52,21 @@ export default function HomeFeed() {
   const [showMap, setShowMap] = useState(false);
   const [requesting, setRequesting] = useState<Set<string>>(new Set());
   const [reportTarget, setReportTarget] = useState<{ user_id: string; user_name: string } | null>(null);
+  const [confettiKey, setConfettiKey] = useState(0);
+  const knownAccepted = useRef<Set<string> | null>(null);
 
   const load = useCallback(async () => {
-    try { const list = await api.listPools(); setPools(list); }
+    try {
+      const list = await api.listPools();
+      setPools(list);
+
+      const acceptedNow = new Set<string>(list.filter((p: Pool) => p.my_request_status === "accepted").map((p: Pool) => p.pool_id));
+      if (knownAccepted.current) {
+        const newlyAccepted = [...acceptedNow].some((id) => !knownAccepted.current!.has(id));
+        if (newlyAccepted) setConfettiKey((k) => k + 1);
+      }
+      knownAccepted.current = acceptedNow;
+    }
     catch (e) { console.warn(e); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
@@ -99,6 +112,7 @@ export default function HomeFeed() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
+      <Confetti burstKey={confettiKey} />
       <LinearGradient colors={[COLORS.indigo, "#283593"]} style={styles.header}>
         <View style={styles.headerTop}>
           <View>
