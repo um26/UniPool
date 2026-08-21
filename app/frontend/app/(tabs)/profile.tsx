@@ -60,6 +60,7 @@ export default function ProfileScreen() {
   const [removingTraveler, setRemovingTraveler] = useState<string | null>(null);
   const [myRating, setMyRating] = useState<{ average: number | null; count: number }>({ average: null, count: 0 });
   const [myBadges, setMyBadges] = useState<{ id: string; label: string; icon: string }[]>([]);
+  const [ridesCompleted, setRidesCompleted] = useState(0);
   const [verifyModalOpen, setVerifyModalOpen] = useState(false);
   const [blocked, setBlocked] = useState<{ user_id: string; name: string }[]>([]);
   const [unblockingId, setUnblockingId] = useState<string | null>(null);
@@ -81,6 +82,7 @@ export default function ProfileScreen() {
         const r = await api.getUserRatings(user.user_id);
         setMyRating({ average: r.average, count: r.count });
         setMyBadges(r.badges || []);
+        setRidesCompleted(r.rides_completed || 0);
       } catch {}
     }
   }, [user?.user_id]);
@@ -183,55 +185,6 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <LinearGradient colors={[COLORS.indigo, "#3949AB"]} style={styles.header}>
-        <View style={styles.avatar}><Text style={styles.avatarText}>{user?.name?.[0]?.toUpperCase() || "U"}</Text></View>
-        <Text style={styles.name}>{user?.name}</Text>
-        <Text style={styles.email}>{user?.email}</Text>
-        <View style={styles.myRatingRow} testID="my-rating">
-          <Ionicons name="star" size={14} color={COLORS.saffron} />
-          {myRating.average != null ? (
-            <Text style={styles.myRatingText}>{myRating.average.toFixed(1)}/10 · {myRating.count} rating{myRating.count === 1 ? "" : "s"}</Text>
-          ) : (
-            <Text style={styles.myRatingText}>No ratings yet</Text>
-          )}
-        </View>
-        {myBadges.length > 0 && (
-          <View style={{ marginTop: 8 }}>
-            <UserBadges badges={myBadges} />
-          </View>
-        )}
-        {user?.is_admin ? (
-          <View style={styles.adminBadge}><Ionicons name="shield-checkmark" size={12} color={COLORS.indigo} /><Text style={styles.adminBadgeText}>Admin</Text></View>
-        ) : null}
-      </LinearGradient>
-
-      {user?.college_verified ? (
-        <View style={styles.idCardWrap}>
-          <CollegeIdCard
-            name={user.name}
-            rollNumber={user.roll_number || ""}
-            schoolName={user.school_name}
-            branchName={user.branch_name}
-            batchYear={user.batch_year}
-            degreeLevelName={user.degree_level_name}
-          />
-        </View>
-      ) : (
-        <View style={styles.collegeCard} testID="college-id-verify-prompt">
-          <View style={styles.collegeCardHeader}>
-            <Ionicons name="shield-outline" size={18} color={COLORS.muted} />
-            <Text style={styles.collegeCardTitle}>Get your digital Student ID</Text>
-          </View>
-          <Text style={styles.verifySub}>
-            Verify your @mahindrauniversity.edu.in email — even if you signed in a different way — to unlock the Verified Student badge and a shareable digital ID card.
-          </Text>
-          <Pressable testID="verify-college-id-btn" onPress={() => setVerifyModalOpen(true)} style={styles.verifyBtn}>
-            <Ionicons name="shield-checkmark-outline" size={16} color="#fff" />
-            <Text style={styles.verifyBtnText}>Verify college ID</Text>
-          </Pressable>
-        </View>
-      )}
-
       <VerifyCollegeIdModal
         visible={verifyModalOpen}
         onClose={() => setVerifyModalOpen(false)}
@@ -245,9 +198,67 @@ export default function ProfileScreen() {
       <FlatList
         data={filtered}
         keyExtractor={(i) => i.pool_id}
-        contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 140 }}
+        contentContainerStyle={{ paddingBottom: 140 }}
         ListHeaderComponent={
           <>
+            <LinearGradient colors={[COLORS.indigo, "#3949AB"]} style={styles.header}>
+              <View style={styles.avatar}><Text style={styles.avatarText}>{user?.name?.[0]?.toUpperCase() || "U"}</Text></View>
+              <Text style={styles.name}>{user?.name}</Text>
+              <Text style={styles.email}>{user?.email}</Text>
+              <View style={styles.myRatingRow} testID="my-rating">
+                <Ionicons name="star" size={14} color={COLORS.saffron} />
+                {myRating.average != null ? (
+                  <Text style={styles.myRatingText}>{myRating.average.toFixed(1)}/10 · {myRating.count} rating{myRating.count === 1 ? "" : "s"}</Text>
+                ) : (
+                  <Text style={styles.myRatingText}>No ratings yet</Text>
+                )}
+              </View>
+              {myBadges.length > 0 && (
+                <View style={{ marginTop: 8 }}>
+                  <UserBadges badges={myBadges} />
+                </View>
+              )}
+              {user?.is_admin ? (
+                <View style={styles.adminBadge}><Ionicons name="shield-checkmark" size={12} color={COLORS.indigo} /><Text style={styles.adminBadgeText}>Admin</Text></View>
+              ) : null}
+            </LinearGradient>
+
+            {user?.college_verified ? (
+              <View style={styles.idCardWrap}>
+                <CollegeIdCard
+                  name={user.name}
+                  rollNumber={user.roll_number || ""}
+                  schoolName={user.school_name}
+                  branchName={user.branch_name}
+                  batchYear={user.batch_year}
+                  degreeLevelName={user.degree_level_name}
+                  email={user.email}
+                  collegeEmail={user.college_email}
+                  phone={user.phone}
+                  bloodGroup={user.blood_group}
+                  ratingAvg={myRating.average}
+                  ratingCount={myRating.count}
+                  ridesCompleted={ridesCompleted}
+                  onProfileUpdated={async () => { await refresh(); await load(); }}
+                />
+              </View>
+            ) : (
+              <View style={styles.collegeCard} testID="college-id-verify-prompt">
+                <View style={styles.collegeCardHeader}>
+                  <Ionicons name="shield-outline" size={18} color={COLORS.muted} />
+                  <Text style={styles.collegeCardTitle}>Get your digital Student ID</Text>
+                </View>
+                <Text style={styles.verifySub}>
+                  Verify your @mahindrauniversity.edu.in email — even if you signed in a different way — to unlock the Verified Student badge and a shareable digital ID card.
+                </Text>
+                <Pressable testID="verify-college-id-btn" onPress={() => setVerifyModalOpen(true)} style={styles.verifyBtn}>
+                  <Ionicons name="shield-checkmark-outline" size={16} color="#fff" />
+                  <Text style={styles.verifyBtnText}>Verify college ID</Text>
+                </Pressable>
+              </View>
+            )}
+
+            <View style={{ paddingHorizontal: SPACING.lg }}>
             <Text style={styles.sectionLabel}>Preferences</Text>
             <View style={styles.prefRow}>
               {[
@@ -359,10 +370,11 @@ export default function ProfileScreen() {
                 <Text style={[styles.segmentText, tab === "closed" && styles.segmentTextActive]}>Closed</Text>
               </Pressable>
             </View>
+            </View>
           </>
         }
         renderItem={({ item }) => (
-          <View style={styles.mine} testID={`mine-item-${item.pool_id}`}>
+          <View style={[styles.mine, { marginHorizontal: SPACING.lg }]} testID={`mine-item-${item.pool_id}`}>
             <View style={{ flex: 1 }}>
               <Text style={styles.mineRoute}>{item.from_location} → {item.to_location}</Text>
               <Text style={styles.mineWhen}>{fmt(item.travel_datetime)}</Text>

@@ -9,6 +9,7 @@ export type UniUser = {
   picture?: string | null;
   gender?: string | null;
   phone?: string | null;
+  blood_group?: string | null;
   username?: string | null;
   is_admin?: boolean;
   college_verified?: boolean;

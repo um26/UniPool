@@ -74,9 +74,8 @@ ROLL_NUMBER_RE = re.compile(r"^([a-z]{2})(\d{2})([ump])([a-z]+)(\d{3})$")
 SCHOOL_CODES = {"se": "School of Engineering", "sm": "School of Management", "sl": "School of Law"}
 DEGREE_LEVEL_NAMES = {"u": "Undergraduate", "m": "Masters", "p": "PhD"}
 BRANCH_CODES = {
-    "cam": "Computer Science & Applied Mathematics",
-    "cse": "Computer Science",
-    "ece": "Electronics & Communication",
+    "cam": "Computational and Mathematics",
+    "cse": "CSE",
     "ari": "Artificial Intelligence",
     "cie": "Civil Engineering",
 }
@@ -286,6 +285,7 @@ class JoinRequestOut(BaseModel):
 class ProfileUpdate(BaseModel):
     gender: Optional[str] = None  # "male" | "female" | "other"
     phone: Optional[str] = None
+    blood_group: Optional[str] = None
 
 
 class SignupRequest(BaseModel):
@@ -1539,7 +1539,10 @@ async def get_user_ratings(user_id: str, authorization: Optional[str] = Header(N
     college_map = await _college_info_map([user_id])
     rides_map = await _rides_completed_map([user_id])
     badges = _compute_badges(user_id in college_map, avg, len(ratings), rides_map.get(user_id, 0))
-    return {"average": avg, "count": len(ratings), "ratings": ratings, "badges": badges, "college_id": college_map.get(user_id)}
+    return {
+        "average": avg, "count": len(ratings), "ratings": ratings, "badges": badges,
+        "college_id": college_map.get(user_id), "rides_completed": rides_map.get(user_id, 0),
+    }
 
 
 @api.get("/ratings/can-rate/{user_id}")
@@ -1665,6 +1668,23 @@ async def admin_migrate_ratings_scale(authorization: Optional[str] = Header(None
         [{"$set": {"stars": {"$min": [{"$multiply": ["$stars", 2]}, 10]}, "scale": 10}}],
     )
     return {"ok": True, "matched": result.matched_count, "modified": result.modified_count}
+
+
+@api.post("/admin/refresh-college-info")
+async def admin_refresh_college_info(authorization: Optional[str] = Header(None)):
+    """Idempotent: re-decodes roll_number for every already-verified user
+    against the current SCHOOL_CODES/BRANCH_CODES/DEGREE_LEVEL_NAMES maps.
+    Run this after updating those dicts so existing verified profiles pick
+    up corrected/newly-added names, not just future verifications."""
+    await require_admin(authorization)
+    cursor = db.users.find({"college_verified": True, "roll_number": {"$exists": True}}, {"_id": 0, "user_id": 1, "roll_number": 1})
+    updated = 0
+    async for u in cursor:
+        decoded = _decode_roll_number(u["roll_number"].lower())
+        if decoded:
+            await db.users.update_one({"user_id": u["user_id"]}, {"$set": decoded})
+            updated += 1
+    return {"ok": True, "updated": updated}
 
 
 @api.get("/admin/reports")
