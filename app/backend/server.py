@@ -5,6 +5,8 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 import uuid
+import re
+import secrets
 import asyncio
 from pathlib import Path             
 from pydantic import BaseModel, Field, EmailStr
@@ -12,6 +14,7 @@ from typing import List, Optional
 from datetime import datetime, timezone, timedelta
 
 import httpx
+import bcrypt
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
 
@@ -28,10 +31,140 @@ GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
 EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "UniPool")
+GMAIL_ADDRESS = os.environ.get("GMAIL_ADDRESS", "")
+GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
+SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
+SENDGRID_FROM_EMAIL = os.environ.get("SENDGRID_FROM_EMAIL", GMAIL_ADDRESS)
+TURNSTILE_SECRET_KEY = os.environ.get("TURNSTILE_SECRET_KEY", "")
 
 ADMIN_EMAILS = {
     e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()
 }
+
+# Domains that auto-grant the "Verified Student" badge. Generic Indian/global
+# academic suffixes are trusted by default; ADD your specific college domain
+# via the VERIFIED_EMAIL_DOMAINS env var (comma-separated, e.g. "mycollege.ac.in").
+DEFAULT_VERIFIED_SUFFIXES = (".edu", ".edu.in", ".ac.in")
+VERIFIED_EMAIL_DOMAINS = {
+    d.strip().lower() for d in os.environ.get("VERIFIED_EMAIL_DOMAINS", "").split(",") if d.strip()
+}
+
+
+def _is_verified_domain(email: str) -> bool:
+    email = (email or "").lower()
+    if "@" not in email:
+        return False
+    domain = email.split("@", 1)[1]
+    if domain in VERIFIED_EMAIL_DOMAINS:
+        return True
+    return any(email.endswith(suffix) for suffix in DEFAULT_VERIFIED_SUFFIXES)
+
+
+# ---------- College ID verification & roll-number decoding ----------
+# Mahindra University roll numbers embed structured info in the email's
+# local part, e.g. "se22ucam015@mahindrauniversity.edu.in":
+#   se   -> school            (2 letters)
+#   22   -> joining year      (2 digits, batch = 2000 + yy)
+#   u    -> degree level      (1 letter: u/m/p)
+#   cam  -> branch            (variable-length letters)
+#   015  -> serial number     (3 digits)
+# These maps are intentionally easy to extend — send more codes any time.
+COLLEGE_EMAIL_DOMAIN = "mahindrauniversity.edu.in"
+ROLL_NUMBER_RE = re.compile(r"^([a-z]{2})(\d{2})([ump])([a-z]+)(\d{3})$")
+SCHOOL_CODES = {"se": "School of Engineering", "sm": "School of Management", "sl": "School of Law"}
+DEGREE_LEVEL_NAMES = {"u": "Undergraduate", "m": "Masters", "p": "PhD"}
+BRANCH_CODES = {
+    "cam": "Computational and Mathematics",
+    "cse": "CSE",
+    "ari": "Artificial Intelligence",
+    "cie": "Civil Engineering",
+}
+
+
+def _decode_roll_number(local_part: str) -> Optional[dict]:
+    m = ROLL_NUMBER_RE.match(local_part.lower())
+    if not m:
+        return None
+    school_code, yy, degree_code, branch_code, serial = m.groups()
+    return {
+        "roll_number": local_part.upper(),
+        "school_code": school_code.upper(),
+        "school_name": SCHOOL_CODES.get(school_code, school_code.upper()),
+        "batch_year": 2000 + int(yy),
+        "degree_level_code": degree_code.upper(),
+        "degree_level_name": DEGREE_LEVEL_NAMES.get(degree_code, degree_code.upper()),
+        "branch_code": branch_code.upper(),
+        "branch_name": BRANCH_CODES.get(branch_code, branch_code.upper()),
+        "serial": serial,
+    }
+
+
+async def _college_info_map(user_ids: list) -> dict:
+    """Batch-fetch verified college-ID info for a set of user_ids."""
+    if not user_ids:
+        return {}
+    cursor = db.users.find(
+        {"user_id": {"$in": user_ids}, "college_verified": True},
+        {"_id": 0, "user_id": 1, "roll_number": 1, "school_name": 1, "degree_level_name": 1, "branch_name": 1, "batch_year": 1},
+    )
+    return {u["user_id"]: u async for u in cursor}
+
+
+def _compute_badges(college_verified: bool, rating_avg: Optional[float], rating_count: int, rides_completed: int) -> List[dict]:
+    badges = []
+    if college_verified:
+        badges.append({"id": "verified", "label": "Verified Student", "icon": "shield-checkmark"})
+    if rating_avg is not None and rating_avg >= 8.5 and rating_count >= 3:
+        badges.append({"id": "top_rated", "label": "Top Rated", "icon": "trophy"})
+    if rides_completed >= 5:
+        badges.append({"id": "frequent", "label": "Frequent Traveller", "icon": "flame"})
+    return badges
+
+
+async def _rides_completed_map(user_ids: list) -> dict:
+    """How many confirmed ride-pairings each user has been part of, whether
+    as the pool owner or as an accepted traveler — used for the 'Frequent
+    Traveller' badge."""
+    if not user_ids:
+        return {}
+    as_requester = await db.join_requests.aggregate([
+        {"$match": {"requester_id": {"$in": user_ids}, "status": "accepted"}},
+        {"$group": {"_id": "$requester_id", "c": {"$sum": 1}}},
+    ]).to_list(len(user_ids))
+    as_owner = await db.pools.aggregate([
+        {"$match": {"user_id": {"$in": user_ids}, "confirmed_travelers.0": {"$exists": True}}},
+        {"$project": {"user_id": 1, "n": {"$size": "$confirmed_travelers"}}},
+        {"$group": {"_id": "$user_id", "c": {"$sum": "$n"}}},
+    ]).to_list(len(user_ids))
+    counts: dict = {}
+    for row in as_requester + as_owner:
+        counts[row["_id"]] = counts.get(row["_id"], 0) + row["c"]
+    return counts
+
+
+async def _attach_badges(items: list, id_field: str, email_field: str, avg_field: str, count_field: str, out_field: str, roll_field: Optional[str] = None) -> list:
+    """Batch-attach a 'badges' list (and optionally verified college-ID info)
+    to each dict in items, using rating stats already present on that dict
+    plus a fresh rides-completed + college-verification lookup."""
+    if not items:
+        return items
+    user_ids = list({it[id_field] for it in items if it.get(id_field)})
+    rides_map = await _rides_completed_map(user_ids)
+    college_map = await _college_info_map(user_ids)
+    for it in items:
+        uid = it.get(id_field)
+        info = college_map.get(uid)
+        it[out_field] = _compute_badges(
+            info is not None, it.get(avg_field), it.get(count_field) or 0, rides_map.get(uid, 0)
+        )
+        if roll_field:
+            it[roll_field] = info
+    return items
+
+# Seeded username/password admin account — created on startup if missing.
+SEED_ADMIN_USERNAME = "BBadmin"
+SEED_ADMIN_PASSWORD = "BB@unipool123"
+SEED_ADMIN_EMAIL = "bbadmin@unipool.internal"
 
 VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
 VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
@@ -100,6 +233,12 @@ class PushSubscribe(BaseModel):
     keys: dict
 
 
+class ConfirmedTraveler(BaseModel):
+    user_id: str
+    name: str
+    email: EmailStr
+
+
 class PoolRequestOut(BaseModel):
     pool_id: str
     user_id: str
@@ -117,11 +256,50 @@ class PoolRequestOut(BaseModel):
     created_at: datetime
     user_rating_avg: Optional[float] = None
     user_rating_count: int = 0
+    user_badges: List[dict] = []
+    user_college_id: Optional[dict] = None
+    confirmed_travelers: List[ConfirmedTraveler] = []
+    my_request_status: Optional[str] = None  # "pending" | "accepted" | "declined" | None
+
+
+class JoinRequestOut(BaseModel):
+    request_id: str
+    pool_id: str
+    pool_owner_id: str
+    from_location: str
+    to_location: str
+    travel_datetime: datetime
+    requester_id: str
+    requester_name: str
+    requester_email: EmailStr
+    requester_gender: Optional[str] = None
+    requester_rating_avg: Optional[float] = None
+    requester_rating_count: int = 0
+    requester_badges: List[dict] = []
+    requester_college_id: Optional[dict] = None
+    status: str = "pending"
+    created_at: datetime
+    responded_at: Optional[datetime] = None
 
 
 class ProfileUpdate(BaseModel):
     gender: Optional[str] = None  # "male" | "female" | "other"
     phone: Optional[str] = None
+    blood_group: Optional[str] = None
+
+
+class SignupRequest(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+    username: Optional[str] = None
+    turnstile_token: Optional[str] = None
+
+
+class LoginRequest(BaseModel):
+    identifier: str  # email or username
+    password: str
+    turnstile_token: Optional[str] = None
 
 
 class ScoreSubmit(BaseModel):
@@ -133,6 +311,13 @@ class RatingCreate(BaseModel):
     rated_user_id: str
     stars: int
     comment: Optional[str] = None
+    pool_id: Optional[str] = None
+
+
+class ReportCreate(BaseModel):
+    reported_user_id: str
+    reason: str  # short category, e.g. "no-show", "unsafe", "harassment", "spam", "other"
+    details: Optional[str] = None
     pool_id: Optional[str] = None
 
 
@@ -154,7 +339,7 @@ def _is_admin(email: str) -> bool:
 
 def _with_admin_flag(user: dict) -> dict:
     if user:
-        user["is_admin"] = _is_admin(user.get("email", ""))
+        user["is_admin"] = _is_admin(user.get("email", "")) or bool(user.get("is_admin_override"))
     return user
 
 
@@ -162,6 +347,55 @@ def _ensure_aware(dt: datetime) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt
+
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _fmt_ist(dt: datetime) -> str:
+    """Format a stored (UTC) datetime as an IST wall-clock string for emails —
+    all UniPool users are in India, so times should never surface as UTC."""
+    return _ensure_aware(dt).astimezone(IST).strftime("%d %b %Y, %I:%M %p IST")
+
+
+async def _blocked_user_ids(user_id: str) -> set:
+    """Everyone blocked in EITHER direction relative to this user — used to
+    hide their pools from the feed and prevent messaging/requests."""
+    cursor = db.blocks.find(
+        {"$or": [{"blocker_id": user_id}, {"blocked_id": user_id}]}, {"_id": 0}
+    )
+    pairs = await cursor.to_list(2000)
+    ids = set()
+    for p in pairs:
+        ids.add(p["blocked_id"] if p["blocker_id"] == user_id else p["blocker_id"])
+    return ids
+
+
+async def _is_blocked_pair(user_a: str, user_b: str) -> bool:
+    doc = await db.blocks.find_one(
+        {"$or": [
+            {"blocker_id": user_a, "blocked_id": user_b},
+            {"blocker_id": user_b, "blocked_id": user_a},
+        ]},
+        {"_id": 0},
+    )
+    return doc is not None
+
+
+ONLINE_THRESHOLD_SECONDS = 60
+
+
+def _is_online(last_seen: Optional[datetime]) -> bool:
+    if not last_seen:
+        return False
+    return (_now_utc() - _ensure_aware(last_seen)).total_seconds() < ONLINE_THRESHOLD_SECONDS
+
+
+# In-memory "is typing" state: {(from_user_id, to_user_id): last_ping_at}.
+# Ephemeral by design — a restart clearing it is harmless, and it avoids
+# writing throwaway data to Mongo on every keystroke.
+TYPING_STATE: dict = {}
+TYPING_TTL_SECONDS = 4
 
 
 async def _enrich_with_ratings(pools: list) -> list:
@@ -179,7 +413,47 @@ async def _enrich_with_ratings(pools: list) -> list:
         s = stat_map.get(p["user_id"])
         p["user_rating_avg"] = round(s["avg"], 1) if s else None
         p["user_rating_count"] = s["count"] if s else 0
+    return await _attach_badges(pools, "user_id", "user_email", "user_rating_avg", "user_rating_count", "user_badges", "user_college_id")
+
+
+async def _attach_requester_ratings(requests: list) -> list:
+    """Batch-attach requester_rating_avg/count to a list of join_request dicts."""
+    if not requests:
+        return requests
+    user_ids = list({r["requester_id"] for r in requests})
+    pipeline = [
+        {"$match": {"rated_user_id": {"$in": user_ids}}},
+        {"$group": {"_id": "$rated_user_id", "avg": {"$avg": "$stars"}, "count": {"$sum": 1}}},
+    ]
+    stats = await db.ratings.aggregate(pipeline).to_list(len(user_ids))
+    stat_map = {s["_id"]: s for s in stats}
+    for r in requests:
+        s = stat_map.get(r["requester_id"])
+        r["requester_rating_avg"] = round(s["avg"], 1) if s else None
+        r["requester_rating_count"] = s["count"] if s else 0
+    return requests
+
+
+async def _enrich_with_my_request_status(pools: list, user_id: str) -> list:
+    """Attach my_request_status to each pool dict, for the current viewer."""
+    if not pools:
+        return pools
+    pool_ids = [p["pool_id"] for p in pools]
+    cursor = db.join_requests.find(
+        {"pool_id": {"$in": pool_ids}, "requester_id": user_id}, {"_id": 0}
+    )
+    status_map = {r["pool_id"]: r["status"] async for r in cursor}
+    for p in pools:
+        p["my_request_status"] = status_map.get(p["pool_id"])
+        p.setdefault("confirmed_travelers", [])
     return pools
+
+
+async def _touch_last_seen(user_id: str) -> None:
+    try:
+        await db.users.update_one({"user_id": user_id}, {"$set": {"last_seen": _now_utc()}})
+    except Exception as e:
+        logger.warning(f"Failed to update last_seen for {user_id}: {e}")
 
 
 async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
@@ -192,16 +466,51 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     exp = _ensure_aware(session["expires_at"])
     if exp < _now_utc():
         raise HTTPException(status_code=401, detail="Session expired")
-    user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
+    user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0, "password_hash": 0})
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    # Implicit presence heartbeat — every authenticated call (chat polling,
+    # feed refreshes, etc.) counts as "active", so no dedicated heartbeat
+    # endpoint is needed. Fire-and-forget so it never slows the response.
+    # NOTE: must wrap in a real `async def` coroutine — passing a Motor
+    # awaitable straight into asyncio.create_task() can raise
+    # "TypeError: a coroutine was expected, got <Future ...>" depending on
+    # the event loop, which took down every authenticated endpoint.
+    asyncio.create_task(_touch_last_seen(user["user_id"]))
     return _with_admin_flag(user)
 
 
 # ---------- Email ----------
+# Note: Render blocks outbound SMTP ports (25/465/587) on its network as a
+# standard anti-spam measure, so a direct Gmail-SMTP send from this service
+# can never succeed here — always [Errno 101] Network unreachable, no matter
+# how correct the SMTP code is. SendGrid's HTTP API (port 443) is unaffected,
+# which is why it's the primary path below.
 async def send_email(to_email: str, subject: str, html_content: str) -> bool:
+    if SENDGRID_API_KEY and SENDGRID_FROM_EMAIL:
+        payload = {
+            "personalizations": [{"to": [{"email": to_email}]}],
+            "from": {"email": SENDGRID_FROM_EMAIL, "name": EMAIL_FROM_NAME},
+            "subject": subject,
+            "content": [{"type": "text/html", "value": html_content}],
+        }
+        try:
+            async with httpx.AsyncClient(timeout=20) as http:
+                resp = await http.post(
+                    "https://api.sendgrid.com/v3/mail/send",
+                    headers={"Authorization": f"Bearer {SENDGRID_API_KEY}"},
+                    json=payload,
+                )
+            if resp.status_code >= 400:
+                logger.error(f"SendGrid send failed to {to_email}: {resp.status_code} {resp.text}")
+                return False
+            return True
+        except Exception as e:
+            logger.error(f"SendGrid send failed to {to_email}: {e}")
+            return False
+
     if not RESEND_API_KEY:
-        logger.warning("RESEND_API_KEY missing — skipping email send")
+        logger.warning("No email credentials configured (SENDGRID_API_KEY or RESEND_API_KEY) — skipping email send")
         return False
     payload = {
         "from": f"{EMAIL_FROM_NAME} <{RESEND_FROM_EMAIL}>",
@@ -216,10 +525,33 @@ async def send_email(to_email: str, subject: str, html_content: str) -> bool:
                 headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
                 json=payload,
             )
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            logger.error(f"Email send failed to {to_email}: {resp.status_code} {resp.text}")
+            return False
         return True
     except Exception as e:
         logger.error(f"Email send failed to {to_email}: {e}")
+        return False
+
+
+async def _verify_turnstile(token: Optional[str], remote_ip: Optional[str]) -> bool:
+    """Verifies a Cloudflare Turnstile token. If no secret key is configured
+    yet, verification is skipped (open) so this can be deployed ahead of the
+    Cloudflare setup being finished — flip it on the moment the key is set."""
+    if not TURNSTILE_SECRET_KEY:
+        return True
+    if not token:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=10) as http:
+            resp = await http.post(
+                "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+                data={"secret": TURNSTILE_SECRET_KEY, "response": token, "remoteip": remote_ip or ""},
+            )
+        data = resp.json()
+        return bool(data.get("success"))
+    except Exception as e:
+        logger.error(f"Turnstile verification error: {e}")
         return False
 
 
@@ -249,6 +581,34 @@ async def send_push(user_id: str, title: str, body: str, url: str = "/") -> None
             logger.warning(f"Push error for {user_id}: {e}")
 
 
+async def _leaving_soon_reminder_loop():
+    """Runs continuously while the service is awake. Every 5 minutes, finds
+    open pools departing within the next ~35 minutes that haven't been
+    reminded yet, and pushes a nudge to the owner + all confirmed travelers."""
+    while True:
+        try:
+            now = _now_utc()
+            window_end = now + timedelta(minutes=35)
+            cursor = db.pools.find(
+                {"status": "open", "travel_datetime": {"$gte": now, "$lte": window_end}, "reminder_sent": {"$ne": True}},
+                {"_id": 0},
+            )
+            pools = await cursor.to_list(200)
+            for p in pools:
+                minutes_left = max(1, int((_ensure_aware(p["travel_datetime"]) - now).total_seconds() // 60))
+                recipients = {p["user_id"]} | {t["user_id"] for t in p.get("confirmed_travelers", [])}
+                for uid in recipients:
+                    asyncio.create_task(send_push(
+                        uid, "Ride leaving soon 🚗",
+                        f"{p['from_location']} → {p['to_location']} in about {minutes_left} min",
+                        "/(tabs)/matches",
+                    ))
+                await db.pools.update_one({"pool_id": p["pool_id"]}, {"$set": {"reminder_sent": True}})
+        except Exception as e:
+            logger.warning(f"Leaving-soon reminder loop error: {e}")
+        await asyncio.sleep(300)
+
+
 def match_email_html(recipient_name: str, match: dict, own: dict) -> str:
     return f"""
     <html><body style="font-family:Arial,sans-serif;background:#FFF9F2;padding:24px;">
@@ -262,11 +622,41 @@ def match_email_html(recipient_name: str, match: dict, own: dict) -> str:
           <p>Good news — someone on UniPool just posted a cab-pool request that overlaps with yours within a 1-hour window.</p>
           <table cellpadding="8" cellspacing="0" style="background:#FFECC2;border-radius:12px;width:100%;margin:12px 0;">
             <tr><td><b>{match['user_name']}</b><br/>{match['from_location']} → {match['to_location']}<br/>
-            <span style="color:#B05C00;">{_ensure_aware(match['travel_datetime']).strftime('%d %b %Y, %I:%M %p UTC')}</span><br/>
+            <span style="color:#B05C00;">{_fmt_ist(match['travel_datetime'])}</span><br/>
             Reply to: <a href="mailto:{match['user_email']}">{match['user_email']}</a></td></tr>
           </table>
-          <p style="color:#3D352F;font-size:13px;">Your request: {own['from_location']} → {own['to_location']} at {_ensure_aware(own['travel_datetime']).strftime('%d %b %Y, %I:%M %p UTC')}</p>
+          <p style="color:#3D352F;font-size:13px;">Your request: {own['from_location']} → {own['to_location']} at {_fmt_ist(own['travel_datetime'])}</p>
           <p>Reach out and split the fare. Safe travels!</p>
+          <p style="color:#B05C00;font-weight:600;">— Team UniPool</p>
+        </td></tr>
+      </table>
+    </body></html>
+    """
+
+
+def join_request_email_html(recipient_name: str, requester_name: str, pool: dict, action: str) -> str:
+    """action: 'received' (owner got a new request) | 'accepted' (requester got accepted)"""
+    if action == "received":
+        heading = "New ride request"
+        body = f"<b>{requester_name}</b> wants to travel with you on this pool:"
+    else:
+        heading = "Request accepted!"
+        body = f"<b>{pool['user_name']}</b> accepted your request to travel together:"
+    return f"""
+    <html><body style="font-family:Arial,sans-serif;background:#FFF9F2;padding:24px;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;margin:auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.08);">
+        <tr><td style="background:#1A237E;padding:20px 24px;color:#FFECC2;">
+          <div style="font-size:22px;font-weight:700;color:#FF9933;">UniPool</div>
+          <div style="font-size:14px;opacity:0.9;">{heading}</div>
+        </td></tr>
+        <tr><td style="padding:24px;color:#1C1917;">
+          <p>Namaste {recipient_name},</p>
+          <p>{body}</p>
+          <table cellpadding="8" cellspacing="0" style="background:#FFECC2;border-radius:12px;width:100%;margin:12px 0;">
+            <tr><td>{pool['from_location']} → {pool['to_location']}<br/>
+            <span style="color:#B05C00;">{_fmt_ist(pool['travel_datetime'])}</span></td></tr>
+          </table>
+          <p>Open UniPool to {"accept or decline" if action == "received" else "start chatting"}.</p>
           <p style="color:#B05C00;font-weight:600;">— Team UniPool</p>
         </td></tr>
       </table>
@@ -318,6 +708,30 @@ class GoogleSignIn(BaseModel):
     id_token: str
 
 
+def _hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def _verify_password(password: str, password_hash: str) -> bool:
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    except Exception:
+        return False
+
+
+async def _create_session_token(user_id: str) -> str:
+    session_token = uuid.uuid4().hex
+    await db.user_sessions.insert_one(
+        {
+            "session_token": session_token,
+            "user_id": user_id,
+            "expires_at": _now_utc() + timedelta(days=7),
+            "created_at": _now_utc(),
+        }
+    )
+    return session_token
+
+
 async def _create_session_for_user(email: str, name: str, picture: Optional[str]) -> dict:
     """Shared logic: upsert the user, mint a session token, return {session_token, user}."""
     existing_user = await db.users.find_one({"email": email}, {"_id": 0})
@@ -342,16 +756,8 @@ async def _create_session_for_user(email: str, name: str, picture: Optional[str]
             }
         )
 
-    session_token = uuid.uuid4().hex
-    await db.user_sessions.insert_one(
-        {
-            "session_token": session_token,
-            "user_id": user_id,
-            "expires_at": _now_utc() + timedelta(days=7),
-            "created_at": _now_utc(),
-        }
-    )
-    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    session_token = await _create_session_token(user_id)
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
     return {"session_token": session_token, "user": _with_admin_flag(user_doc)}
 
 
@@ -376,6 +782,55 @@ async def google_sign_in(body: GoogleSignIn):
     return await _create_session_for_user(email, name, picture)
 
 
+@api.post("/auth/signup")
+async def signup(body: SignupRequest, request: Request):
+    if not await _verify_turnstile(body.turnstile_token, request.client.host if request.client else None):
+        raise HTTPException(status_code=400, detail="Bot check failed — please try again.")
+    email = body.email.strip().lower()
+    if len(body.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    if await db.users.find_one({"email": email}, {"_id": 0}):
+        raise HTTPException(status_code=409, detail="An account with this email already exists")
+    username = (body.username or "").strip() or None
+    if username:
+        if await db.users.find_one({"username": username}, {"_id": 0}):
+            raise HTTPException(status_code=409, detail="That username is already taken")
+
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    await db.users.insert_one({
+        "user_id": user_id,
+        "email": email,
+        "username": username,
+        "name": body.name.strip() or email.split("@")[0],
+        "picture": None,
+        "password_hash": _hash_password(body.password),
+        "gender": None,
+        "phone": None,
+        "created_at": _now_utc(),
+        "last_login": _now_utc(),
+    })
+    session_token = await _create_session_token(user_id)
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+    return {"session_token": session_token, "user": _with_admin_flag(user_doc)}
+
+
+@api.post("/auth/login")
+async def login(body: LoginRequest, request: Request):
+    if not await _verify_turnstile(body.turnstile_token, request.client.host if request.client else None):
+        raise HTTPException(status_code=400, detail="Bot check failed — please try again.")
+    identifier = body.identifier.strip()
+    user = await db.users.find_one(
+        {"$or": [{"email": identifier.lower()}, {"username": identifier}]}, {"_id": 0}
+    )
+    if not user or not user.get("password_hash") or not _verify_password(body.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Incorrect email/username or password")
+
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"last_login": _now_utc()}})
+    session_token = await _create_session_token(user["user_id"])
+    user_doc = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "password_hash": 0})
+    return {"session_token": session_token, "user": _with_admin_flag(user_doc)}
+
+
 @api.get("/auth/me")
 async def me(user=None, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
@@ -396,8 +851,92 @@ async def update_profile(body: ProfileUpdate, authorization: Optional[str] = Hea
     updates = {k: v for k, v in body.dict().items() if v is not None}
     if updates:
         await db.users.update_one({"user_id": user["user_id"]}, {"$set": updates})
-    updated = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    updated = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "password_hash": 0})
     return updated
+
+
+class CollegeVerifyStart(BaseModel):
+    college_email: EmailStr
+
+
+class CollegeVerifyConfirm(BaseModel):
+    code: str
+
+
+@api.post("/profile/verify-college-id/start")
+async def verify_college_id_start(body: CollegeVerifyStart, authorization: Optional[str] = Header(None)):
+    """Step 1: user types their @mahindrauniversity.edu.in address (which may
+    differ from their login email, e.g. if they signed up via a personal
+    Google account). We validate the format, then email a 6-digit code to
+    that address to confirm they actually own it before granting the badge."""
+    user = await get_current_user(authorization)
+    email = body.college_email.strip().lower()
+    if "@" not in email or email.split("@", 1)[1] != COLLEGE_EMAIL_DOMAIN:
+        raise HTTPException(status_code=400, detail=f"Please enter your @{COLLEGE_EMAIL_DOMAIN} college email.")
+    local_part = email.split("@", 1)[0]
+    decoded = _decode_roll_number(local_part)
+    if not decoded:
+        raise HTTPException(
+            status_code=400,
+            detail="Couldn't recognize your roll number format from this email. Please reach out if you think this is a mistake.",
+        )
+    existing_owner = await db.users.find_one(
+        {"roll_number": decoded["roll_number"], "college_verified": True, "user_id": {"$ne": user["user_id"]}},
+        {"_id": 0},
+    )
+    if existing_owner:
+        raise HTTPException(status_code=409, detail="This roll number is already verified on another account.")
+
+    code = f"{secrets.randbelow(1000000):06d}"
+    await db.college_verifications.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {
+            "user_id": user["user_id"], "college_email": email, "code": code,
+            "expires_at": _now_utc() + timedelta(minutes=15), "attempts": 0, "created_at": _now_utc(),
+        }},
+        upsert=True,
+    )
+    sent = await send_email(
+        email, "Your UniPool verification code",
+        f"""<html><body style="font-family:Arial,sans-serif;background:#FFF9F2;padding:24px;">
+        <div style="max-width:420px;margin:0 auto;background:#fff;border-radius:16px;padding:32px;text-align:center;">
+        <h2 style="color:#1A237E;margin-bottom:8px;">Verify your college ID</h2>
+        <p style="color:#3D352F;">Enter this code in UniPool to verify {decoded['roll_number']}:</p>
+        <div style="font-size:36px;font-weight:800;letter-spacing:8px;color:#F57F17;margin:24px 0;">{code}</div>
+        <p style="color:#8A8178;font-size:13px;">This code expires in 15 minutes. If you didn't request this, you can ignore this email.</p>
+        </div></body></html>""",
+    )
+    if not sent:
+        raise HTTPException(status_code=502, detail="Couldn't send the verification email — please try again in a moment.")
+    return {"ok": True, "sent_to": email}
+
+
+@api.post("/profile/verify-college-id/confirm")
+async def verify_college_id_confirm(body: CollegeVerifyConfirm, authorization: Optional[str] = Header(None)):
+    """Step 2: user enters the code we emailed them."""
+    user = await get_current_user(authorization)
+    record = await db.college_verifications.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not record:
+        raise HTTPException(status_code=400, detail="No verification in progress — please start again.")
+    if _ensure_aware(record["expires_at"]) < _now_utc():
+        raise HTTPException(status_code=400, detail="That code has expired — please request a new one.")
+    if record.get("attempts", 0) >= 5:
+        raise HTTPException(status_code=429, detail="Too many attempts — please request a new code.")
+    if body.code.strip() != record["code"]:
+        await db.college_verifications.update_one({"user_id": user["user_id"]}, {"$inc": {"attempts": 1}})
+        raise HTTPException(status_code=400, detail="Incorrect code — please check and try again.")
+
+    decoded = _decode_roll_number(record["college_email"].split("@", 1)[0])
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {
+            **decoded, "college_email": record["college_email"],
+            "college_verified": True, "college_verified_at": _now_utc(),
+        }},
+    )
+    await db.college_verifications.delete_one({"user_id": user["user_id"]})
+    updated = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "password_hash": 0})
+    return _with_admin_flag(updated)
 
 
 # ---------- Pool Routes ----------
@@ -441,6 +980,7 @@ async def create_pool(body: PoolRequestCreate, authorization: Optional[str] = He
         "notes": body.notes,
         "status": "open",
         "created_at": _now_utc(),
+        "confirmed_travelers": [],
     }
     await db.pools.insert_one(doc)
     # Fire-and-forget notify
@@ -450,14 +990,16 @@ async def create_pool(body: PoolRequestCreate, authorization: Optional[str] = He
 
 @api.get("/pools", response_model=List[PoolRequestOut])
 async def list_pools(authorization: Optional[str] = Header(None)):
-    await get_current_user(authorization)
+    user = await get_current_user(authorization)
     now = _now_utc()
-    cursor = db.pools.find(
-        {"travel_datetime": {"$gte": now - timedelta(hours=2)}, "status": "open"},
-        {"_id": 0},
-    ).sort("travel_datetime", 1)
+    blocked_ids = await _blocked_user_ids(user["user_id"])
+    query = {"travel_datetime": {"$gte": now - timedelta(hours=2)}, "status": "open"}
+    if blocked_ids:
+        query["user_id"] = {"$nin": list(blocked_ids)}
+    cursor = db.pools.find(query, {"_id": 0}).sort("travel_datetime", 1)
     results = await cursor.to_list(200)
-    return await _enrich_with_ratings(results)
+    results = await _enrich_with_ratings(results)
+    return await _enrich_with_my_request_status(results, user["user_id"])
 
 
 @api.get("/pools/mine", response_model=List[PoolRequestOut])
@@ -465,7 +1007,21 @@ async def my_pools(authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
     cursor = db.pools.find({"user_id": user["user_id"]}, {"_id": 0}).sort("travel_datetime", -1)
     results = await cursor.to_list(200)
-    return await _enrich_with_ratings(results)
+    results = await _enrich_with_ratings(results)
+    return await _enrich_with_my_request_status(results, user["user_id"])
+
+
+@api.get("/pools/{pool_id}", response_model=PoolRequestOut)
+async def get_pool(pool_id: str, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    pool = await db.pools.find_one({"pool_id": pool_id}, {"_id": 0})
+    if not pool:
+        raise HTTPException(status_code=404, detail="Pool not found")
+    if await _is_blocked_pair(user["user_id"], pool["user_id"]):
+        raise HTTPException(status_code=404, detail="Pool not found")
+    results = await _enrich_with_ratings([pool])
+    results = await _enrich_with_my_request_status(results, user["user_id"])
+    return results[0]
 
 
 @api.patch("/pools/{pool_id}/close", response_model=PoolRequestOut)
@@ -476,6 +1032,12 @@ async def close_pool(pool_id: str, authorization: Optional[str] = Header(None)):
     )
     if r.matched_count == 0:
         raise HTTPException(status_code=404, detail="Not found")
+    # Closing a pool means it's no longer taking new travelers — any still-pending
+    # join requests on it are auto-declined so requesters aren't left hanging.
+    await db.join_requests.update_many(
+        {"pool_id": pool_id, "status": "pending"},
+        {"$set": {"status": "declined", "responded_at": _now_utc()}},
+    )
     return _clean(await db.pools.find_one({"pool_id": pool_id}, {"_id": 0}))
 
 
@@ -534,7 +1096,8 @@ async def my_matches(authorization: Optional[str] = Header(None)):
         )
         for m in await cursor.to_list(100):
             results[m["pool_id"]] = m
-    return await _enrich_with_ratings(list(results.values()))
+    enriched = await _enrich_with_ratings(list(results.values()))
+    return await _enrich_with_my_request_status(enriched, user["user_id"])
 
 
 @api.delete("/pools/{pool_id}")
@@ -543,6 +1106,248 @@ async def delete_pool(pool_id: str, authorization: Optional[str] = Header(None))
     r = await db.pools.delete_one({"pool_id": pool_id, "user_id": user["user_id"]})
     if r.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Not found")
+    return {"ok": True}
+
+
+# ---------- Join Requests ----------
+def _pool_is_joinable(pool: dict) -> bool:
+    if not pool or pool.get("status") != "open":
+        return False
+    return _ensure_aware(pool["travel_datetime"]) > _now_utc()
+
+
+@api.post("/pools/{pool_id}/requests", response_model=JoinRequestOut)
+async def create_join_request(pool_id: str, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    pool = await db.pools.find_one({"pool_id": pool_id}, {"_id": 0})
+    if not pool:
+        raise HTTPException(status_code=404, detail="Pool not found")
+    if pool["user_id"] == user["user_id"]:
+        raise HTTPException(status_code=400, detail="You can't request to join your own pool")
+    if not _pool_is_joinable(pool):
+        raise HTTPException(status_code=400, detail="This pool is no longer accepting requests")
+    if any(t["user_id"] == user["user_id"] for t in pool.get("confirmed_travelers", [])):
+        raise HTTPException(status_code=400, detail="You're already confirmed on this pool")
+    if await _is_blocked_pair(user["user_id"], pool["user_id"]):
+        raise HTTPException(status_code=403, detail="You can't request to join this pool")
+
+    existing = await db.join_requests.find_one(
+        {"pool_id": pool_id, "requester_id": user["user_id"], "status": {"$in": ["pending", "accepted"]}},
+        {"_id": 0},
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="You already have a request on this pool")
+
+    doc = {
+        "request_id": f"req_{uuid.uuid4().hex[:12]}",
+        "pool_id": pool_id,
+        "pool_owner_id": pool["user_id"],
+        "from_location": pool["from_location"],
+        "to_location": pool["to_location"],
+        "travel_datetime": pool["travel_datetime"],
+        "requester_id": user["user_id"],
+        "requester_name": user.get("name") or "Traveller",
+        "requester_email": user["email"],
+        "requester_gender": user.get("gender"),
+        "status": "pending",
+        "created_at": _now_utc(),
+        "responded_at": None,
+    }
+    await db.join_requests.insert_one(doc)
+
+    asyncio.create_task(send_push(
+        pool["user_id"], "New ride request",
+        f"{doc['requester_name']} wants to travel with you: {pool['from_location']} → {pool['to_location']}",
+        "/(tabs)/matches",
+    ))
+    asyncio.create_task(send_email(
+        pool["user_email"], "UniPool: New ride request",
+        join_request_email_html(pool["user_name"], doc["requester_name"], pool, "received"),
+    ))
+    return _clean(dict(doc))
+
+
+@api.get("/pools/{pool_id}/requests", response_model=List[JoinRequestOut])
+async def list_pool_requests(pool_id: str, authorization: Optional[str] = Header(None)):
+    """Pool owner only — all requests (any status) for one of their pools."""
+    user = await get_current_user(authorization)
+    pool = await db.pools.find_one({"pool_id": pool_id}, {"_id": 0})
+    if not pool:
+        raise HTTPException(status_code=404, detail="Pool not found")
+    if pool["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not your pool")
+    cursor = db.join_requests.find({"pool_id": pool_id}, {"_id": 0}).sort("created_at", -1)
+    return await cursor.to_list(200)
+
+
+@api.get("/requests/incoming", response_model=List[JoinRequestOut])
+async def incoming_requests(authorization: Optional[str] = Header(None)):
+    """Pending requests on pools I own — for the notification/inbox badge."""
+    user = await get_current_user(authorization)
+    cursor = db.join_requests.find(
+        {"pool_owner_id": user["user_id"], "status": "pending"}, {"_id": 0}
+    ).sort("created_at", -1)
+    results = await cursor.to_list(200)
+    results = await _attach_requester_ratings(results)
+    return await _attach_badges(results, "requester_id", "requester_email", "requester_rating_avg", "requester_rating_count", "requester_badges", "requester_college_id")
+
+
+@api.get("/requests/mine", response_model=List[JoinRequestOut])
+async def my_requests(authorization: Optional[str] = Header(None)):
+    """Requests I've sent, any status — so I can see pending/accepted/declined."""
+    user = await get_current_user(authorization)
+    cursor = db.join_requests.find(
+        {"requester_id": user["user_id"]}, {"_id": 0}
+    ).sort("created_at", -1)
+    results = await cursor.to_list(200)
+    results = await _attach_requester_ratings(results)
+    return await _attach_badges(results, "requester_id", "requester_email", "requester_rating_avg", "requester_rating_count", "requester_badges", "requester_college_id")
+
+
+@api.patch("/requests/{request_id}/accept", response_model=JoinRequestOut)
+async def accept_request(request_id: str, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    reqdoc = await db.join_requests.find_one({"request_id": request_id}, {"_id": 0})
+    if not reqdoc:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if reqdoc["pool_owner_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not your pool")
+    if reqdoc["status"] != "pending":
+        raise HTTPException(status_code=400, detail="This request was already responded to")
+
+    pool = await db.pools.find_one({"pool_id": reqdoc["pool_id"]}, {"_id": 0})
+    if not pool:
+        raise HTTPException(status_code=404, detail="Pool not found")
+
+    traveler = {"user_id": reqdoc["requester_id"], "name": reqdoc["requester_name"], "email": reqdoc["requester_email"]}
+    # Keeps adding travelers — 2 confirmed + 1 more accepted just appends, no cap here.
+    await db.pools.update_one(
+        {"pool_id": pool["pool_id"], "confirmed_travelers.user_id": {"$ne": traveler["user_id"]}},
+        {"$push": {"confirmed_travelers": traveler}},
+    )
+    await db.join_requests.update_one(
+        {"request_id": request_id}, {"$set": {"status": "accepted", "responded_at": _now_utc()}}
+    )
+    updated = await db.join_requests.find_one({"request_id": request_id}, {"_id": 0})
+
+    asyncio.create_task(send_push(
+        reqdoc["requester_id"], "Request accepted! 🚗",
+        f"{user.get('name')} accepted you for {pool['from_location']} → {pool['to_location']}",
+        "/(tabs)/matches",
+    ))
+    asyncio.create_task(send_email(
+        reqdoc["requester_email"], "UniPool: Your request was accepted",
+        join_request_email_html(reqdoc["requester_name"], user.get("name") or "", pool, "accepted"),
+    ))
+    return _clean(updated)
+
+
+@api.patch("/requests/{request_id}/decline", response_model=JoinRequestOut)
+async def decline_request(request_id: str, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    reqdoc = await db.join_requests.find_one({"request_id": request_id}, {"_id": 0})
+    if not reqdoc:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if reqdoc["pool_owner_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not your pool")
+    if reqdoc["status"] != "pending":
+        raise HTTPException(status_code=400, detail="This request was already responded to")
+
+    await db.join_requests.update_one(
+        {"request_id": request_id}, {"$set": {"status": "declined", "responded_at": _now_utc()}}
+    )
+    return _clean(await db.join_requests.find_one({"request_id": request_id}, {"_id": 0}))
+
+
+@api.delete("/requests/{request_id}")
+async def cancel_request(request_id: str, authorization: Optional[str] = Header(None)):
+    """Requester withdraws their own pending request."""
+    user = await get_current_user(authorization)
+    r = await db.join_requests.delete_one(
+        {"request_id": request_id, "requester_id": user["user_id"], "status": "pending"}
+    )
+    if r.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"ok": True}
+
+
+# ---------- Confirmed Rides (accepted requests, from both sides) ----------
+@api.get("/matches/confirmed")
+async def confirmed_matches(authorization: Optional[str] = Header(None)):
+    """Every 'traveling together' pairing involving me — whether I'm the pool
+    owner or a confirmed traveler on someone else's pool."""
+    user = await get_current_user(authorization)
+    uid = user["user_id"]
+    results = []
+
+    owner_pools = await db.pools.find(
+        {"user_id": uid, "confirmed_travelers.0": {"$exists": True}}, {"_id": 0}
+    ).to_list(200)
+    for p in owner_pools:
+        for t in p.get("confirmed_travelers", []):
+            results.append({
+                "pool_id": p["pool_id"], "from_location": p["from_location"], "to_location": p["to_location"],
+                "travel_datetime": p["travel_datetime"], "pool_status": p.get("status", "open"),
+                "other_user_id": t["user_id"], "other_user_name": t["name"], "other_user_email": t["email"],
+                "my_role": "owner",
+            })
+
+    traveler_pools = await db.pools.find({"confirmed_travelers.user_id": uid}, {"_id": 0}).to_list(200)
+    for p in traveler_pools:
+        results.append({
+            "pool_id": p["pool_id"], "from_location": p["from_location"], "to_location": p["to_location"],
+            "travel_datetime": p["travel_datetime"], "pool_status": p.get("status", "open"),
+            "other_user_id": p["user_id"], "other_user_name": p["user_name"], "other_user_email": p["user_email"],
+            "my_role": "traveler",
+        })
+
+    if not results:
+        return []
+    other_ids = list({r["other_user_id"] for r in results})
+    pipeline = [
+        {"$match": {"rated_user_id": {"$in": other_ids}}},
+        {"$group": {"_id": "$rated_user_id", "avg": {"$avg": "$stars"}, "count": {"$sum": 1}}},
+    ]
+    stats = await db.ratings.aggregate(pipeline).to_list(len(other_ids))
+    stat_map = {s["_id"]: s for s in stats}
+    for r in results:
+        s = stat_map.get(r["other_user_id"])
+        r["other_user_rating_avg"] = round(s["avg"], 1) if s else None
+        r["other_user_rating_count"] = s["count"] if s else 0
+    results = await _attach_badges(results, "other_user_id", "other_user_email", "other_user_rating_avg", "other_user_rating_count", "other_user_badges", "other_user_college_id")
+    results.sort(key=lambda r: r["travel_datetime"], reverse=True)
+    return results
+
+
+@api.delete("/pools/{pool_id}/travelers/{traveler_user_id}")
+async def remove_confirmed_traveler(pool_id: str, traveler_user_id: str, authorization: Optional[str] = Header(None)):
+    """Either the pool owner or the confirmed traveler themselves can undo a
+    'traveling together' pairing at any time — no questions asked."""
+    user = await get_current_user(authorization)
+    pool = await db.pools.find_one({"pool_id": pool_id}, {"_id": 0})
+    if not pool:
+        raise HTTPException(status_code=404, detail="Pool not found")
+    if user["user_id"] not in (pool["user_id"], traveler_user_id):
+        raise HTTPException(status_code=403, detail="Not part of this ride")
+    if not any(t["user_id"] == traveler_user_id for t in pool.get("confirmed_travelers", [])):
+        raise HTTPException(status_code=404, detail="Not a confirmed traveler on this pool")
+
+    await db.pools.update_one(
+        {"pool_id": pool_id}, {"$pull": {"confirmed_travelers": {"user_id": traveler_user_id}}}
+    )
+    await db.join_requests.update_many(
+        {"pool_id": pool_id, "requester_id": traveler_user_id, "status": "accepted"},
+        {"$set": {"status": "removed", "responded_at": _now_utc()}},
+    )
+
+    other_user_id = pool["user_id"] if user["user_id"] == traveler_user_id else traveler_user_id
+    asyncio.create_task(send_push(
+        other_user_id, "Ride update",
+        f"{user.get('name')} removed themselves from {pool['from_location']} → {pool['to_location']}"
+        if user["user_id"] == traveler_user_id else
+        f"You were removed from {pool['from_location']} → {pool['to_location']}",
+        "/(tabs)/matches",
+    ))
     return {"ok": True}
 
 
@@ -585,9 +1390,11 @@ async def send_message(body: MessageCreate, authorization: Optional[str] = Heade
     if recent_msgs >= 30:
         raise HTTPException(status_code=429, detail="You're sending messages too fast. Slow down a bit.")
 
-    to_user = await db.users.find_one({"user_id": body.to_user_id}, {"_id": 0})
+    to_user = await db.users.find_one({"user_id": body.to_user_id}, {"_id": 0, "password_hash": 0})
     if not to_user:
         raise HTTPException(status_code=404, detail="Recipient not found")
+    if await _is_blocked_pair(user["user_id"], body.to_user_id):
+        raise HTTPException(status_code=403, detail="You can't message this user")
     doc = {
         "message_id": f"msg_{uuid.uuid4().hex[:12]}",
         "from_user_id": user["user_id"],
@@ -652,8 +1459,39 @@ async def list_conversations(authorization: Optional[str] = Header(None)):
     out = []
     for other_id, convo in seen.items():
         u = umap.get(other_id, {})
-        out.append({**convo, "name": u.get("name", "Unknown"), "picture": u.get("picture")})
+        out.append({
+            **convo,
+            "name": u.get("name", "Unknown"),
+            "picture": u.get("picture"),
+            "online": _is_online(u.get("last_seen")),
+        })
     return out
+
+
+@api.post("/messages/typing")
+async def send_typing(body: dict, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    to_user_id = body.get("to_user_id")
+    if to_user_id:
+        TYPING_STATE[(user["user_id"], to_user_id)] = _now_utc()
+    return {"ok": True}
+
+
+@api.get("/messages/typing/{other_user_id}")
+async def get_typing(other_user_id: str, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    ts = TYPING_STATE.get((other_user_id, user["user_id"]))
+    typing = bool(ts and (_now_utc() - ts).total_seconds() < TYPING_TTL_SECONDS)
+    return {"typing": typing}
+
+
+@api.get("/users/{user_id}/presence")
+async def get_presence(user_id: str, authorization: Optional[str] = Header(None)):
+    await get_current_user(authorization)
+    u = await db.users.find_one({"user_id": user_id}, {"_id": 0, "last_seen": 1})
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"online": _is_online(u.get("last_seen")), "last_seen": u.get("last_seen")}
 
 
 # ---------- Ratings ----------
@@ -662,9 +1500,9 @@ async def submit_rating(body: RatingCreate, authorization: Optional[str] = Heade
     user = await get_current_user(authorization)
     if body.rated_user_id == user["user_id"]:
         raise HTTPException(status_code=400, detail="You can't rate yourself")
-    if not (1 <= body.stars <= 5):
-        raise HTTPException(status_code=400, detail="Stars must be between 1 and 5")
-    rated_user = await db.users.find_one({"user_id": body.rated_user_id}, {"_id": 0})
+    if not (1 <= body.stars <= 10):
+        raise HTTPException(status_code=400, detail="Rating must be between 1 and 10")
+    rated_user = await db.users.find_one({"user_id": body.rated_user_id}, {"_id": 0, "password_hash": 0})
     if not rated_user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -679,6 +1517,7 @@ async def submit_rating(body: RatingCreate, authorization: Optional[str] = Heade
             "comment": (body.comment or "").strip()[:500] or None,
             "pool_id": body.pool_id,
             "created_at": _now_utc(),
+            "scale": 10,
         }},
         upsert=True,
     )
@@ -697,7 +1536,13 @@ async def get_user_ratings(user_id: str, authorization: Optional[str] = Header(N
     cursor = db.ratings.find({"rated_user_id": user_id}, {"_id": 0}).sort("created_at", -1)
     ratings = await cursor.to_list(100)
     avg = round(sum(r["stars"] for r in ratings) / len(ratings), 1) if ratings else None
-    return {"average": avg, "count": len(ratings), "ratings": ratings}
+    college_map = await _college_info_map([user_id])
+    rides_map = await _rides_completed_map([user_id])
+    badges = _compute_badges(user_id in college_map, avg, len(ratings), rides_map.get(user_id, 0))
+    return {
+        "average": avg, "count": len(ratings), "ratings": ratings, "badges": badges,
+        "college_id": college_map.get(user_id), "rides_completed": rides_map.get(user_id, 0),
+    }
 
 
 @api.get("/ratings/can-rate/{user_id}")
@@ -708,6 +1553,69 @@ async def can_rate(user_id: str, authorization: Optional[str] = Header(None)):
         {"rater_user_id": user["user_id"], "rated_user_id": user_id}, {"_id": 0}
     )
     return {"already_rated": existing is not None, "existing": existing}
+
+
+# ---------- Safety: Block & Report ----------
+@api.post("/users/{user_id}/block")
+async def block_user(user_id: str, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    if user_id == user["user_id"]:
+        raise HTTPException(status_code=400, detail="You can't block yourself")
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    await db.blocks.update_one(
+        {"blocker_id": user["user_id"], "blocked_id": user_id},
+        {"$setOnInsert": {"blocker_id": user["user_id"], "blocked_id": user_id, "created_at": _now_utc()}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api.delete("/users/{user_id}/block")
+async def unblock_user(user_id: str, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    await db.blocks.delete_one({"blocker_id": user["user_id"], "blocked_id": user_id})
+    return {"ok": True}
+
+
+@api.get("/users/me/blocked")
+async def list_blocked(authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    cursor = db.blocks.find({"blocker_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1)
+    rows = await cursor.to_list(500)
+    ids = [r["blocked_id"] for r in rows]
+    if not ids:
+        return []
+    users = await db.users.find({"user_id": {"$in": ids}}, {"_id": 0, "password_hash": 0}).to_list(500)
+    u_map = {u["user_id"]: u for u in users}
+    return [
+        {"user_id": r["blocked_id"], "name": u_map.get(r["blocked_id"], {}).get("name", "Unknown"), "blocked_at": r["created_at"]}
+        for r in rows
+    ]
+
+
+@api.post("/reports")
+async def submit_report(body: ReportCreate, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    if body.reported_user_id == user["user_id"]:
+        raise HTTPException(status_code=400, detail="You can't report yourself")
+    target = await db.users.find_one({"user_id": body.reported_user_id}, {"_id": 0, "password_hash": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    await db.reports.insert_one({
+        "report_id": f"rpt_{uuid.uuid4().hex[:12]}",
+        "reporter_id": user["user_id"],
+        "reporter_name": user.get("name"),
+        "reported_user_id": body.reported_user_id,
+        "reported_user_name": target.get("name"),
+        "reason": body.reason.strip()[:60],
+        "details": (body.details or "").strip()[:1000] or None,
+        "pool_id": body.pool_id,
+        "status": "open",
+        "created_at": _now_utc(),
+    })
+    return {"ok": True}
 
 
 # ---------- Admin ----------
@@ -745,6 +1653,52 @@ async def admin_delete_pool(pool_id: str, authorization: Optional[str] = Header(
     await require_admin(authorization)
     r = await db.pools.delete_one({"pool_id": pool_id})
     if r.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"ok": True}
+
+
+@api.post("/admin/migrate-ratings-scale")
+async def admin_migrate_ratings_scale(authorization: Optional[str] = Header(None)):
+    """One-time, idempotent migration: rescale ratings submitted on the old
+    1-5 scale to the current 1-10 scale (stars * 2, capped at 10). Safe to
+    call more than once — only touches docs without a 'scale' marker."""
+    await require_admin(authorization)
+    result = await db.ratings.update_many(
+        {"scale": {"$exists": False}},
+        [{"$set": {"stars": {"$min": [{"$multiply": ["$stars", 2]}, 10]}, "scale": 10}}],
+    )
+    return {"ok": True, "matched": result.matched_count, "modified": result.modified_count}
+
+
+@api.post("/admin/refresh-college-info")
+async def admin_refresh_college_info(authorization: Optional[str] = Header(None)):
+    """Idempotent: re-decodes roll_number for every already-verified user
+    against the current SCHOOL_CODES/BRANCH_CODES/DEGREE_LEVEL_NAMES maps.
+    Run this after updating those dicts so existing verified profiles pick
+    up corrected/newly-added names, not just future verifications."""
+    await require_admin(authorization)
+    cursor = db.users.find({"college_verified": True, "roll_number": {"$exists": True}}, {"_id": 0, "user_id": 1, "roll_number": 1})
+    updated = 0
+    async for u in cursor:
+        decoded = _decode_roll_number(u["roll_number"].lower())
+        if decoded:
+            await db.users.update_one({"user_id": u["user_id"]}, {"$set": decoded})
+            updated += 1
+    return {"ok": True, "updated": updated}
+
+
+@api.get("/admin/reports")
+async def admin_list_reports(authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    cursor = db.reports.find({}, {"_id": 0}).sort("created_at", -1)
+    return await cursor.to_list(500)
+
+
+@api.patch("/admin/reports/{report_id}/resolve")
+async def admin_resolve_report(report_id: str, authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    r = await db.reports.update_one({"report_id": report_id}, {"$set": {"status": "resolved"}})
+    if r.matched_count == 0:
         raise HTTPException(status_code=404, detail="Not found")
     return {"ok": True}
 
@@ -866,14 +1820,41 @@ async def _startup():
     try:
         await db.users.create_index("email", unique=True)
         await db.users.create_index("user_id", unique=True)
+        await db.users.create_index("username", unique=True, sparse=True)
         await db.user_sessions.create_index("session_token", unique=True)
         await db.user_sessions.create_index("user_id")
         await db.user_sessions.create_index("expires_at", expireAfterSeconds=0)
         await db.pools.create_index("pool_id", unique=True)
         await db.pools.create_index([("from_location", 1), ("to_location", 1), ("travel_datetime", 1)])
+        await db.blocks.create_index([("blocker_id", 1), ("blocked_id", 1)], unique=True)
+        await db.reports.create_index("created_at")
+        await db.college_verifications.create_index("user_id", unique=True)
+        await db.users.create_index("roll_number", sparse=True)
         logger.info("Indexes created")
     except Exception as e:
         logger.warning(f"Index setup issue: {e}")
+
+    try:
+        existing_admin = await db.users.find_one({"username": SEED_ADMIN_USERNAME}, {"_id": 0})
+        if not existing_admin:
+            await db.users.insert_one({
+                "user_id": f"user_{uuid.uuid4().hex[:12]}",
+                "email": SEED_ADMIN_EMAIL,
+                "username": SEED_ADMIN_USERNAME,
+                "name": "BB Admin",
+                "picture": None,
+                "password_hash": _hash_password(SEED_ADMIN_PASSWORD),
+                "gender": None,
+                "phone": None,
+                "is_admin_override": True,
+                "created_at": _now_utc(),
+                "last_login": None,
+            })
+            logger.info(f"Seeded admin account '{SEED_ADMIN_USERNAME}'")
+    except Exception as e:
+        logger.warning(f"Admin seed issue: {e}")
+
+    asyncio.create_task(_leaving_soon_reminder_loop())
 
 
 @app.on_event("shutdown")

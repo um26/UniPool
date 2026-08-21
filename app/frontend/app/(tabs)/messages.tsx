@@ -15,6 +15,7 @@ type Convo = {
   last_message: string;
   last_at: string;
   unread: number;
+  online?: boolean;
 };
 
 function fmt(dt: string) {
@@ -22,8 +23,8 @@ function fmt(dt: string) {
   const now = new Date();
   const sameDay = d.toDateString() === now.toDateString();
   return sameDay
-    ? d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
-    : d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+    ? d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })
+    : d.toLocaleDateString(undefined, { day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
 }
 
 export default function MessagesScreen() {
@@ -72,7 +73,10 @@ export default function MessagesScreen() {
               onPress={() => router.push({ pathname: "/chat/[userId]", params: { userId: item.other_user_id, name: item.name } })}
               style={styles.row}
             >
-              <View style={styles.avatar}><Text style={styles.avatarText}>{item.name?.[0]?.toUpperCase() || "U"}</Text></View>
+              <View style={{ position: "relative" }}>
+                <View style={styles.avatar}><Text style={styles.avatarText}>{item.name?.[0]?.toUpperCase() || "U"}</Text></View>
+                {item.online && <View style={styles.onlineDot} />}
+              </View>
               <View style={{ flex: 1 }}>
                 <View style={styles.rowTop}>
                   <Text style={styles.name}>{item.name}</Text>
@@ -105,6 +109,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: SPACING.md, backgroundColor: "#fff", borderRadius: RADIUS.lg, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: COLORS.border },
   avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.cream, alignItems: "center", justifyContent: "center" },
   avatarText: { color: COLORS.indigo, fontWeight: "800" },
+  onlineDot: { position: "absolute", bottom: 0, right: 0, width: 12, height: 12, borderRadius: 6, backgroundColor: COLORS.success, borderWidth: 2, borderColor: "#fff" },
   rowTop: { flexDirection: "row", justifyContent: "space-between" },
   name: { fontWeight: "700", color: COLORS.onSurface, fontSize: FONT.base },
   time: { color: COLORS.muted, fontSize: FONT.sm },

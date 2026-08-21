@@ -9,6 +9,16 @@ export type UniUser = {
   picture?: string | null;
   gender?: string | null;
   phone?: string | null;
+  blood_group?: string | null;
+  username?: string | null;
+  is_admin?: boolean;
+  college_verified?: boolean;
+  college_email?: string | null;
+  roll_number?: string | null;
+  school_name?: string | null;
+  degree_level_name?: string | null;
+  branch_name?: string | null;
+  batch_year?: number | null;
 };
 
 type AuthCtx = {
@@ -25,6 +35,9 @@ type AuthCtx = {
   refresh: () => Promise<void>;
   // Web-only: mount a Google button into a DOM node.
   renderGoogleButton: (containerId: string) => void;
+  // Email/username + password auth.
+  signInWithPassword: (identifier: string, password: string, turnstileToken?: string | null) => Promise<void>;
+  signUpWithPassword: (email: string, password: string, name: string, username?: string, turnstileToken?: string | null) => Promise<void>;
 };
 
 const Ctx = createContext<AuthCtx>({} as any);
@@ -169,8 +182,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const signInWithPassword = useCallback(async (identifier: string, password: string, turnstileToken?: string | null) => {
+    setSigningIn(true);
+    setSignInError(null);
+    try {
+      const res = await api.emailLogin(identifier, password, turnstileToken);
+      await setToken(res.session_token);
+      setUser(res.user);
+    } catch (e: any) {
+      setSignInError(e?.message || "Sign-in failed. Please check your details and try again.");
+      throw e;
+    } finally {
+      setSigningIn(false);
+    }
+  }, []);
+
+  const signUpWithPassword = useCallback(async (email: string, password: string, name: string, username?: string, turnstileToken?: string | null) => {
+    setSigningIn(true);
+    setSignInError(null);
+    try {
+      const res = await api.emailSignup(email, password, name, username, turnstileToken);
+      await setToken(res.session_token);
+      setUser(res.user);
+    } catch (e: any) {
+      setSignInError(e?.message || "Couldn't create your account. Please try again.");
+      throw e;
+    } finally {
+      setSigningIn(false);
+    }
+  }, []);
+
   return (
-    <Ctx.Provider value={{ user, loading, signingIn, signInError, signIn, signOut, refresh, renderGoogleButton }}>
+    <Ctx.Provider value={{ user, loading, signingIn, signInError, signIn, signOut, refresh, renderGoogleButton, signInWithPassword, signUpWithPassword }}>
       {children}
     </Ctx.Provider>
   );

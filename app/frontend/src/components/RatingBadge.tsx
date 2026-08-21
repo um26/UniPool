@@ -15,7 +15,7 @@ export default function RatingBadge({ avg, count }: { avg?: number | null; count
   return (
     <View style={styles.row}>
       <Ionicons name="star" size={12} color={COLORS.saffron} />
-      <Text style={styles.text}>{avg.toFixed(1)}</Text>
+      <Text style={styles.text}>{avg.toFixed(1)}/10</Text>
       <Text style={styles.count}>({count})</Text>
     </View>
   );

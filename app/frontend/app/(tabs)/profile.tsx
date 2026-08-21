@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from "react";
-import { View, Text, StyleSheet, Pressable, FlatList, Alert, ActivityIndicator } from "react-native";
+import React, { useCallback, useState, useRef } from "react";
+import { View, Text, StyleSheet, Pressable, FlatList, Alert, ActivityIndicator, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -10,7 +10,13 @@ import { COLORS, SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/auth/AuthContext";
 import BrandFooter from "@/src/components/BrandFooter";
+import UserBadges from "@/src/components/UserBadges";
+import CollegeIdCard from "@/src/components/CollegeIdCard";
+import Confetti from "@/src/components/Confetti";
+import VerifyCollegeIdModal from "@/src/components/VerifyCollegeIdModal";
 import { usePushNotifications } from "@/src/hooks/use-push-notifications";
+
+type ConfirmedTraveler = { user_id: string; name: string; email: string };
 
 type Pool = {
   pool_id: string;
@@ -21,30 +27,130 @@ type Pool = {
   status?: string;
   user_name?: string;
   user_email?: string;
+  confirmed_travelers?: ConfirmedTraveler[];
+};
+
+type JoinRequest = {
+  request_id: string;
+  pool_id: string;
+  from_location: string;
+  to_location: string;
+  travel_datetime: string;
+  requester_id: string;
+  requester_name: string;
+  requester_rating_avg?: number | null;
+  requester_rating_count?: number;
+  requester_badges?: { id: string; label: string; icon: string }[];
+  status: string;
+  created_at: string;
 };
 
 function fmt(dt: string) {
-  return new Date(dt).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  return new Date(dt).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 }
 
 export default function ProfileScreen() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, refresh } = useAuth();
   const router = useRouter();
   const push = usePushNotifications();
   const [myPools, setMyPools] = useState<Pool[]>([]);
   const [gender, setGender] = useState<string>(user?.gender || "any");
   const [tab, setTab] = useState<"open" | "closed">("open");
+  const [incoming, setIncoming] = useState<JoinRequest[]>([]);
+  const [respondingId, setRespondingId] = useState<string | null>(null);
+  const [removingTraveler, setRemovingTraveler] = useState<string | null>(null);
+  const [myRating, setMyRating] = useState<{ average: number | null; count: number }>({ average: null, count: 0 });
+  const [myBadges, setMyBadges] = useState<{ id: string; label: string; icon: string }[]>([]);
+  const [ridesCompleted, setRidesCompleted] = useState(0);
+  const [verifyModalOpen, setVerifyModalOpen] = useState(false);
+  const [blocked, setBlocked] = useState<{ user_id: string; name: string }[]>([]);
+  const [unblockingId, setUnblockingId] = useState<string | null>(null);
 
   const [adminOpen, setAdminOpen] = useState(false);
   const [adminStats, setAdminStats] = useState<any>(null);
   const [adminPools, setAdminPools] = useState<Pool[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
+  const [confettiKey, setConfettiKey] = useState(0);
+  const knownBadgeIds = useRef<Set<string> | null>(null);
 
   const load = useCallback(async () => {
-    try { setMyPools(await api.myPools()); } catch {}
-  }, []);
+    try {
+      const [pools, reqs] = await Promise.all([api.myPools(), api.incomingRequests()]);
+      setMyPools(pools);
+      setIncoming(reqs);
+    } catch {}
+    try { setBlocked(await api.listBlocked()); } catch {}
+    if (user?.user_id) {
+      try {
+        const r = await api.getUserRatings(user.user_id);
+        setMyRating({ average: r.average, count: r.count });
+        setMyBadges(r.badges || []);
+        setRidesCompleted(r.rides_completed || 0);
+
+        const newIds = new Set<string>((r.badges || []).map((b: any) => b.id));
+        if (knownBadgeIds.current) {
+          const gainedNew = [...newIds].some((id) => !knownBadgeIds.current!.has(id));
+          if (gainedNew) setConfettiKey((k) => k + 1);
+        }
+        knownBadgeIds.current = newIds;
+      } catch {}
+    }
+  }, [user?.user_id]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  const respond = async (requestId: string, action: "accept" | "decline") => {
+    setRespondingId(requestId);
+    try {
+      if (action === "accept") await api.acceptRequest(requestId);
+      else await api.declineRequest(requestId);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (action === "accept") setConfettiKey((k) => k + 1);
+      await load();
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
+    } finally {
+      setRespondingId(null);
+    }
+  };
+
+  const removeTraveler = (poolId: string, travelerId: string, travelerName: string) => {
+    Alert.alert(
+      "Remove this traveler?",
+      `${travelerName.split(" ")[0]} will no longer be traveling together with you on this pool.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove", style: "destructive", onPress: async () => {
+            const key = `${poolId}:${travelerId}`;
+            setRemovingTraveler(key);
+            try {
+              await api.removeTraveler(poolId, travelerId);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              await load();
+            } catch (e: any) {
+              Alert.alert("Error", e.message);
+            } finally {
+              setRemovingTraveler(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const unblock = async (userId: string) => {
+    setUnblockingId(userId);
+    try {
+      await api.unblockUser(userId);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await load();
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
+    } finally {
+      setUnblockingId(null);
+    }
+  };
 
   const saveGender = async (g: string) => {
     setGender(g);
@@ -90,21 +196,81 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <LinearGradient colors={[COLORS.indigo, "#3949AB"]} style={styles.header}>
-        <View style={styles.avatar}><Text style={styles.avatarText}>{user?.name?.[0]?.toUpperCase() || "U"}</Text></View>
-        <Text style={styles.name}>{user?.name}</Text>
-        <Text style={styles.email}>{user?.email}</Text>
-        {user?.is_admin ? (
-          <View style={styles.adminBadge}><Ionicons name="shield-checkmark" size={12} color={COLORS.indigo} /><Text style={styles.adminBadgeText}>Admin</Text></View>
-        ) : null}
-      </LinearGradient>
+      <Confetti burstKey={confettiKey} />
+      <VerifyCollegeIdModal
+        visible={verifyModalOpen}
+        onClose={() => setVerifyModalOpen(false)}
+        onVerified={async () => {
+          setVerifyModalOpen(false);
+          await refresh();
+          await load();
+        }}
+      />
 
       <FlatList
         data={filtered}
         keyExtractor={(i) => i.pool_id}
-        contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 140 }}
+        contentContainerStyle={{ paddingBottom: 140 }}
         ListHeaderComponent={
           <>
+            <LinearGradient colors={[COLORS.indigo, "#3949AB"]} style={styles.header}>
+              <View style={styles.avatar}><Text style={styles.avatarText}>{user?.name?.[0]?.toUpperCase() || "U"}</Text></View>
+              <Text style={styles.name}>{user?.name}</Text>
+              <Text style={styles.email}>{user?.email}</Text>
+              <View style={styles.myRatingRow} testID="my-rating">
+                <Ionicons name="star" size={14} color={COLORS.saffron} />
+                {myRating.average != null ? (
+                  <Text style={styles.myRatingText}>{myRating.average.toFixed(1)}/10 · {myRating.count} rating{myRating.count === 1 ? "" : "s"}</Text>
+                ) : (
+                  <Text style={styles.myRatingText}>No ratings yet</Text>
+                )}
+              </View>
+              {myBadges.length > 0 && (
+                <View style={{ marginTop: 8 }}>
+                  <UserBadges badges={myBadges} />
+                </View>
+              )}
+              {user?.is_admin ? (
+                <View style={styles.adminBadge}><Ionicons name="shield-checkmark" size={12} color={COLORS.indigo} /><Text style={styles.adminBadgeText}>Admin</Text></View>
+              ) : null}
+            </LinearGradient>
+
+            {user?.college_verified ? (
+              <View style={styles.idCardWrap}>
+                <CollegeIdCard
+                  name={user.name}
+                  rollNumber={user.roll_number || ""}
+                  schoolName={user.school_name}
+                  branchName={user.branch_name}
+                  batchYear={user.batch_year}
+                  degreeLevelName={user.degree_level_name}
+                  email={user.email}
+                  collegeEmail={user.college_email}
+                  phone={user.phone}
+                  bloodGroup={user.blood_group}
+                  ratingAvg={myRating.average}
+                  ratingCount={myRating.count}
+                  ridesCompleted={ridesCompleted}
+                  onProfileUpdated={async () => { await refresh(); await load(); }}
+                />
+              </View>
+            ) : (
+              <View style={styles.collegeCard} testID="college-id-verify-prompt">
+                <View style={styles.collegeCardHeader}>
+                  <Ionicons name="shield-outline" size={18} color={COLORS.muted} />
+                  <Text style={styles.collegeCardTitle}>Get your digital Student ID</Text>
+                </View>
+                <Text style={styles.verifySub}>
+                  Verify your @mahindrauniversity.edu.in email — even if you signed in a different way — to unlock the Verified Student badge and a shareable digital ID card.
+                </Text>
+                <Pressable testID="verify-college-id-btn" onPress={() => setVerifyModalOpen(true)} style={styles.verifyBtn}>
+                  <Ionicons name="shield-checkmark-outline" size={16} color="#fff" />
+                  <Text style={styles.verifyBtnText}>Verify college ID</Text>
+                </Pressable>
+              </View>
+            )}
+
+            <View style={{ paddingHorizontal: SPACING.lg }}>
             <Text style={styles.sectionLabel}>Preferences</Text>
             <View style={styles.prefRow}>
               {[
@@ -146,6 +312,67 @@ export default function ProfileScreen() {
               </Pressable>
             )}
 
+            {blocked.length > 0 && (
+              <>
+                <Text style={styles.sectionLabel}>Blocked Users ({blocked.length})</Text>
+                {blocked.map((b) => (
+                  <View key={b.user_id} style={styles.blockedRow} testID={`blocked-${b.user_id}`}>
+                    <Text style={styles.blockedName}>{b.name}</Text>
+                    <Pressable
+                      testID={`unblock-${b.user_id}`}
+                      onPress={() => unblock(b.user_id)}
+                      disabled={unblockingId === b.user_id}
+                      style={styles.unblockBtn}
+                    >
+                      {unblockingId === b.user_id ? (
+                        <ActivityIndicator size="small" color={COLORS.indigo} />
+                      ) : (
+                        <Text style={styles.unblockText}>Unblock</Text>
+                      )}
+                    </Pressable>
+                  </View>
+                ))}
+              </>
+            )}
+
+            {incoming.length > 0 && (
+              <>
+                <Text style={styles.sectionLabel}>Ride Requests</Text>
+                {incoming.map((r) => (
+                  <View key={r.request_id} style={styles.reqCard} testID={`incoming-${r.request_id}`}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.reqName}>{r.requester_name}</Text>
+                      <UserBadges badges={r.requester_badges} compact />
+                      <Text style={styles.reqRoute}>{r.from_location} → {r.to_location}</Text>
+                      <Text style={styles.reqWhen}>{fmt(r.travel_datetime)}</Text>
+                    </View>
+                    {respondingId === r.request_id ? (
+                      <ActivityIndicator color={COLORS.indigo} />
+                    ) : (
+                      <View style={{ flexDirection: "row", gap: SPACING.sm }}>
+                        <Pressable
+                          testID={`decline-${r.request_id}`}
+                          onPress={() => respond(r.request_id, "decline")}
+                          style={[styles.reqBtn, styles.reqBtnDecline]}
+                          hitSlop={8}
+                        >
+                          <Ionicons name="close" size={18} color={COLORS.error} />
+                        </Pressable>
+                        <Pressable
+                          testID={`accept-${r.request_id}`}
+                          onPress={() => respond(r.request_id, "accept")}
+                          style={[styles.reqBtn, styles.reqBtnAccept]}
+                          hitSlop={8}
+                        >
+                          <Ionicons name="checkmark" size={18} color="#fff" />
+                        </Pressable>
+                      </View>
+                    )}
+                  </View>
+                ))}
+              </>
+            )}
+
             <Text style={styles.sectionLabel}>My Queries</Text>
             <View style={styles.segmentRow}>
               <Pressable testID="mine-tab-open" onPress={() => setTab("open")} style={[styles.segment, tab === "open" && styles.segmentActive]}>
@@ -155,13 +382,39 @@ export default function ProfileScreen() {
                 <Text style={[styles.segmentText, tab === "closed" && styles.segmentTextActive]}>Closed</Text>
               </Pressable>
             </View>
+            </View>
           </>
         }
         renderItem={({ item }) => (
-          <View style={styles.mine} testID={`mine-item-${item.pool_id}`}>
+          <View style={[styles.mine, { marginHorizontal: SPACING.lg }]} testID={`mine-item-${item.pool_id}`}>
             <View style={{ flex: 1 }}>
               <Text style={styles.mineRoute}>{item.from_location} → {item.to_location}</Text>
               <Text style={styles.mineWhen}>{fmt(item.travel_datetime)}</Text>
+              {(item.confirmed_travelers?.length ?? 0) > 0 && (
+                <View style={styles.mineTravelersWrap}>
+                  {item.confirmed_travelers!.map((t) => {
+                    const key = `${item.pool_id}:${t.user_id}`;
+                    return (
+                      <View key={key} style={styles.mineTravelerChip} testID={`mine-traveler-${key}`}>
+                        <Ionicons name="car-sport" size={11} color={COLORS.success} />
+                        <Text style={styles.mineTravelingText}>{t.name.split(" ")[0]}</Text>
+                        <Pressable
+                          testID={`mine-remove-${key}`}
+                          onPress={() => removeTraveler(item.pool_id, t.user_id, t.name)}
+                          disabled={removingTraveler === key}
+                          hitSlop={6}
+                        >
+                          {removingTraveler === key ? (
+                            <ActivityIndicator size="small" color={COLORS.error} />
+                          ) : (
+                            <Ionicons name="close" size={12} color={COLORS.error} />
+                          )}
+                        </Pressable>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
             </View>
             {tab === "open" ? (
               <>
@@ -254,8 +507,17 @@ const styles = StyleSheet.create({
   avatarText: { color: COLORS.indigo, fontSize: 28, fontWeight: "800" },
   name: { color: "#fff", fontSize: FONT.xl, fontWeight: "800", fontFamily: FONT_DISPLAY },
   email: { color: "rgba(255,236,194,0.9)", marginTop: 4 },
+  myRatingRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8, backgroundColor: "rgba(255,236,194,0.15)", borderRadius: RADIUS.pill, paddingHorizontal: 12, paddingVertical: 5 },
+  myRatingText: { color: COLORS.cream, fontSize: 12, fontWeight: "700" },
   adminBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: COLORS.cream, borderRadius: RADIUS.pill, paddingHorizontal: 10, paddingVertical: 4, marginTop: SPACING.sm },
   adminBadgeText: { color: COLORS.indigo, fontWeight: "800", fontSize: 11 },
+  collegeCard: { backgroundColor: "#fff", marginHorizontal: SPACING.lg, marginTop: SPACING.lg, borderRadius: RADIUS.lg, padding: SPACING.lg, borderWidth: 1, borderColor: COLORS.border },
+  collegeCardHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
+  collegeCardTitle: { fontSize: FONT.base, fontWeight: "800", color: COLORS.onSurface },
+  idCardWrap: { marginHorizontal: SPACING.lg, marginTop: SPACING.lg },
+  verifySub: { fontSize: FONT.sm, color: COLORS.muted, marginBottom: SPACING.md, lineHeight: 18 },
+  verifyBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: COLORS.indigo, borderRadius: RADIUS.pill, paddingVertical: 12 },
+  verifyBtnText: { color: "#fff", fontWeight: "700", fontSize: FONT.sm },
   sectionLabel: { fontSize: FONT.sm, fontWeight: "700", color: COLORS.muted, marginTop: SPACING.lg, marginBottom: SPACING.sm, letterSpacing: 0.8, textTransform: "uppercase" },
   prefRow: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.sm },
   prefChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: RADIUS.pill, backgroundColor: "#fff", borderWidth: 1, borderColor: COLORS.border },
@@ -275,8 +537,23 @@ const styles = StyleSheet.create({
   mine: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: COLORS.border, gap: SPACING.sm },
   mineRoute: { fontSize: FONT.base, fontWeight: "700", color: COLORS.onSurface },
   mineWhen: { color: COLORS.muted, marginTop: 2, fontSize: FONT.sm },
+  mineTravelersWrap: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
+  mineTravelerChip: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(46,125,50,0.08)", borderRadius: RADIUS.pill, paddingHorizontal: 8, paddingVertical: 4 },
+  mineTravelingText: { color: COLORS.success, fontSize: 11, fontWeight: "700" },
   actionBtn: { padding: 4 },
   emptyMine: { color: COLORS.muted, padding: SPACING.md, textAlign: "center" },
+
+  reqCard: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: COLORS.saffron, gap: SPACING.sm },
+  reqName: { fontSize: FONT.base, fontWeight: "700", color: COLORS.onSurface },
+  reqRoute: { color: COLORS.onSurface, marginTop: 2, fontSize: FONT.sm, fontWeight: "600" },
+  reqWhen: { color: COLORS.muted, marginTop: 1, fontSize: FONT.sm },
+  reqBtn: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+  reqBtnAccept: { backgroundColor: COLORS.success },
+  reqBtnDecline: { backgroundColor: "#fff", borderWidth: 1, borderColor: COLORS.error },
+  blockedRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#fff", borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: COLORS.border },
+  blockedName: { fontSize: FONT.base, fontWeight: "600", color: COLORS.onSurface },
+  unblockBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.indigo },
+  unblockText: { color: COLORS.indigo, fontWeight: "700", fontSize: 12 },
 
   adminToggle: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#fff", borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.border, paddingVertical: 12, paddingHorizontal: SPACING.lg, justifyContent: "center" },
   adminToggleText: { color: COLORS.indigo, fontWeight: "700", flex: 1, textAlign: "center" },

@@ -34,6 +34,10 @@ async function req(path: string, opts: RequestInit = {}) {
 
 export const api = {
   googleSignIn: (id_token: string) => req("/auth/google", { method: "POST", body: JSON.stringify({ id_token }) }),
+  emailSignup: (email: string, password: string, name: string, username?: string, turnstileToken?: string | null) =>
+    req("/auth/signup", { method: "POST", body: JSON.stringify({ email, password, name, username, turnstile_token: turnstileToken }) }),
+  emailLogin: (identifier: string, password: string, turnstileToken?: string | null) =>
+    req("/auth/login", { method: "POST", body: JSON.stringify({ identifier, password, turnstile_token: turnstileToken }) }),
   me: () => req("/auth/me"),
   logout: () => req("/auth/logout", { method: "POST" }),
   updateProfile: (patch: any) => req("/profile", { method: "PATCH", body: JSON.stringify(patch) }),
@@ -53,6 +57,9 @@ export const api = {
     req("/messages", { method: "POST", body: JSON.stringify({ to_user_id, text, pool_id }) }),
   getThread: (otherUserId: string) => req(`/messages/thread/${otherUserId}`),
   listConversations: () => req("/messages/conversations"),
+  sendTyping: (to_user_id: string) => req("/messages/typing", { method: "POST", body: JSON.stringify({ to_user_id }) }),
+  getTyping: (otherUserId: string) => req(`/messages/typing/${otherUserId}`),
+  getPresence: (userId: string) => req(`/users/${userId}/presence`),
   getVapidKey: () => req("/push/vapid-public-key"),
   pushSubscribe: (sub: { endpoint: string; keys: any }) => req("/push/subscribe", { method: "POST", body: JSON.stringify(sub) }),
   pushUnsubscribe: (endpoint: string) => req("/push/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint }) }),
@@ -62,4 +69,21 @@ export const api = {
     req("/ratings", { method: "POST", body: JSON.stringify({ rated_user_id, stars, comment, pool_id }) }),
   getUserRatings: (userId: string) => req(`/ratings/user/${userId}`),
   canRate: (userId: string) => req(`/ratings/can-rate/${userId}`),
+  requestToJoin: (poolId: string) => req(`/pools/${poolId}/requests`, { method: "POST" }),
+  listPoolRequests: (poolId: string) => req(`/pools/${poolId}/requests`),
+  incomingRequests: () => req("/requests/incoming"),
+  myRequests: () => req("/requests/mine"),
+  acceptRequest: (requestId: string) => req(`/requests/${requestId}/accept`, { method: "PATCH" }),
+  declineRequest: (requestId: string) => req(`/requests/${requestId}/decline`, { method: "PATCH" }),
+  cancelRequest: (requestId: string) => req(`/requests/${requestId}`, { method: "DELETE" }),
+  confirmedMatches: () => req("/matches/confirmed"),
+  removeTraveler: (poolId: string, travelerUserId: string) => req(`/pools/${poolId}/travelers/${travelerUserId}`, { method: "DELETE" }),
+  getPool: (poolId: string) => req(`/pools/${poolId}`),
+  blockUser: (userId: string) => req(`/users/${userId}/block`, { method: "POST" }),
+  unblockUser: (userId: string) => req(`/users/${userId}/block`, { method: "DELETE" }),
+  listBlocked: () => req("/users/me/blocked"),
+  submitReport: (reportedUserId: string, reason: string, details?: string, poolId?: string) =>
+    req("/reports", { method: "POST", body: JSON.stringify({ reported_user_id: reportedUserId, reason, details, pool_id: poolId }) }),
+  verifyCollegeIdStart: (collegeEmail: string) => req("/profile/verify-college-id/start", { method: "POST", body: JSON.stringify({ college_email: collegeEmail }) }),
+  verifyCollegeIdConfirm: (code: string) => req("/profile/verify-college-id/confirm", { method: "POST", body: JSON.stringify({ code }) }),
 };
