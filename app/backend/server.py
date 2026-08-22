@@ -8,7 +8,7 @@ import uuid
 import re
 import secrets
 import asyncio
-from pathlib import Path
+from pathlib import Path             
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
@@ -23,7 +23,7 @@ load_dotenv(ROOT_DIR / ".env")
 
 # ---------- Config ----------
 mongo_url = os.environ["MONGO_URL"]
-client = AsyncIOMotorClient(mongo_url)
+client = AsyncIOMotorClient(mongo_url, tz_aware=True, tzinfo=timezone.utc)
 db = client[os.environ["DB_NAME"]]
 
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
@@ -78,6 +78,11 @@ BRANCH_CODES = {
     "cse": "CSE",
     "ari": "Artificial Intelligence",
     "cie": "Civil Engineering",
+    "ecm": "Electronics and Computer Engineering",
+    "ece": "Electronics and Communication Engineering",
+    "mec": "Mechatronics Engineering",
+    "mee": "Mechanical Engineering",
+    "bit": "Biotechnology",
 }
 
 
