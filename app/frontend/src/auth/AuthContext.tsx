@@ -77,8 +77,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.warn("Google sign-in failed", e);
       setSignInError(
         e?.message === "Failed to fetch" || e?.name === "TypeError"
-          ? "Couldn't reach the server. It may be waking from sleep — please try again in a few seconds."
-          : e?.message || "Google sign-in failed. Please try again."
+          ? "Couldn't reach the server. It may be waking up from sleep — please try again in a few seconds."
+          : e?.message || "Sign-in failed. Please try again."
       );
     } finally {
       setSigningIn(false);
@@ -86,12 +86,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const initGoogle = useCallback(async () => {
-    if (Platform.OS !== "web") return;
-    if (!GOOGLE_CLIENT_ID) {
-      throw new Error("Google sign-in is not configured for this deployment.");
-    }
+    if (Platform.OS !== "web" || !GOOGLE_CLIENT_ID) return;
     await loadGoogleScript();
-    if (!window.google?.accounts?.id) throw new Error("Google Sign-In could not be loaded.");
+    if (!window.google?.accounts?.id) return;
     window.google.accounts.id.initialize({
       client_id: GOOGLE_CLIENT_ID,
       callback: handleCredential,
@@ -113,9 +110,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        if (Platform.OS === "web" && GOOGLE_CLIENT_ID) await initGoogle();
+        await initGoogle();
       } catch (e) {
-        console.warn("Google sign-in initialization failed", e);
+        console.warn("Google script failed to load (ad-blocker?)", e);
       } finally {
         setLoading(false);
       }
@@ -125,39 +122,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [initGoogle, refresh]);
 
   const signIn = useCallback(async () => {
-    setSignInError(null);
     if (Platform.OS !== "web") {
-      setSignInError("Google sign-in is currently available on the web app.");
+      console.warn("Google sign-in is currently only wired up for web.");
       return;
     }
-    try {
-      await initGoogle();
+    await initGoogle();
+    if (window.google?.accounts?.id) {
       window.google.accounts.id.prompt();
-    } catch (e: any) {
-      setSignInError(e?.message || "Google sign-in is unavailable right now.");
     }
   }, [initGoogle]);
 
-  const renderGoogleButton = useCallback((containerId: string) => {
-    if (Platform.OS !== "web") return;
-    if (!GOOGLE_CLIENT_ID) {
-      setSignInError("Google sign-in needs to be configured for this deployment.");
-      return;
-    }
-    initGoogle().then(() => {
-      const el = document.getElementById(containerId);
-      if (el && window.google?.accounts?.id) {
-        el.innerHTML = "";
-        window.google.accounts.id.renderButton(el, {
-          theme: "outline",
-          size: "large",
-          width: 320,
-          text: "continue_with",
-          shape: "pill",
-        });
-      }
-    }).catch((e: any) => setSignInError(e?.message || "Google sign-in is unavailable right now."));
-  }, [initGoogle]);
+  const renderGoogleButton = useCallback(
+    (containerId: string) => {
+      if (Platform.OS !== "web") return;
+      initGoogle().then(() => {
+        const el = document.getElementById(containerId);
+        if (el && window.google?.accounts?.id) {
+          el.innerHTML = "";
+          window.google.accounts.id.renderButton(el, {
+            theme: "outline",
+            size: "large",
+            width: 280,
+          });
+        }
+      });
+    },
+    [initGoogle]
+  );
 
   const signOut = useCallback(async () => {
     try { await api.logout(); } catch {}
