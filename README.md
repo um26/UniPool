@@ -1,4 +1,4 @@
-# 🚗 UniPool
+ # 🚗 UniPool
 
 > **A campus-focused carpooling platform that helps students discover, request, coordinate, and travel together.**
 
