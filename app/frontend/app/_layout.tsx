@@ -15,6 +15,10 @@ LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
 applyPremiumFontDefaults();
 
+// Temporary visual-review mode. Keep authentication intact in the auth provider;
+// this only lets the preview navigate through the UI before the auth flow is restored.
+const PREVIEW_MODE = true;
+
 function AuthGate() {
   const { user, loading } = useAuth();
   const { colors } = useTheme();
@@ -24,8 +28,8 @@ function AuthGate() {
   useEffect(() => {
     if (loading) return;
     const inTabs = segments[0] === "(tabs)";
-    if (!user && inTabs) router.replace("/");
-    if (user && !inTabs && segments[0] !== "post-request" && segments[0] !== "games" && segments[0] !== "chat" && segments[0] !== "pool") {
+    if (!PREVIEW_MODE && !user && inTabs) router.replace("/");
+    if (!PREVIEW_MODE && user && !inTabs && segments[0] !== "post-request" && segments[0] !== "games" && segments[0] !== "chat" && segments[0] !== "pool") {
       router.replace("/(tabs)");
     }
   }, [user, loading, segments]);
@@ -33,6 +37,7 @@ function AuthGate() {
   if (loading) {
     return <AnimatedSplash />;
   }
+
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface } }}>
       <Stack.Screen name="index" />
