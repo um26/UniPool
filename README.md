@@ -3,7 +3,7 @@
 > A university carpooling platform that matches students travelling
 > on the same route within a ±1-hour window.
 
-[🌐 Live Demo](https://uni-pool-ruddy.vercel.app) //coming soon
+[🌐 Live Demo](https://uni-pool-ruddy.vercel.app)
 
 <p align="center">
   <img src="assets/banner.png" width="450">
