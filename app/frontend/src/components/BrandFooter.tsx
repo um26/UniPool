@@ -1,17 +1,19 @@
 import React from "react";
 import { View, Text, Pressable, StyleSheet, Linking } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { COLORS, SPACING, FONT } from "@/src/theme";
+import { SPACING, FONT } from "@/src/theme";
+import { useTheme } from "@/src/theme_context/ThemeContext";
 
 const INSTAGRAM_HANDLE = "binary.bots_01";
 const INSTAGRAM_URL = `https://www.instagram.com/${INSTAGRAM_HANDLE}/`;
 
 export default function BrandFooter({ light = false }: { light?: boolean }) {
-  const color = light ? "rgba(255,236,194,0.85)" : COLORS.muted;
+  const { colors } = useTheme();
+  const color = light ? "rgba(255,236,194,0.85)" : colors.muted;
   return (
     <View style={styles.row}>
       <Text style={[styles.text, { color }]}>Made with </Text>
-      <Ionicons name="heart" size={12} color={light ? COLORS.saffron : COLORS.error} />
+      <Ionicons name="heart" size={12} color={light ? colors.saffron : colors.error} />
       <Text style={[styles.text, { color }]}> by BinaryBots</Text>
       <Pressable
         testID="brand-instagram-link"

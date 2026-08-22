@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useRef } from "react";
+import React, { useCallback, useState, useRef, useMemo } from "react";
 import { View, Text, StyleSheet, Pressable, FlatList, Alert, ActivityIndicator, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -6,7 +6,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 
-import { COLORS, SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
+import { SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
+import { useTheme } from "@/src/theme_context/ThemeContext";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/auth/AuthContext";
 import BrandFooter from "@/src/components/BrandFooter";
@@ -53,6 +54,8 @@ export default function ProfileScreen() {
   const { user, signOut, refresh } = useAuth();
   const router = useRouter();
   const push = usePushNotifications();
+  const { colors, isDark, mode, setMode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [myPools, setMyPools] = useState<Pool[]>([]);
   const [gender, setGender] = useState<string>(user?.gender || "any");
   const [tab, setTab] = useState<"open" | "closed">("open");
@@ -213,12 +216,12 @@ export default function ProfileScreen() {
         contentContainerStyle={{ paddingBottom: 140 }}
         ListHeaderComponent={
           <>
-            <LinearGradient colors={[COLORS.indigo, "#3949AB"]} style={styles.header}>
+            <LinearGradient colors={[colors.indigo, "#3949AB"]} style={styles.header}>
               <View style={styles.avatar}><Text style={styles.avatarText}>{user?.name?.[0]?.toUpperCase() || "U"}</Text></View>
               <Text style={styles.name}>{user?.name}</Text>
               <Text style={styles.email}>{user?.email}</Text>
               <View style={styles.myRatingRow} testID="my-rating">
-                <Ionicons name="star" size={14} color={COLORS.saffron} />
+                <Ionicons name="star" size={14} color={colors.saffron} />
                 {myRating.average != null ? (
                   <Text style={styles.myRatingText}>{myRating.average.toFixed(1)}/10 · {myRating.count} rating{myRating.count === 1 ? "" : "s"}</Text>
                 ) : (
@@ -231,7 +234,7 @@ export default function ProfileScreen() {
                 </View>
               )}
               {user?.is_admin ? (
-                <View style={styles.adminBadge}><Ionicons name="shield-checkmark" size={12} color={COLORS.indigo} /><Text style={styles.adminBadgeText}>Admin</Text></View>
+                <View style={styles.adminBadge}><Ionicons name="shield-checkmark" size={12} color={colors.indigo} /><Text style={styles.adminBadgeText}>Admin</Text></View>
               ) : null}
             </LinearGradient>
 
@@ -257,7 +260,7 @@ export default function ProfileScreen() {
             ) : (
               <View style={styles.collegeCard} testID="college-id-verify-prompt">
                 <View style={styles.collegeCardHeader}>
-                  <Ionicons name="shield-outline" size={18} color={COLORS.muted} />
+                  <Ionicons name="shield-outline" size={18} color={colors.muted} />
                   <Text style={styles.collegeCardTitle}>Get your digital Student ID</Text>
                 </View>
                 <Text style={styles.verifySub}>
@@ -298,9 +301,9 @@ export default function ProfileScreen() {
                 style={[styles.pushToggle, push.subscribed && styles.pushToggleActive]}
               >
                 {push.busy ? (
-                  <ActivityIndicator color={push.subscribed ? "#fff" : COLORS.indigo} size="small" />
+                  <ActivityIndicator color={push.subscribed ? "#fff" : colors.indigo} size="small" />
                 ) : (
-                  <Ionicons name={push.subscribed ? "notifications" : "notifications-outline"} size={18} color={push.subscribed ? "#fff" : COLORS.indigo} />
+                  <Ionicons name={push.subscribed ? "notifications" : "notifications-outline"} size={18} color={push.subscribed ? "#fff" : colors.indigo} />
                 )}
                 <Text style={[styles.pushToggleText, push.subscribed && { color: "#fff" }]}>
                   {push.permission === "denied"
@@ -311,6 +314,29 @@ export default function ProfileScreen() {
                 </Text>
               </Pressable>
             )}
+
+            <View style={styles.themeRow}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Ionicons name={isDark ? "moon" : "sunny"} size={18} color={colors.indigo} />
+                <Text style={styles.themeLabel}>Dark mode</Text>
+              </View>
+              <View style={styles.themeSegment}>
+                {[
+                  { k: "light" as const, icon: "sunny" as const },
+                  { k: "system" as const, icon: "phone-portrait" as const },
+                  { k: "dark" as const, icon: "moon" as const },
+                ].map((opt) => (
+                  <Pressable
+                    key={opt.k}
+                    testID={`theme-${opt.k}`}
+                    onPress={() => { setMode(opt.k); Haptics.selectionAsync(); }}
+                    style={[styles.themeOption, mode === opt.k && styles.themeOptionActive]}
+                  >
+                    <Ionicons name={opt.icon} size={15} color={mode === opt.k ? "#fff" : colors.muted} />
+                  </Pressable>
+                ))}
+              </View>
+            </View>
 
             {blocked.length > 0 && (
               <>
@@ -325,7 +351,7 @@ export default function ProfileScreen() {
                       style={styles.unblockBtn}
                     >
                       {unblockingId === b.user_id ? (
-                        <ActivityIndicator size="small" color={COLORS.indigo} />
+                        <ActivityIndicator size="small" color={colors.indigo} />
                       ) : (
                         <Text style={styles.unblockText}>Unblock</Text>
                       )}
@@ -347,7 +373,7 @@ export default function ProfileScreen() {
                       <Text style={styles.reqWhen}>{fmt(r.travel_datetime)}</Text>
                     </View>
                     {respondingId === r.request_id ? (
-                      <ActivityIndicator color={COLORS.indigo} />
+                      <ActivityIndicator color={colors.indigo} />
                     ) : (
                       <View style={{ flexDirection: "row", gap: SPACING.sm }}>
                         <Pressable
@@ -356,7 +382,7 @@ export default function ProfileScreen() {
                           style={[styles.reqBtn, styles.reqBtnDecline]}
                           hitSlop={8}
                         >
-                          <Ionicons name="close" size={18} color={COLORS.error} />
+                          <Ionicons name="close" size={18} color={colors.error} />
                         </Pressable>
                         <Pressable
                           testID={`accept-${r.request_id}`}
@@ -396,7 +422,7 @@ export default function ProfileScreen() {
                     const key = `${item.pool_id}:${t.user_id}`;
                     return (
                       <View key={key} style={styles.mineTravelerChip} testID={`mine-traveler-${key}`}>
-                        <Ionicons name="car-sport" size={11} color={COLORS.success} />
+                        <Ionicons name="car-sport" size={11} color={colors.success} />
                         <Text style={styles.mineTravelingText}>{t.name.split(" ")[0]}</Text>
                         <Pressable
                           testID={`mine-remove-${key}`}
@@ -405,9 +431,9 @@ export default function ProfileScreen() {
                           hitSlop={6}
                         >
                           {removingTraveler === key ? (
-                            <ActivityIndicator size="small" color={COLORS.error} />
+                            <ActivityIndicator size="small" color={colors.error} />
                           ) : (
-                            <Ionicons name="close" size={12} color={COLORS.error} />
+                            <Ionicons name="close" size={12} color={colors.error} />
                           )}
                         </Pressable>
                       </View>
@@ -419,19 +445,19 @@ export default function ProfileScreen() {
             {tab === "open" ? (
               <>
                 <Pressable testID={`edit-${item.pool_id}`} onPress={() => router.push(`/post-request?edit=${item.pool_id}`)} style={styles.actionBtn} hitSlop={8}>
-                  <Ionicons name="pencil" size={20} color={COLORS.indigo} />
+                  <Ionicons name="pencil" size={20} color={colors.indigo} />
                 </Pressable>
                 <Pressable testID={`close-${item.pool_id}`} onPress={() => closeQuery(item.pool_id)} style={styles.actionBtn} hitSlop={8}>
-                  <Ionicons name="checkmark-circle-outline" size={20} color={COLORS.success} />
+                  <Ionicons name="checkmark-circle-outline" size={20} color={colors.success} />
                 </Pressable>
               </>
             ) : (
               <Pressable testID={`reopen-${item.pool_id}`} onPress={() => reopenQuery(item.pool_id)} style={styles.actionBtn} hitSlop={8}>
-                <Ionicons name="refresh" size={20} color={COLORS.indigo} />
+                <Ionicons name="refresh" size={20} color={colors.indigo} />
               </Pressable>
             )}
             <Pressable testID={`delete-${item.pool_id}`} onPress={() => remove(item.pool_id)} hitSlop={8} style={styles.actionBtn}>
-              <Ionicons name="trash" size={20} color={COLORS.error} />
+              <Ionicons name="trash" size={20} color={colors.error} />
             </Pressable>
           </View>
         )}
@@ -445,21 +471,21 @@ export default function ProfileScreen() {
             {user?.is_admin ? (
               <View style={{ marginTop: SPACING.xl }}>
                 <Pressable testID="admin-panel-toggle" onPress={toggleAdmin} style={styles.adminToggle}>
-                  <Ionicons name="shield" size={16} color={COLORS.indigo} />
+                  <Ionicons name="shield" size={16} color={colors.indigo} />
                   <Text style={styles.adminToggleText}>Admin panel</Text>
-                  <Ionicons name={adminOpen ? "chevron-up" : "chevron-down"} size={16} color={COLORS.indigo} />
+                  <Ionicons name={adminOpen ? "chevron-up" : "chevron-down"} size={16} color={colors.indigo} />
                 </Pressable>
                 {adminOpen && (
                   <View style={styles.adminPanel}>
                     {adminLoading ? (
-                      <ActivityIndicator color={COLORS.indigo} />
+                      <ActivityIndicator color={colors.indigo} />
                     ) : (
                       <>
                         {adminStats && (
                           <View style={styles.statsRow}>
-                            <Stat label="Users" value={adminStats.total_users} />
-                            <Stat label="Open" value={adminStats.open_pools} />
-                            <Stat label="Closed" value={adminStats.closed_pools} />
+                            <Stat label="Users" value={adminStats.total_users} styles={styles} />
+                            <Stat label="Open" value={adminStats.open_pools} styles={styles} />
+                            <Stat label="Closed" value={adminStats.closed_pools} styles={styles} />
                           </View>
                         )}
                         {adminPools.map((p) => (
@@ -469,7 +495,7 @@ export default function ProfileScreen() {
                               <Text style={styles.adminMeta}>{p.user_name} · {p.user_email} · {p.status ?? "open"}</Text>
                             </View>
                             <Pressable testID={`admin-delete-${p.pool_id}`} onPress={() => adminRemove(p.pool_id)} hitSlop={8}>
-                              <Ionicons name="trash" size={18} color={COLORS.error} />
+                              <Ionicons name="trash" size={18} color={colors.error} />
                             </Pressable>
                           </View>
                         ))}
@@ -480,7 +506,7 @@ export default function ProfileScreen() {
               </View>
             ) : null}
             <Pressable testID="logout-button" onPress={signOut} style={styles.logout}>
-              <Ionicons name="log-out-outline" size={18} color={COLORS.error} />
+              <Ionicons name="log-out-outline" size={18} color={colors.error} />
               <Text style={styles.logoutText}>Sign out</Text>
             </Pressable>
             <BrandFooter />
@@ -491,7 +517,7 @@ export default function ProfileScreen() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({ label, value, styles }: { label: string; value: number; styles: any }) {
   return (
     <View style={styles.statBox}>
       <Text style={styles.statValue}>{value}</Text>
@@ -500,72 +526,77 @@ function Stat({ label, value }: { label: string; value: number }) {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: COLORS.surface },
+const makeStyles = (colors: any) => StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.surface },
   header: { alignItems: "center", paddingVertical: SPACING.xl, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
-  avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: COLORS.cream, alignItems: "center", justifyContent: "center", marginBottom: SPACING.md },
-  avatarText: { color: COLORS.indigo, fontSize: 28, fontWeight: "800" },
+  avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.cream, alignItems: "center", justifyContent: "center", marginBottom: SPACING.md },
+  avatarText: { color: colors.indigo, fontSize: 28, fontWeight: "800" },
   name: { color: "#fff", fontSize: FONT.xl, fontWeight: "800", fontFamily: FONT_DISPLAY },
   email: { color: "rgba(255,236,194,0.9)", marginTop: 4 },
   myRatingRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8, backgroundColor: "rgba(255,236,194,0.15)", borderRadius: RADIUS.pill, paddingHorizontal: 12, paddingVertical: 5 },
-  myRatingText: { color: COLORS.cream, fontSize: 12, fontWeight: "700" },
-  adminBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: COLORS.cream, borderRadius: RADIUS.pill, paddingHorizontal: 10, paddingVertical: 4, marginTop: SPACING.sm },
-  adminBadgeText: { color: COLORS.indigo, fontWeight: "800", fontSize: 11 },
-  collegeCard: { backgroundColor: "#fff", marginHorizontal: SPACING.lg, marginTop: SPACING.lg, borderRadius: RADIUS.lg, padding: SPACING.lg, borderWidth: 1, borderColor: COLORS.border },
+  myRatingText: { color: colors.cream, fontSize: 12, fontWeight: "700" },
+  adminBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.cream, borderRadius: RADIUS.pill, paddingHorizontal: 10, paddingVertical: 4, marginTop: SPACING.sm },
+  adminBadgeText: { color: colors.indigo, fontWeight: "800", fontSize: 11 },
+  collegeCard: { backgroundColor: "#fff", marginHorizontal: SPACING.lg, marginTop: SPACING.lg, borderRadius: RADIUS.lg, padding: SPACING.lg, borderWidth: 1, borderColor: colors.border },
   collegeCardHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
-  collegeCardTitle: { fontSize: FONT.base, fontWeight: "800", color: COLORS.onSurface },
+  collegeCardTitle: { fontSize: FONT.base, fontWeight: "800", color: colors.onSurface },
   idCardWrap: { marginHorizontal: SPACING.lg, marginTop: SPACING.lg },
-  verifySub: { fontSize: FONT.sm, color: COLORS.muted, marginBottom: SPACING.md, lineHeight: 18 },
-  verifyBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: COLORS.indigo, borderRadius: RADIUS.pill, paddingVertical: 12 },
+  verifySub: { fontSize: FONT.sm, color: colors.muted, marginBottom: SPACING.md, lineHeight: 18 },
+  verifyBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.indigo, borderRadius: RADIUS.pill, paddingVertical: 12 },
   verifyBtnText: { color: "#fff", fontWeight: "700", fontSize: FONT.sm },
-  sectionLabel: { fontSize: FONT.sm, fontWeight: "700", color: COLORS.muted, marginTop: SPACING.lg, marginBottom: SPACING.sm, letterSpacing: 0.8, textTransform: "uppercase" },
+  sectionLabel: { fontSize: FONT.sm, fontWeight: "700", color: colors.muted, marginTop: SPACING.lg, marginBottom: SPACING.sm, letterSpacing: 0.8, textTransform: "uppercase" },
   prefRow: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.sm },
-  prefChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: RADIUS.pill, backgroundColor: "#fff", borderWidth: 1, borderColor: COLORS.border },
-  prefChipActive: { backgroundColor: COLORS.indigo, borderColor: COLORS.indigo },
-  prefText: { color: COLORS.onSurface, fontWeight: "600", fontSize: 13 },
+  prefChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: RADIUS.pill, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border },
+  prefChipActive: { backgroundColor: colors.indigo, borderColor: colors.indigo },
+  prefText: { color: colors.onSurface, fontWeight: "600", fontSize: 13 },
 
-  pushToggle: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: SPACING.md, backgroundColor: "#fff", borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.indigo, paddingVertical: 12 },
-  pushToggleActive: { backgroundColor: COLORS.indigo },
-  pushToggleText: { color: COLORS.indigo, fontWeight: "700", fontSize: 13 },
+  pushToggle: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: SPACING.md, backgroundColor: "#fff", borderRadius: RADIUS.pill, borderWidth: 1, borderColor: colors.indigo, paddingVertical: 12 },
+  pushToggleActive: { backgroundColor: colors.indigo },
+  pushToggleText: { color: colors.indigo, fontWeight: "700", fontSize: 13 },
+  themeRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: SPACING.md, backgroundColor: colors.card, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: colors.border, paddingVertical: 10, paddingHorizontal: 14 },
+  themeLabel: { color: colors.onSurface, fontWeight: "700", fontSize: 13 },
+  themeSegment: { flexDirection: "row", gap: 4, backgroundColor: colors.surface2, borderRadius: RADIUS.pill, padding: 3 },
+  themeOption: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  themeOptionActive: { backgroundColor: colors.indigo },
 
   segmentRow: { flexDirection: "row", gap: SPACING.sm, marginBottom: SPACING.sm },
-  segment: { flex: 1, paddingVertical: 10, borderRadius: RADIUS.pill, alignItems: "center", backgroundColor: "#fff", borderWidth: 1, borderColor: COLORS.border },
-  segmentActive: { backgroundColor: COLORS.indigo, borderColor: COLORS.indigo },
-  segmentText: { fontWeight: "700", color: COLORS.onSurface },
+  segment: { flex: 1, paddingVertical: 10, borderRadius: RADIUS.pill, alignItems: "center", backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border },
+  segmentActive: { backgroundColor: colors.indigo, borderColor: colors.indigo },
+  segmentText: { fontWeight: "700", color: colors.onSurface },
   segmentTextActive: { color: "#fff" },
 
-  mine: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: COLORS.border, gap: SPACING.sm },
-  mineRoute: { fontSize: FONT.base, fontWeight: "700", color: COLORS.onSurface },
-  mineWhen: { color: COLORS.muted, marginTop: 2, fontSize: FONT.sm },
+  mine: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: colors.border, gap: SPACING.sm },
+  mineRoute: { fontSize: FONT.base, fontWeight: "700", color: colors.onSurface },
+  mineWhen: { color: colors.muted, marginTop: 2, fontSize: FONT.sm },
   mineTravelersWrap: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
   mineTravelerChip: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(46,125,50,0.08)", borderRadius: RADIUS.pill, paddingHorizontal: 8, paddingVertical: 4 },
-  mineTravelingText: { color: COLORS.success, fontSize: 11, fontWeight: "700" },
+  mineTravelingText: { color: colors.success, fontSize: 11, fontWeight: "700" },
   actionBtn: { padding: 4 },
-  emptyMine: { color: COLORS.muted, padding: SPACING.md, textAlign: "center" },
+  emptyMine: { color: colors.muted, padding: SPACING.md, textAlign: "center" },
 
-  reqCard: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: COLORS.saffron, gap: SPACING.sm },
-  reqName: { fontSize: FONT.base, fontWeight: "700", color: COLORS.onSurface },
-  reqRoute: { color: COLORS.onSurface, marginTop: 2, fontSize: FONT.sm, fontWeight: "600" },
-  reqWhen: { color: COLORS.muted, marginTop: 1, fontSize: FONT.sm },
+  reqCard: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: colors.saffron, gap: SPACING.sm },
+  reqName: { fontSize: FONT.base, fontWeight: "700", color: colors.onSurface },
+  reqRoute: { color: colors.onSurface, marginTop: 2, fontSize: FONT.sm, fontWeight: "600" },
+  reqWhen: { color: colors.muted, marginTop: 1, fontSize: FONT.sm },
   reqBtn: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
-  reqBtnAccept: { backgroundColor: COLORS.success },
-  reqBtnDecline: { backgroundColor: "#fff", borderWidth: 1, borderColor: COLORS.error },
-  blockedRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#fff", borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: COLORS.border },
-  blockedName: { fontSize: FONT.base, fontWeight: "600", color: COLORS.onSurface },
-  unblockBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.indigo },
-  unblockText: { color: COLORS.indigo, fontWeight: "700", fontSize: 12 },
+  reqBtnAccept: { backgroundColor: colors.success },
+  reqBtnDecline: { backgroundColor: "#fff", borderWidth: 1, borderColor: colors.error },
+  blockedRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#fff", borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: colors.border },
+  blockedName: { fontSize: FONT.base, fontWeight: "600", color: colors.onSurface },
+  unblockBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: colors.indigo },
+  unblockText: { color: colors.indigo, fontWeight: "700", fontSize: 12 },
 
-  adminToggle: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#fff", borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.border, paddingVertical: 12, paddingHorizontal: SPACING.lg, justifyContent: "center" },
-  adminToggleText: { color: COLORS.indigo, fontWeight: "700", flex: 1, textAlign: "center" },
-  adminPanel: { marginTop: SPACING.sm, backgroundColor: "#fff", borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, padding: SPACING.md },
+  adminToggle: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#fff", borderRadius: RADIUS.pill, borderWidth: 1, borderColor: colors.border, paddingVertical: 12, paddingHorizontal: SPACING.lg, justifyContent: "center" },
+  adminToggleText: { color: colors.indigo, fontWeight: "700", flex: 1, textAlign: "center" },
+  adminPanel: { marginTop: SPACING.sm, backgroundColor: "#fff", borderRadius: RADIUS.md, borderWidth: 1, borderColor: colors.border, padding: SPACING.md },
   statsRow: { flexDirection: "row", gap: SPACING.sm, marginBottom: SPACING.md },
-  statBox: { flex: 1, alignItems: "center", backgroundColor: COLORS.surface2, borderRadius: RADIUS.md, paddingVertical: SPACING.sm },
-  statValue: { fontSize: FONT.xl, fontWeight: "800", color: COLORS.indigo },
-  statLabel: { fontSize: FONT.sm, color: COLORS.muted, marginTop: 2 },
-  adminRow: { flexDirection: "row", alignItems: "center", paddingVertical: SPACING.sm, borderTopWidth: 1, borderTopColor: COLORS.border },
-  adminRoute: { fontWeight: "700", color: COLORS.onSurface },
-  adminMeta: { color: COLORS.muted, fontSize: FONT.sm, marginTop: 2 },
+  statBox: { flex: 1, alignItems: "center", backgroundColor: colors.surface2, borderRadius: RADIUS.md, paddingVertical: SPACING.sm },
+  statValue: { fontSize: FONT.xl, fontWeight: "800", color: colors.indigo },
+  statLabel: { fontSize: FONT.sm, color: colors.muted, marginTop: 2 },
+  adminRow: { flexDirection: "row", alignItems: "center", paddingVertical: SPACING.sm, borderTopWidth: 1, borderTopColor: colors.border },
+  adminRoute: { fontWeight: "700", color: colors.onSurface },
+  adminMeta: { color: colors.muted, fontSize: FONT.sm, marginTop: 2 },
 
-  logout: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: SPACING.xl, paddingVertical: 14, borderRadius: RADIUS.pill, backgroundColor: "#fff", borderWidth: 1, borderColor: COLORS.error },
-  logoutText: { color: COLORS.error, fontWeight: "700" },
+  logout: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: SPACING.xl, paddingVertical: 14, borderRadius: RADIUS.pill, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.error },
+  logoutText: { color: colors.error, fontWeight: "700" },
 });

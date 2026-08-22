@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { View, Text, StyleSheet, Modal, Pressable, ActivityIndicator, FlatList } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import { COLORS, SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
+import { SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
+import { useTheme } from "@/src/theme_context/ThemeContext";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/auth/AuthContext";
 
@@ -23,6 +24,8 @@ export default function LeaderboardModal({
   gameLabel: string;
   unit?: string;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { user } = useAuth();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [myBest, setMyBest] = useState<number | null>(null);
@@ -47,11 +50,11 @@ export default function LeaderboardModal({
         <View style={styles.sheet}>
           <View style={styles.header}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.sm }}>
-              <Ionicons name="trophy" size={22} color={COLORS.saffron} />
+              <Ionicons name="trophy" size={22} color={colors.saffron} />
               <Text style={styles.title}>{gameLabel}</Text>
             </View>
             <Pressable testID="leaderboard-close" onPress={onClose} hitSlop={12}>
-              <Ionicons name="close" size={24} color={COLORS.onSurface} />
+              <Ionicons name="close" size={24} color={colors.onSurface} />
             </Pressable>
           </View>
 
@@ -62,7 +65,7 @@ export default function LeaderboardModal({
           )}
 
           {loading ? (
-            <View style={styles.center}><ActivityIndicator color={COLORS.indigo} /></View>
+            <View style={styles.center}><ActivityIndicator color={colors.indigo} /></View>
           ) : (
             <FlatList
               data={entries}
@@ -90,19 +93,19 @@ export default function LeaderboardModal({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: any) => StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(20,20,25,0.6)", justifyContent: "flex-end" },
-  sheet: { backgroundColor: COLORS.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: "75%", paddingBottom: SPACING.xl },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: SPACING.lg, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  title: { fontSize: FONT.xl, fontWeight: "800", color: COLORS.onSurface, fontFamily: FONT_DISPLAY },
-  myBestPill: { alignSelf: "center", backgroundColor: COLORS.cream, borderRadius: RADIUS.pill, paddingHorizontal: 14, paddingVertical: 6, marginTop: SPACING.md },
-  myBestText: { color: COLORS.onCream, fontWeight: "700", fontSize: FONT.sm },
+  sheet: { backgroundColor: colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: "75%", paddingBottom: SPACING.xl },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: SPACING.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
+  title: { fontSize: FONT.xl, fontWeight: "800", color: colors.onSurface, fontFamily: FONT_DISPLAY },
+  myBestPill: { alignSelf: "center", backgroundColor: colors.cream, borderRadius: RADIUS.pill, paddingHorizontal: 14, paddingVertical: 6, marginTop: SPACING.md },
+  myBestText: { color: colors.onCream, fontWeight: "700", fontSize: FONT.sm },
   center: { paddingVertical: 60, alignItems: "center" },
-  empty: { textAlign: "center", color: COLORS.muted, paddingVertical: 40 },
+  empty: { textAlign: "center", color: colors.muted, paddingVertical: 40 },
   row: { flexDirection: "row", alignItems: "center", gap: SPACING.md, paddingHorizontal: SPACING.lg, paddingVertical: 10 },
   rowMe: { backgroundColor: "rgba(255,153,51,0.1)" },
-  rankBadge: { width: 28, height: 28, borderRadius: 14, backgroundColor: COLORS.surface2, alignItems: "center", justifyContent: "center" },
-  rankText: { fontWeight: "800", color: COLORS.muted, fontSize: FONT.sm },
-  name: { flex: 1, color: COLORS.onSurface, fontWeight: "600", fontSize: FONT.base },
-  score: { color: COLORS.indigo, fontWeight: "800", fontSize: FONT.base },
+  rankBadge: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center" },
+  rankText: { fontWeight: "800", color: colors.muted, fontSize: FONT.sm },
+  name: { flex: 1, color: colors.onSurface, fontWeight: "600", fontSize: FONT.base },
+  score: { color: colors.indigo, fontWeight: "800", fontSize: FONT.base },
 });

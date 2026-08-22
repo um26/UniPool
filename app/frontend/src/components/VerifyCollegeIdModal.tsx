@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { View, Text, StyleSheet, Modal, Pressable, TextInput, ActivityIndicator, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 
-import { COLORS, SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
+import { SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
+import { useTheme } from "@/src/theme_context/ThemeContext";
 import { api } from "@/src/api/client";
 
 export default function VerifyCollegeIdModal({
@@ -13,6 +14,8 @@ export default function VerifyCollegeIdModal({
   onClose: () => void;
   onVerified: () => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [step, setStep] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -55,10 +58,10 @@ export default function VerifyCollegeIdModal({
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <Pressable testID="verify-modal-close" onPress={() => { reset(); onClose(); }} style={styles.closeBtn} hitSlop={12}>
-            <Ionicons name="close" size={22} color={COLORS.onSurface} />
+            <Ionicons name="close" size={22} color={colors.onSurface} />
           </Pressable>
 
-          <Ionicons name="shield-checkmark-outline" size={44} color={COLORS.indigo} />
+          <Ionicons name="shield-checkmark-outline" size={44} color={colors.indigo} />
 
           {step === "email" ? (
             <>
@@ -71,7 +74,7 @@ export default function VerifyCollegeIdModal({
                 value={email}
                 onChangeText={setEmail}
                 placeholder="se22ucam015@mahindrauniversity.edu.in"
-                placeholderTextColor={COLORS.muted}
+                placeholderTextColor={colors.muted}
                 style={styles.input}
                 autoCapitalize="none"
                 keyboardType="email-address"
@@ -90,7 +93,7 @@ export default function VerifyCollegeIdModal({
                 value={code}
                 onChangeText={(t) => setCode(t.replace(/[^0-9]/g, "").slice(0, 6))}
                 placeholder="000000"
-                placeholderTextColor={COLORS.muted}
+                placeholderTextColor={colors.muted}
                 style={[styles.input, styles.codeInput]}
                 keyboardType="number-pad"
                 autoFocus
@@ -109,15 +112,15 @@ export default function VerifyCollegeIdModal({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: any) => StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(20,20,25,0.6)", alignItems: "center", justifyContent: "center", padding: SPACING.xl },
   card: { backgroundColor: "#fff", borderRadius: RADIUS.lg, padding: SPACING.xl, width: "100%", maxWidth: 400, alignItems: "center" },
   closeBtn: { position: "absolute", top: SPACING.md, right: SPACING.md },
-  title: { fontSize: FONT.xl, fontWeight: "800", color: COLORS.onSurface, marginTop: SPACING.sm, fontFamily: FONT_DISPLAY },
-  sub: { color: COLORS.muted, textAlign: "center", marginTop: 6, marginBottom: SPACING.lg, lineHeight: 19 },
-  input: { alignSelf: "stretch", backgroundColor: COLORS.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 14, paddingVertical: 12, color: COLORS.onSurface, marginBottom: SPACING.lg, fontSize: FONT.base },
+  title: { fontSize: FONT.xl, fontWeight: "800", color: colors.onSurface, marginTop: SPACING.sm, fontFamily: FONT_DISPLAY },
+  sub: { color: colors.muted, textAlign: "center", marginTop: 6, marginBottom: SPACING.lg, lineHeight: 19 },
+  input: { alignSelf: "stretch", backgroundColor: colors.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14, paddingVertical: 12, color: colors.onSurface, marginBottom: SPACING.lg, fontSize: FONT.base },
   codeInput: { textAlign: "center", fontSize: 22, fontWeight: "800", letterSpacing: 8 },
-  submitBtn: { alignSelf: "stretch", backgroundColor: COLORS.indigo, borderRadius: RADIUS.pill, paddingVertical: 14, alignItems: "center" },
+  submitBtn: { alignSelf: "stretch", backgroundColor: colors.indigo, borderRadius: RADIUS.pill, paddingVertical: 14, alignItems: "center" },
   submitText: { color: "#fff", fontWeight: "800", fontSize: FONT.lg },
-  fallbackLink: { color: COLORS.muted, fontSize: FONT.sm, textDecorationLine: "underline" },
+  fallbackLink: { color: colors.muted, fontSize: FONT.sm, textDecorationLine: "underline" },
 });

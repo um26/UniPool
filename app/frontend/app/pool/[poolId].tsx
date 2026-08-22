@@ -1,11 +1,12 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useState, useMemo } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert, Platform, Share as RNShare } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
 
-import { COLORS, SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
+import { SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
+import { useTheme } from "@/src/theme_context/ThemeContext";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/auth/AuthContext";
 import RatingBadge from "@/src/components/RatingBadge";
@@ -35,6 +36,8 @@ export default function PoolDetailScreen() {
   const { poolId } = useLocalSearchParams<{ poolId: string }>();
   const router = useRouter();
   const { user } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [pool, setPool] = useState<Pool | null>(null);
   const [loading, setLoading] = useState(true);
   const [requesting, setRequesting] = useState(false);
@@ -79,7 +82,7 @@ export default function PoolDetailScreen() {
     return (
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-          <ActivityIndicator color={COLORS.indigo} />
+          <ActivityIndicator color={colors.indigo} />
         </View>
       </SafeAreaView>
     );
@@ -92,16 +95,16 @@ export default function PoolDetailScreen() {
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
         <Pressable testID="back-btn" onPress={() => router.back()} hitSlop={10}>
-          <Ionicons name="arrow-back" size={24} color={COLORS.onSurface} />
+          <Ionicons name="arrow-back" size={24} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.headerTitle}>Pool Details</Text>
         <View style={{ flexDirection: "row", gap: SPACING.md }}>
           <Pressable testID="share-btn" onPress={share} hitSlop={10}>
-            <Ionicons name="share-outline" size={22} color={COLORS.onSurface} />
+            <Ionicons name="share-outline" size={22} color={colors.onSurface} />
           </Pressable>
           {!mine && (
             <Pressable testID="detail-more-btn" onPress={() => setShowReport(true)} hitSlop={10}>
-              <Ionicons name="ellipsis-vertical" size={22} color={COLORS.onSurface} />
+              <Ionicons name="ellipsis-vertical" size={22} color={colors.onSurface} />
             </Pressable>
           )}
         </View>
@@ -109,7 +112,7 @@ export default function PoolDetailScreen() {
 
       <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 140 }}>
         <View style={styles.ownerRow}>
-          <View style={styles.avatar}><Text style={{ color: COLORS.indigo, fontWeight: "800", fontSize: 18 }}>{pool.user_name?.[0]?.toUpperCase() || "U"}</Text></View>
+          <View style={styles.avatar}><Text style={{ color: colors.indigo, fontWeight: "800", fontSize: 18 }}>{pool.user_name?.[0]?.toUpperCase() || "U"}</Text></View>
           <View style={{ flex: 1 }}>
             <Text style={styles.ownerName}>{pool.user_name}{mine ? "  (you)" : ""}</Text>
             <RatingBadge avg={pool.user_rating_avg} count={pool.user_rating_count} />
@@ -130,11 +133,11 @@ export default function PoolDetailScreen() {
         </View>
 
         <View style={styles.card}>
-          <Row icon="location" iconColor={COLORS.saffron} label="Pickup" value={pool.from_location} />
-          <Row icon="flag" iconColor={COLORS.indigo} label="Drop" value={pool.to_location} />
-          <Row icon="time" iconColor={COLORS.muted} label="Departs" value={fmtWhen(pool.travel_datetime)} />
-          <Row icon="people" iconColor={COLORS.muted} label="Companions" value={`+${pool.companions} already with them`} />
-          {pool.luggage ? <Row icon="briefcase" iconColor={COLORS.muted} label="Luggage" value={pool.luggage} /> : null}
+          <Row icon="location" iconColor={colors.saffron} label="Pickup" value={pool.from_location} styles={styles} />
+          <Row icon="flag" iconColor={colors.indigo} label="Drop" value={pool.to_location} styles={styles} />
+          <Row icon="time" iconColor={colors.muted} label="Departs" value={fmtWhen(pool.travel_datetime)} styles={styles} />
+          <Row icon="people" iconColor={colors.muted} label="Companions" value={`+${pool.companions} already with them`} styles={styles} />
+          {pool.luggage ? <Row icon="briefcase" iconColor={colors.muted} label="Luggage" value={pool.luggage} styles={styles} /> : null}
         </View>
 
         {pool.notes ? (
@@ -149,7 +152,7 @@ export default function PoolDetailScreen() {
             <Text style={styles.notesLabel}>Traveling Together ({travelers.length})</Text>
             {travelers.map((t) => (
               <View key={t.user_id} style={styles.travelerRow}>
-                <Ionicons name="car-sport" size={16} color={COLORS.success} />
+                <Ionicons name="car-sport" size={16} color={colors.success} />
                 <Text style={styles.travelerName}>{t.name}</Text>
               </View>
             ))}
@@ -164,21 +167,21 @@ export default function PoolDetailScreen() {
             onPress={() => router.push({ pathname: "/chat/[userId]", params: { userId: pool.user_id, name: pool.user_name } })}
             style={styles.messageBtn}
           >
-            <Ionicons name="chatbubble" size={18} color={COLORS.indigo} />
+            <Ionicons name="chatbubble" size={18} color={colors.indigo} />
           </Pressable>
 
           {pool.my_request_status === "accepted" ? (
-            <View style={[styles.requestBtn, { backgroundColor: COLORS.success }]}>
+            <View style={[styles.requestBtn, { backgroundColor: colors.success }]}>
               <Ionicons name="checkmark-circle" size={18} color="#fff" />
               <Text style={styles.requestBtnText}>Confirmed for this ride</Text>
             </View>
           ) : pool.my_request_status === "pending" ? (
-            <View style={[styles.requestBtn, { backgroundColor: COLORS.cream }]}>
-              <Ionicons name="time-outline" size={18} color={COLORS.indigo} />
-              <Text style={[styles.requestBtnText, { color: COLORS.indigo }]}>Request sent</Text>
+            <View style={[styles.requestBtn, { backgroundColor: colors.cream }]}>
+              <Ionicons name="time-outline" size={18} color={colors.indigo} />
+              <Text style={[styles.requestBtnText, { color: colors.indigo }]}>Request sent</Text>
             </View>
           ) : (
-            <Pressable testID="detail-request-btn" onPress={sendRequest} disabled={requesting} style={[styles.requestBtn, { backgroundColor: COLORS.indigo }, requesting && { opacity: 0.6 }]}>
+            <Pressable testID="detail-request-btn" onPress={sendRequest} disabled={requesting} style={[styles.requestBtn, { backgroundColor: colors.indigo }, requesting && { opacity: 0.6 }]}>
               {requesting ? <ActivityIndicator color="#fff" /> : (
                 <>
                   <Ionicons name="hand-left-outline" size={18} color="#fff" />
@@ -202,7 +205,7 @@ export default function PoolDetailScreen() {
   );
 }
 
-function Row({ icon, iconColor, label, value }: { icon: any; iconColor: string; label: string; value: string }) {
+function Row({ icon, iconColor, label, value, styles }: { icon: any; iconColor: string; label: string; value: string; styles: any }) {
   return (
     <View style={styles.row}>
       <Ionicons name={icon} size={18} color={iconColor} />
@@ -214,29 +217,29 @@ function Row({ icon, iconColor, label, value }: { icon: any; iconColor: string; 
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: COLORS.surface },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border, backgroundColor: "#fff" },
-  headerTitle: { fontSize: FONT.lg, fontWeight: "800", color: COLORS.onSurface },
+const makeStyles = (colors: any) => StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.surface },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.card },
+  headerTitle: { fontSize: FONT.lg, fontWeight: "800", color: colors.onSurface },
   ownerRow: { flexDirection: "row", alignItems: "center", gap: SPACING.md, marginBottom: SPACING.lg },
-  ownerRoll: { fontSize: 11, color: COLORS.muted, fontWeight: "600", marginTop: 4 },
-  avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: COLORS.cream, alignItems: "center", justifyContent: "center" },
-  ownerName: { fontSize: FONT.lg, fontWeight: "800", color: COLORS.onSurface, marginBottom: 2, fontFamily: FONT_DISPLAY },
-  badge: { backgroundColor: COLORS.indigo, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.pill },
+  ownerRoll: { fontSize: 11, color: colors.muted, fontWeight: "600", marginTop: 4 },
+  avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.cream, alignItems: "center", justifyContent: "center" },
+  ownerName: { fontSize: FONT.lg, fontWeight: "800", color: colors.onSurface, marginBottom: 2, fontFamily: FONT_DISPLAY },
+  badge: { backgroundColor: colors.indigo, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.pill },
   badgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
-  mapWrap: { height: 220, borderRadius: RADIUS.lg, overflow: "hidden", marginBottom: SPACING.lg, borderWidth: 1, borderColor: COLORS.border },
-  card: { backgroundColor: "#fff", borderRadius: RADIUS.lg, padding: SPACING.lg, borderWidth: 1, borderColor: COLORS.border, gap: SPACING.md, marginBottom: SPACING.lg },
+  mapWrap: { height: 220, borderRadius: RADIUS.lg, overflow: "hidden", marginBottom: SPACING.lg, borderWidth: 1, borderColor: colors.border },
+  card: { backgroundColor: colors.card, borderRadius: RADIUS.lg, padding: SPACING.lg, borderWidth: 1, borderColor: colors.border, gap: SPACING.md, marginBottom: SPACING.lg },
   row: { flexDirection: "row", alignItems: "flex-start", gap: SPACING.md },
-  rowLabel: { fontSize: 11, fontWeight: "700", color: COLORS.muted, textTransform: "uppercase", letterSpacing: 0.5 },
-  rowValue: { fontSize: FONT.base, fontWeight: "600", color: COLORS.onSurface, marginTop: 2 },
-  notesCard: { backgroundColor: "#fff", borderRadius: RADIUS.lg, padding: SPACING.lg, borderWidth: 1, borderColor: COLORS.border, marginBottom: SPACING.lg },
-  notesLabel: { fontSize: 11, fontWeight: "700", color: COLORS.muted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 },
-  notesText: { color: COLORS.onSurface, fontStyle: "italic" },
-  travelersCard: { backgroundColor: "#fff", borderRadius: RADIUS.lg, padding: SPACING.lg, borderWidth: 1, borderColor: COLORS.success, marginBottom: SPACING.lg },
+  rowLabel: { fontSize: 11, fontWeight: "700", color: colors.muted, textTransform: "uppercase", letterSpacing: 0.5 },
+  rowValue: { fontSize: FONT.base, fontWeight: "600", color: colors.onSurface, marginTop: 2 },
+  notesCard: { backgroundColor: colors.card, borderRadius: RADIUS.lg, padding: SPACING.lg, borderWidth: 1, borderColor: colors.border, marginBottom: SPACING.lg },
+  notesLabel: { fontSize: 11, fontWeight: "700", color: colors.muted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 },
+  notesText: { color: colors.onSurface, fontStyle: "italic" },
+  travelersCard: { backgroundColor: colors.card, borderRadius: RADIUS.lg, padding: SPACING.lg, borderWidth: 1, borderColor: colors.success, marginBottom: SPACING.lg },
   travelerRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 },
-  travelerName: { color: COLORS.onSurface, fontWeight: "600" },
-  footer: { flexDirection: "row", gap: SPACING.md, padding: SPACING.lg, borderTopWidth: 1, borderTopColor: COLORS.border, backgroundColor: COLORS.surface },
-  messageBtn: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: COLORS.indigo, backgroundColor: "#fff" },
+  travelerName: { color: colors.onSurface, fontWeight: "600" },
+  footer: { flexDirection: "row", gap: SPACING.md, padding: SPACING.lg, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface },
+  messageBtn: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.indigo, backgroundColor: colors.card },
   requestBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: RADIUS.pill, paddingVertical: 14 },
   requestBtnText: { color: "#fff", fontWeight: "800", fontSize: FONT.base },
 });

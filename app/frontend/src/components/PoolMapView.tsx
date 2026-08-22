@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { View, Text, StyleSheet, Platform, ActivityIndicator } from "react-native";
-import { COLORS, SPACING, RADIUS, FONT } from "@/src/theme";
+import { SPACING, RADIUS, FONT } from "@/src/theme";
+import { useTheme } from "@/src/theme_context/ThemeContext";
 
 type Pool = {
   pool_id: string;
@@ -62,6 +63,8 @@ async function geocode(place: string): Promise<{ lat: number; lng: number } | nu
 }
 
 export default function PoolMapView({ pools }: { pools: Pool[] }) {
+  const { colors } = useTheme();
+  const styles = React.useMemo(() => makeStyles(colors), [colors]);
   const mapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -151,7 +154,7 @@ export default function PoolMapView({ pools }: { pools: Pool[] }) {
       <View nativeID="pool-map-container" style={{ flex: 1 }} />
       {status === "loading" && (
         <View style={styles.overlay} pointerEvents="none">
-          <ActivityIndicator color={COLORS.indigo} />
+          <ActivityIndicator color={colors.indigo} />
           <Text style={styles.overlayText}>Locating {resolvedCount}/{Math.min(pools.length, 15)} routes…</Text>
         </View>
       )}
@@ -169,14 +172,14 @@ export default function PoolMapView({ pools }: { pools: Pool[] }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: any) => StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: SPACING.xl },
-  msg: { color: COLORS.muted, textAlign: "center" },
+  msg: { color: colors.muted, textAlign: "center" },
   overlay: {
     position: "absolute", top: SPACING.md, alignSelf: "center",
     backgroundColor: "#fff", borderRadius: RADIUS.pill, paddingHorizontal: 16, paddingVertical: 8,
     flexDirection: "row", alignItems: "center", gap: SPACING.sm,
     shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4,
   },
-  overlayText: { fontSize: FONT.sm, color: COLORS.muted, fontWeight: "600" },
+  overlayText: { fontSize: FONT.sm, color: colors.muted, fontWeight: "600" },
 });

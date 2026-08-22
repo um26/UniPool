@@ -3,16 +3,18 @@ import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { View, StyleSheet, Platform } from "react-native";
 import { BlurView } from "expo-blur";
-import { COLORS, RADIUS } from "@/src/theme";
+import { RADIUS } from "@/src/theme";
+import { useTheme } from "@/src/theme_context/ThemeContext";
 
 export default function TabsLayout() {
+  const { colors, isDark } = useTheme();
   return (
     <Tabs
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarShowLabel: true,
-        tabBarActiveTintColor: COLORS.saffron,
-        tabBarInactiveTintColor: COLORS.muted,
+        tabBarActiveTintColor: colors.saffron,
+        tabBarInactiveTintColor: colors.muted,
         tabBarLabelStyle: { fontSize: 11, fontWeight: "600", marginBottom: 4 },
         tabBarStyle: {
           position: "absolute",
@@ -20,10 +22,10 @@ export default function TabsLayout() {
           elevation: 0,
           height: 74,
           paddingTop: 8,
-          backgroundColor: Platform.OS === "android" ? "rgba(255,249,242,0.96)" : "transparent",
+          backgroundColor: Platform.OS === "android" ? (isDark ? "rgba(18,16,22,0.96)" : "rgba(255,249,242,0.96)") : "transparent",
         },
         tabBarBackground: () => (
-          <BlurView intensity={40} tint="light" style={StyleSheet.absoluteFill} />
+          <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
         ),
         tabBarIcon: ({ color, focused }) => {
           const map: Record<string, any> = {
@@ -34,7 +36,7 @@ export default function TabsLayout() {
             profile: focused ? "person-circle" : "person-circle-outline",
           };
           return (
-            <View style={[styles.iconWrap, focused && styles.iconWrapActive]}>
+            <View style={[styles.iconWrap, focused && { backgroundColor: isDark ? "rgba(255,183,77,0.18)" : "rgba(255,153,51,0.15)" }]}>
               <Ionicons name={map[route.name] || "ellipse"} size={22} color={color} />
             </View>
           );
@@ -52,5 +54,4 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   iconWrap: { padding: 6, borderRadius: RADIUS.pill },
-  iconWrapActive: { backgroundColor: "rgba(255,153,51,0.15)" },
 });

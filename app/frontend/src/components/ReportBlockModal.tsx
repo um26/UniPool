@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { View, Text, StyleSheet, Modal, Pressable, TextInput, ActivityIndicator, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 
-import { COLORS, SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
+import { SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
+import { useTheme } from "@/src/theme_context/ThemeContext";
 import { api } from "@/src/api/client";
 
 const REASONS = [
@@ -24,6 +25,8 @@ export default function ReportBlockModal({
   poolId?: string;
   onBlocked?: () => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [reason, setReason] = useState<string | null>(null);
   const [details, setDetails] = useState("");
   const [submittingReport, setSubmittingReport] = useState(false);
@@ -77,15 +80,15 @@ export default function ReportBlockModal({
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <Pressable testID="report-close" onPress={() => { reset(); onClose(); }} style={styles.closeBtn} hitSlop={12}>
-            <Ionicons name="close" size={22} color={COLORS.onSurface} />
+            <Ionicons name="close" size={22} color={colors.onSurface} />
           </Pressable>
 
-          <Ionicons name="shield-outline" size={44} color={COLORS.error} />
+          <Ionicons name="shield-outline" size={44} color={colors.error} />
           <Text style={styles.title}>Report {userName.split(" ")[0]}</Text>
 
           {reported ? (
             <View style={{ alignItems: "center", paddingVertical: SPACING.lg }}>
-              <Ionicons name="checkmark-circle" size={40} color={COLORS.success} />
+              <Ionicons name="checkmark-circle" size={40} color={colors.success} />
               <Text style={styles.sub}>Thanks — our team will review this.</Text>
               <Pressable testID="report-done" onPress={() => { reset(); onClose(); }} style={[styles.submitBtn, { marginTop: SPACING.lg }]}>
                 <Text style={styles.submitText}>Done</Text>
@@ -113,7 +116,7 @@ export default function ReportBlockModal({
                 value={details}
                 onChangeText={setDetails}
                 placeholder="Optional details"
-                placeholderTextColor={COLORS.muted}
+                placeholderTextColor={colors.muted}
                 style={styles.input}
                 multiline
               />
@@ -125,9 +128,9 @@ export default function ReportBlockModal({
               <View style={styles.divider} />
 
               <Pressable testID="block-user-btn" onPress={block} disabled={blocking} style={[styles.blockBtn, blocking && { opacity: 0.6 }]}>
-                {blocking ? <ActivityIndicator color={COLORS.error} /> : (
+                {blocking ? <ActivityIndicator color={colors.error} /> : (
                   <>
-                    <Ionicons name="ban-outline" size={18} color={COLORS.error} />
+                    <Ionicons name="ban-outline" size={18} color={colors.error} />
                     <Text style={styles.blockText}>Block this user</Text>
                   </>
                 )}
@@ -140,21 +143,21 @@ export default function ReportBlockModal({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: any) => StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(20,20,25,0.6)", alignItems: "center", justifyContent: "center", padding: SPACING.xl },
   card: { backgroundColor: "#fff", borderRadius: RADIUS.lg, padding: SPACING.xl, width: "100%", maxWidth: 400, alignItems: "center" },
   closeBtn: { position: "absolute", top: SPACING.md, right: SPACING.md },
-  title: { fontSize: FONT.xl, fontWeight: "800", color: COLORS.onSurface, marginTop: SPACING.sm, fontFamily: FONT_DISPLAY },
-  sub: { color: COLORS.muted, textAlign: "center", marginTop: 4, marginBottom: SPACING.lg },
+  title: { fontSize: FONT.xl, fontWeight: "800", color: colors.onSurface, marginTop: SPACING.sm, fontFamily: FONT_DISPLAY },
+  sub: { color: colors.muted, textAlign: "center", marginTop: 4, marginBottom: SPACING.lg },
   reasonsWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: SPACING.md, justifyContent: "center" },
-  reasonChip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: RADIUS.pill, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
-  reasonChipActive: { backgroundColor: COLORS.error, borderColor: COLORS.error },
-  reasonText: { fontSize: 13, fontWeight: "700", color: COLORS.onSurface },
+  reasonChip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: RADIUS.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  reasonChipActive: { backgroundColor: colors.error, borderColor: colors.error },
+  reasonText: { fontSize: 13, fontWeight: "700", color: colors.onSurface },
   reasonTextActive: { color: "#fff" },
-  input: { alignSelf: "stretch", backgroundColor: COLORS.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, padding: SPACING.md, minHeight: 60, textAlignVertical: "top", color: COLORS.onSurface, marginBottom: SPACING.lg },
-  submitBtn: { alignSelf: "stretch", backgroundColor: COLORS.error, borderRadius: RADIUS.pill, paddingVertical: 14, alignItems: "center" },
+  input: { alignSelf: "stretch", backgroundColor: colors.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: colors.border, padding: SPACING.md, minHeight: 60, textAlignVertical: "top", color: colors.onSurface, marginBottom: SPACING.lg },
+  submitBtn: { alignSelf: "stretch", backgroundColor: colors.error, borderRadius: RADIUS.pill, paddingVertical: 14, alignItems: "center" },
   submitText: { color: "#fff", fontWeight: "800", fontSize: FONT.lg },
-  divider: { alignSelf: "stretch", height: 1, backgroundColor: COLORS.border, marginVertical: SPACING.lg },
-  blockBtn: { alignSelf: "stretch", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderWidth: 1, borderColor: COLORS.error, borderRadius: RADIUS.pill, paddingVertical: 12 },
-  blockText: { color: COLORS.error, fontWeight: "700" },
+  divider: { alignSelf: "stretch", height: 1, backgroundColor: colors.border, marginVertical: SPACING.lg },
+  blockBtn: { alignSelf: "stretch", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderWidth: 1, borderColor: colors.error, borderRadius: RADIUS.pill, paddingVertical: 12 },
+  blockText: { color: colors.error, fontWeight: "700" },
 });

@@ -1,14 +1,15 @@
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
-import { LogBox, View, ActivityIndicator } from "react-native";
+import { LogBox } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider, useAuth } from "@/src/auth/AuthContext";
-import { COLORS } from "@/src/theme";
+import { ThemeProvider, useTheme } from "@/src/theme_context/ThemeContext";
 import { applyPremiumFontDefaults } from "@/src/utils/setupFonts";
+import AnimatedSplash from "@/src/components/AnimatedSplash";
 
 LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
@@ -16,6 +17,7 @@ applyPremiumFontDefaults();
 
 function AuthGate() {
   const { user, loading } = useAuth();
+  const { colors } = useTheme();
   const segments = useSegments();
   const router = useRouter();
 
@@ -29,14 +31,10 @@ function AuthGate() {
   }, [user, loading, segments]);
 
   if (loading) {
-    return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.indigo }}>
-        <ActivityIndicator size="large" color={COLORS.saffron} />
-      </View>
-    );
+    return <AnimatedSplash />;
   }
   return (
-    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: COLORS.surface } }}>
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface } }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="post-request" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
@@ -63,9 +61,11 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AuthProvider>
-          <AuthGate />
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <AuthGate />
+          </AuthProvider>
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

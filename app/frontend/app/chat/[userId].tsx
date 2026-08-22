@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { View, Text, StyleSheet, FlatList, TextInput, Pressable, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 
-import { COLORS, SPACING, RADIUS, FONT } from "@/src/theme";
+import { SPACING, RADIUS, FONT } from "@/src/theme";
+import { useTheme } from "@/src/theme_context/ThemeContext";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/auth/AuthContext";
 import ReportBlockModal from "@/src/components/ReportBlockModal";
@@ -33,6 +34,8 @@ export default function ChatThread() {
   const { userId, name } = useLocalSearchParams<{ userId: string; name?: string }>();
   const router = useRouter();
   const { user } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState("");
@@ -117,7 +120,7 @@ export default function ChatThread() {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <View style={styles.header}>
           <Pressable testID="chat-back" onPress={() => router.back()} hitSlop={12}>
-            <Ionicons name="chevron-back" size={24} color={COLORS.onSurface} />
+            <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
           </Pressable>
           <View style={{ alignItems: "center" }}>
             <Text style={styles.headerName}>{name || "Chat"}</Text>
@@ -135,13 +138,13 @@ export default function ChatThread() {
             </View>
           </View>
           <Pressable testID="chat-more" onPress={() => setShowReport(true)} hitSlop={12}>
-            <Ionicons name="ellipsis-vertical" size={22} color={COLORS.onSurface} />
+            <Ionicons name="ellipsis-vertical" size={22} color={colors.onSurface} />
           </Pressable>
         </View>
 
         {loading ? (
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-            <ActivityIndicator color={COLORS.indigo} />
+            <ActivityIndicator color={colors.indigo} />
           </View>
         ) : (
           <FlatList
@@ -152,8 +155,8 @@ export default function ChatThread() {
             onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
             ListEmptyComponent={
               <View style={{ alignItems: "center", paddingTop: 60 }}>
-                <Ionicons name="chatbubble-ellipses-outline" size={48} color={COLORS.borderStrong} />
-                <Text style={{ color: COLORS.muted, marginTop: SPACING.sm }}>Say hi and coordinate your ride!</Text>
+                <Ionicons name="chatbubble-ellipses-outline" size={48} color={colors.borderStrong} />
+                <Text style={{ color: colors.muted, marginTop: SPACING.sm }}>Say hi and coordinate your ride!</Text>
               </View>
             }
             renderItem={({ item, index }) => {
@@ -171,7 +174,7 @@ export default function ChatThread() {
                         <Ionicons
                           name={showRead ? "checkmark-done" : "checkmark"}
                           size={14}
-                          color={showRead ? COLORS.indigo : COLORS.muted}
+                          color={showRead ? colors.indigo : colors.muted}
                         />
                         <Text style={styles.receiptText}>{showRead ? "Read" : "Sent"}</Text>
                       </View>
@@ -200,7 +203,7 @@ export default function ChatThread() {
             value={text}
             onChangeText={onChangeText}
             placeholder="Type a message..."
-            placeholderTextColor={COLORS.muted}
+            placeholderTextColor={colors.muted}
             style={styles.input}
             multiline
           />
@@ -221,24 +224,24 @@ export default function ChatThread() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: COLORS.surface },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  headerName: { fontSize: FONT.lg, fontWeight: "800", color: COLORS.onSurface },
+const makeStyles = (colors: any) => StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.surface },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  headerName: { fontSize: FONT.lg, fontWeight: "800", color: colors.onSurface },
   statusRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2, minHeight: 14 },
-  onlineDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.success },
-  statusText: { fontSize: 11, color: COLORS.muted },
-  typingText: { fontSize: 11, color: COLORS.saffron, fontWeight: "700", fontStyle: "italic" },
+  onlineDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.success },
+  statusText: { fontSize: 11, color: colors.muted },
+  typingText: { fontSize: 11, color: colors.saffron, fontWeight: "700", fontStyle: "italic" },
   bubbleRow: { flexDirection: "row", marginBottom: SPACING.sm },
   bubble: { maxWidth: "78%", borderRadius: RADIUS.lg, paddingHorizontal: 14, paddingVertical: 10 },
-  bubbleMine: { backgroundColor: COLORS.indigo, borderBottomRightRadius: 4 },
-  bubbleTheirs: { backgroundColor: "#fff", borderWidth: 1, borderColor: COLORS.border, borderBottomLeftRadius: 4 },
-  bubbleText: { fontSize: FONT.base, color: COLORS.onSurface },
+  bubbleMine: { backgroundColor: colors.indigo, borderBottomRightRadius: 4 },
+  bubbleTheirs: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderBottomLeftRadius: 4 },
+  bubbleText: { fontSize: FONT.base, color: colors.onSurface },
   receiptRow: { flexDirection: "row", alignItems: "center", gap: 3, justifyContent: "flex-end", marginTop: 2, marginRight: 4 },
-  receiptText: { fontSize: 10, color: COLORS.muted },
+  receiptText: { fontSize: 10, color: colors.muted },
   typingBubble: { flexDirection: "row", gap: 4, alignItems: "center", paddingVertical: 14 },
-  typingDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.muted },
-  inputRow: { flexDirection: "row", alignItems: "flex-end", gap: SPACING.sm, padding: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.border, backgroundColor: COLORS.surface },
-  input: { flex: 1, backgroundColor: "#fff", borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 14, paddingVertical: 10, maxHeight: 100, fontSize: FONT.base, color: COLORS.onSurface },
-  sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.saffron, alignItems: "center", justifyContent: "center" },
+  typingDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.muted },
+  inputRow: { flexDirection: "row", alignItems: "flex-end", gap: SPACING.sm, padding: SPACING.md, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface },
+  input: { flex: 1, backgroundColor: colors.card, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14, paddingVertical: 10, maxHeight: 100, fontSize: FONT.base, color: colors.onSurface },
+  sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.saffron, alignItems: "center", justifyContent: "center" },
 });

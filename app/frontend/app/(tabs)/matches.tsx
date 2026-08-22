@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useRef } from "react";
+import React, { useCallback, useState, useRef, useMemo } from "react";
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, Pressable, Linking, Alert, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -6,7 +6,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 
-import { COLORS, SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
+import { SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
+import { useTheme } from "@/src/theme_context/ThemeContext";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/auth/AuthContext";
 import RatingBadge from "@/src/components/RatingBadge";
@@ -38,6 +39,8 @@ function fmtWhen(iso: string) {
 export default function MatchesScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [items, setItems] = useState<Pool[]>([]);
   const [confirmed, setConfirmed] = useState<ConfirmedRide[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,7 +99,7 @@ export default function MatchesScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <Confetti burstKey={confettiKey} />
-      <LinearGradient colors={[COLORS.saffron, "#F57F17"]} style={styles.header}>
+      <LinearGradient colors={[colors.saffron, "#F57F17"]} style={styles.header}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.md }}>
           <Ionicons name="sparkles" size={26} color="#fff" />
           <View>
@@ -129,7 +132,7 @@ export default function MatchesScreen() {
                         <View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.sm }}>
                           <Text style={styles.when}>{fmtWhen(ride.travel_datetime)}</Text>
                           <Pressable testID={`more-confirmed-${key}`} onPress={() => setReportTarget({ user_id: ride.other_user_id, user_name: ride.other_user_name })} hitSlop={8}>
-                            <Ionicons name="ellipsis-vertical" size={16} color={COLORS.muted} />
+                            <Ionicons name="ellipsis-vertical" size={16} color={colors.muted} />
                           </Pressable>
                         </View>
                       </View>
@@ -139,9 +142,9 @@ export default function MatchesScreen() {
                         <UserBadges badges={ride.other_user_badges} compact />
                       </View>
                       <View style={styles.routeRow}>
-                        <Ionicons name="location" size={16} color={COLORS.saffron} />
+                        <Ionicons name="location" size={16} color={colors.saffron} />
                         <Text style={styles.route}>{ride.from_location}</Text>
-                        <Ionicons name="arrow-forward" size={14} color={COLORS.muted} />
+                        <Ionicons name="arrow-forward" size={14} color={colors.muted} />
                         <Text style={styles.route}>{ride.to_location}</Text>
                       </View>
                       <View style={styles.ctaRow}>
@@ -158,7 +161,7 @@ export default function MatchesScreen() {
                           onPress={() => setRatingTarget({ user_id: ride.other_user_id, user_name: ride.other_user_name, pool_id: ride.pool_id })}
                           style={[styles.cta, styles.ctaGhost]}
                         >
-                          <Ionicons name="star" size={16} color={COLORS.saffron} />
+                          <Ionicons name="star" size={16} color={colors.saffron} />
                         </Pressable>
                         <Pressable
                           testID={`remove-${key}`}
@@ -166,7 +169,7 @@ export default function MatchesScreen() {
                           disabled={removingKey === key}
                           style={[styles.cta, styles.ctaDanger]}
                         >
-                          {removingKey === key ? <ActivityIndicator size="small" color={COLORS.error} /> : <Ionicons name="close-circle-outline" size={16} color={COLORS.error} />}
+                          {removingKey === key ? <ActivityIndicator size="small" color={colors.error} /> : <Ionicons name="close-circle-outline" size={16} color={colors.error} />}
                         </Pressable>
                       </View>
                     </View>
@@ -178,7 +181,7 @@ export default function MatchesScreen() {
           }
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Ionicons name="calendar-clear-outline" size={64} color={COLORS.borderStrong} />
+              <Ionicons name="calendar-clear-outline" size={64} color={colors.borderStrong} />
               <Text style={styles.emptyTitle}>No matches yet</Text>
               <Text style={styles.emptySub}>Post a request from the Pool tab — we'll email you when someone matches.</Text>
             </View>
@@ -190,7 +193,7 @@ export default function MatchesScreen() {
                 <View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.sm }}>
                   <Text style={styles.when}>{fmtWhen(item.travel_datetime)}</Text>
                   <Pressable testID={`more-match-${item.pool_id}`} onPress={() => setReportTarget({ user_id: item.user_id, user_name: item.user_name })} hitSlop={8}>
-                    <Ionicons name="ellipsis-vertical" size={16} color={COLORS.muted} />
+                    <Ionicons name="ellipsis-vertical" size={16} color={colors.muted} />
                   </Pressable>
                 </View>
               </View>
@@ -200,9 +203,9 @@ export default function MatchesScreen() {
                 <UserBadges badges={item.user_badges} compact />
               </View>
               <View style={styles.routeRow}>
-                <Ionicons name="location" size={16} color={COLORS.saffron} />
+                <Ionicons name="location" size={16} color={colors.saffron} />
                 <Text style={styles.route}>{item.from_location}</Text>
-                <Ionicons name="arrow-forward" size={14} color={COLORS.muted} />
+                <Ionicons name="arrow-forward" size={14} color={colors.muted} />
                 <Text style={styles.route}>{item.to_location}</Text>
               </View>
               {item.notes ? <Text style={styles.notes}>“{item.notes}”</Text> : null}
@@ -220,14 +223,14 @@ export default function MatchesScreen() {
                   onPress={() => Linking.openURL(`mailto:${item.user_email}?subject=UniPool%20-%20Cab%20Share&body=Hi%20${encodeURIComponent(item.user_name)},%20saw%20your%20UniPool%20request.%20Want%20to%20share%20the%20cab%3F`)}
                   style={[styles.cta, styles.ctaGhost]}
                 >
-                  <Ionicons name="mail" size={16} color={COLORS.indigo} />
+                  <Ionicons name="mail" size={16} color={colors.indigo} />
                 </Pressable>
                 <Pressable
                   testID={`rate-${item.pool_id}`}
                   onPress={() => setRatingTarget({ user_id: item.user_id, user_name: item.user_name, pool_id: item.pool_id })}
                   style={[styles.cta, styles.ctaGhost]}
                 >
-                  <Ionicons name="star" size={16} color={COLORS.saffron} />
+                  <Ionicons name="star" size={16} color={colors.saffron} />
                 </Pressable>
               </View>
             </View>
@@ -259,31 +262,31 @@ export default function MatchesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: COLORS.surface },
+const makeStyles = (colors: any) => StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.surface },
   header: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.md, paddingBottom: SPACING.lg, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
   title: { color: "#fff", fontSize: FONT["2xl"], fontWeight: "800", fontFamily: FONT_DISPLAY },
   sub: { color: "rgba(255,255,255,0.9)", marginTop: 2 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   empty: { alignItems: "center", paddingVertical: 80, paddingHorizontal: SPACING.xl },
-  emptyTitle: { marginTop: SPACING.md, fontSize: FONT.xl, fontWeight: "700", color: COLORS.onSurface },
-  emptySub: { marginTop: 4, color: COLORS.muted, textAlign: "center" },
-  sectionLabel: { fontSize: FONT.sm, fontWeight: "700", color: COLORS.muted, marginBottom: SPACING.sm, letterSpacing: 0.8, textTransform: "uppercase" },
-  card: { backgroundColor: "#fff", borderRadius: RADIUS.lg, padding: SPACING.lg, marginBottom: SPACING.md, borderWidth: 1, borderColor: COLORS.border, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
-  rideCard: { backgroundColor: "#fff", borderRadius: RADIUS.lg, padding: SPACING.lg, marginBottom: SPACING.md, borderWidth: 1, borderColor: COLORS.success, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
+  emptyTitle: { marginTop: SPACING.md, fontSize: FONT.xl, fontWeight: "700", color: colors.onSurface },
+  emptySub: { marginTop: 4, color: colors.muted, textAlign: "center" },
+  sectionLabel: { fontSize: FONT.sm, fontWeight: "700", color: colors.muted, marginBottom: SPACING.sm, letterSpacing: 0.8, textTransform: "uppercase" },
+  card: { backgroundColor: "#fff", borderRadius: RADIUS.lg, padding: SPACING.lg, marginBottom: SPACING.md, borderWidth: 1, borderColor: colors.border, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
+  rideCard: { backgroundColor: "#fff", borderRadius: RADIUS.lg, padding: SPACING.lg, marginBottom: SPACING.md, borderWidth: 1, borderColor: colors.success, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
   rowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: SPACING.sm },
-  matchBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: COLORS.success, paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.pill },
+  matchBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.success, paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.pill },
   matchBadgeText: { color: "#fff", fontSize: 11, fontWeight: "800", letterSpacing: 0.5 },
-  confirmedBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: COLORS.indigo, paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.pill },
+  confirmedBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.indigo, paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.pill },
   confirmedBadgeText: { color: "#fff", fontSize: 11, fontWeight: "800", letterSpacing: 0.5 },
-  when: { color: COLORS.muted, fontWeight: "600" },
-  name: { fontSize: FONT.lg, fontWeight: "700", color: COLORS.onSurface, marginBottom: 6 },
+  when: { color: colors.muted, fontWeight: "600" },
+  name: { fontSize: FONT.lg, fontWeight: "700", color: colors.onSurface, marginBottom: 6 },
   routeRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: SPACING.sm },
-  route: { fontSize: FONT.base, color: COLORS.onSurface, fontWeight: "600" },
-  notes: { color: COLORS.muted, fontStyle: "italic", marginBottom: SPACING.md },
-  cta: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: COLORS.indigo, paddingVertical: 12, paddingHorizontal: 16, borderRadius: RADIUS.pill },
+  route: { fontSize: FONT.base, color: colors.onSurface, fontWeight: "600" },
+  notes: { color: colors.muted, fontStyle: "italic", marginBottom: SPACING.md },
+  cta: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.indigo, paddingVertical: 12, paddingHorizontal: 16, borderRadius: RADIUS.pill },
   ctaRow: { flexDirection: "row", gap: SPACING.sm, marginTop: SPACING.md },
-  ctaGhost: { backgroundColor: "#fff", borderWidth: 1, borderColor: COLORS.indigo, flex: 0 },
-  ctaDanger: { backgroundColor: "#fff", borderWidth: 1, borderColor: COLORS.error, flex: 0 },
+  ctaGhost: { backgroundColor: "#fff", borderWidth: 1, borderColor: colors.indigo, flex: 0 },
+  ctaDanger: { backgroundColor: "#fff", borderWidth: 1, borderColor: colors.error, flex: 0 },
   ctaText: { color: "#fff", fontWeight: "700" },
 });

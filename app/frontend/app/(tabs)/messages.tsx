@@ -1,11 +1,12 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useState, useMemo } from "react";
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 
-import { COLORS, SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
+import { SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
+import { useTheme } from "@/src/theme_context/ThemeContext";
 import { api } from "@/src/api/client";
 
 type Convo = {
@@ -29,6 +30,8 @@ function fmt(dt: string) {
 
 export default function MessagesScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [items, setItems] = useState<Convo[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -42,7 +45,7 @@ export default function MessagesScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <LinearGradient colors={[COLORS.indigo, "#3949AB"]} style={styles.header}>
+      <LinearGradient colors={[colors.indigo, "#3949AB"]} style={styles.header}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.md }}>
           <Ionicons name="chatbubbles" size={26} color="#fff" />
           <View>
@@ -53,7 +56,7 @@ export default function MessagesScreen() {
       </LinearGradient>
 
       {loading ? (
-        <View style={styles.center}><ActivityIndicator color={COLORS.indigo} /></View>
+        <View style={styles.center}><ActivityIndicator color={colors.indigo} /></View>
       ) : (
         <FlatList
           data={items}
@@ -62,7 +65,7 @@ export default function MessagesScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Ionicons name="chatbubble-ellipses-outline" size={64} color={COLORS.borderStrong} />
+              <Ionicons name="chatbubble-ellipses-outline" size={64} color={colors.borderStrong} />
               <Text style={styles.emptyTitle}>No conversations yet</Text>
               <Text style={styles.emptySub}>Message someone from your Matches tab to start chatting.</Text>
             </View>
@@ -97,24 +100,24 @@ export default function MessagesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: COLORS.surface },
+const makeStyles = (colors: any) => StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.surface },
   header: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.md, paddingBottom: SPACING.lg, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
   title: { color: "#fff", fontSize: FONT["2xl"], fontWeight: "800", fontFamily: FONT_DISPLAY },
   sub: { color: "rgba(255,255,255,0.9)", marginTop: 2 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   empty: { alignItems: "center", paddingVertical: 80, paddingHorizontal: SPACING.xl },
-  emptyTitle: { marginTop: SPACING.md, fontSize: FONT.xl, fontWeight: "700", color: COLORS.onSurface },
-  emptySub: { marginTop: 4, color: COLORS.muted, textAlign: "center" },
-  row: { flexDirection: "row", alignItems: "center", gap: SPACING.md, backgroundColor: "#fff", borderRadius: RADIUS.lg, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: COLORS.border },
-  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.cream, alignItems: "center", justifyContent: "center" },
-  avatarText: { color: COLORS.indigo, fontWeight: "800" },
-  onlineDot: { position: "absolute", bottom: 0, right: 0, width: 12, height: 12, borderRadius: 6, backgroundColor: COLORS.success, borderWidth: 2, borderColor: "#fff" },
+  emptyTitle: { marginTop: SPACING.md, fontSize: FONT.xl, fontWeight: "700", color: colors.onSurface },
+  emptySub: { marginTop: 4, color: colors.muted, textAlign: "center" },
+  row: { flexDirection: "row", alignItems: "center", gap: SPACING.md, backgroundColor: colors.card, borderRadius: RADIUS.lg, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: colors.border },
+  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.cream, alignItems: "center", justifyContent: "center" },
+  avatarText: { color: colors.indigo, fontWeight: "800" },
+  onlineDot: { position: "absolute", bottom: 0, right: 0, width: 12, height: 12, borderRadius: 6, backgroundColor: colors.success, borderWidth: 2, borderColor: colors.card },
   rowTop: { flexDirection: "row", justifyContent: "space-between" },
-  name: { fontWeight: "700", color: COLORS.onSurface, fontSize: FONT.base },
-  time: { color: COLORS.muted, fontSize: FONT.sm },
+  name: { fontWeight: "700", color: colors.onSurface, fontSize: FONT.base },
+  time: { color: colors.muted, fontSize: FONT.sm },
   rowBottom: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 2 },
-  preview: { color: COLORS.muted, flex: 1, marginRight: SPACING.sm },
-  badge: { backgroundColor: COLORS.saffron, borderRadius: RADIUS.pill, minWidth: 20, height: 20, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
+  preview: { color: colors.muted, flex: 1, marginRight: SPACING.sm },
+  badge: { backgroundColor: colors.saffron, borderRadius: RADIUS.pill, minWidth: 20, height: 20, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
   badgeText: { color: "#fff", fontSize: 11, fontWeight: "800" },
 });

@@ -1,8 +1,10 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useMemo } from "react";
 import { View, StyleSheet, Animated } from "react-native";
-import { COLORS, SPACING, RADIUS } from "@/src/theme";
+import { SPACING, RADIUS } from "@/src/theme";
+import { useTheme } from "@/src/theme_context/ThemeContext";
 
 function Shimmer({ style }: { style?: any }) {
+  const { colors } = useTheme();
   const opacity = useRef(new Animated.Value(0.4)).current;
 
   useEffect(() => {
@@ -16,11 +18,13 @@ function Shimmer({ style }: { style?: any }) {
     return () => loop.stop();
   }, []);
 
-  return <Animated.View style={[styles.block, style, { opacity }]} />;
+  return <Animated.View style={[{ backgroundColor: colors.borderStrong }, style, { opacity }]} />;
 }
 
 /** Mimics the shape of a Pool feed card while data loads. */
 export function PoolCardSkeleton() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.card} testID="pool-card-skeleton">
       <View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.md, marginBottom: SPACING.md }}>
@@ -45,10 +49,9 @@ export function PoolFeedSkeleton({ count = 4 }: { count?: number }) {
   );
 }
 
-const styles = StyleSheet.create({
-  block: { backgroundColor: COLORS.borderStrong },
+const makeStyles = (colors: any) => StyleSheet.create({
   card: {
-    backgroundColor: "#fff", borderRadius: RADIUS.lg, padding: SPACING.lg, marginBottom: SPACING.md,
-    borderWidth: 1, borderColor: COLORS.border,
+    backgroundColor: colors.card, borderRadius: RADIUS.lg, padding: SPACING.lg, marginBottom: SPACING.md,
+    borderWidth: 1, borderColor: colors.border,
   },
 });

@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { View, Text, StyleSheet, Modal, Pressable, TextInput, ActivityIndicator, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 
-import { COLORS, SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
+import { SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
+import { useTheme } from "@/src/theme_context/ThemeContext";
 import { api } from "@/src/api/client";
 
 export default function RatingModal({
@@ -21,6 +22,8 @@ export default function RatingModal({
   poolId?: string;
   onSubmitted?: () => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [stars, setStars] = useState(0);
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -64,15 +67,15 @@ export default function RatingModal({
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <Pressable testID="rating-close" onPress={onClose} style={styles.closeBtn} hitSlop={12}>
-            <Ionicons name="close" size={22} color={COLORS.onSurface} />
+            <Ionicons name="close" size={22} color={colors.onSurface} />
           </Pressable>
 
-          <Ionicons name="person-circle" size={48} color={COLORS.indigo} />
+          <Ionicons name="person-circle" size={48} color={colors.indigo} />
           <Text style={styles.title}>Rate {userName.split(" ")[0]}</Text>
           <Text style={styles.sub}>How was your experience coordinating this ride?</Text>
 
           {loadingExisting ? (
-            <ActivityIndicator color={COLORS.indigo} style={{ marginVertical: SPACING.lg }} />
+            <ActivityIndicator color={colors.indigo} style={{ marginVertical: SPACING.lg }} />
           ) : (
             <>
               {stars > 0 && <Text style={styles.scoreLabel}>{stars}/10</Text>}
@@ -94,7 +97,7 @@ export default function RatingModal({
                 value={comment}
                 onChangeText={setComment}
                 placeholder="Optional comment (e.g. punctual, friendly)"
-                placeholderTextColor={COLORS.muted}
+                placeholderTextColor={colors.muted}
                 style={styles.input}
                 multiline
               />
@@ -110,19 +113,19 @@ export default function RatingModal({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: any) => StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(20,20,25,0.6)", alignItems: "center", justifyContent: "center", padding: SPACING.xl },
   card: { backgroundColor: "#fff", borderRadius: RADIUS.lg, padding: SPACING.xl, width: "100%", maxWidth: 380, alignItems: "center" },
   closeBtn: { position: "absolute", top: SPACING.md, right: SPACING.md },
-  title: { fontSize: FONT.xl, fontWeight: "800", color: COLORS.onSurface, marginTop: SPACING.sm, fontFamily: FONT_DISPLAY },
-  sub: { color: COLORS.muted, textAlign: "center", marginTop: 4, marginBottom: SPACING.lg },
-  scoreLabel: { fontSize: FONT.xl, fontWeight: "800", color: COLORS.saffron, marginBottom: SPACING.sm },
+  title: { fontSize: FONT.xl, fontWeight: "800", color: colors.onSurface, marginTop: SPACING.sm, fontFamily: FONT_DISPLAY },
+  sub: { color: colors.muted, textAlign: "center", marginTop: 4, marginBottom: SPACING.lg },
+  scoreLabel: { fontSize: FONT.xl, fontWeight: "800", color: colors.saffron, marginBottom: SPACING.sm },
   numsGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8, marginBottom: SPACING.lg },
-  numChip: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
-  numChipActive: { backgroundColor: COLORS.saffron, borderColor: COLORS.saffron },
-  numChipText: { fontWeight: "700", color: COLORS.onSurface, fontSize: 13 },
+  numChip: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  numChipActive: { backgroundColor: colors.saffron, borderColor: colors.saffron },
+  numChipText: { fontWeight: "700", color: colors.onSurface, fontSize: 13 },
   numChipTextActive: { color: "#fff" },
-  input: { alignSelf: "stretch", backgroundColor: COLORS.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, padding: SPACING.md, minHeight: 60, textAlignVertical: "top", color: COLORS.onSurface, marginBottom: SPACING.lg },
-  submitBtn: { alignSelf: "stretch", backgroundColor: COLORS.indigo, borderRadius: RADIUS.pill, paddingVertical: 14, alignItems: "center" },
+  input: { alignSelf: "stretch", backgroundColor: colors.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: colors.border, padding: SPACING.md, minHeight: 60, textAlignVertical: "top", color: colors.onSurface, marginBottom: SPACING.lg },
+  submitBtn: { alignSelf: "stretch", backgroundColor: colors.indigo, borderRadius: RADIUS.pill, paddingVertical: 14, alignItems: "center" },
   submitText: { color: "#fff", fontWeight: "800", fontSize: FONT.lg },
 });
