@@ -24,12 +24,18 @@ export type UniUser = {
 type AuthCtx = {
   user: UniUser | null;
   loading: boolean;
+  // True while we're mid-way exchanging a Google credential with our backend.
   signingIn: boolean;
+  // Set (with a message) if the last sign-in attempt failed. Cleared on next attempt.
   signInError: string | null;
+  // On web this opens the Google Sign-In popup itself, so no args needed.
+  // Exposed so screens can trigger it from a custom button if desired.
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
+  // Web-only: mount a Google button into a DOM node.
   renderGoogleButton: (containerId: string) => void;
+  // Email/username + password auth.
   signInWithPassword: (identifier: string, password: string, turnstileToken?: string | null) => Promise<void>;
   signUpWithPassword: (email: string, password: string, name: string, username?: string, turnstileToken?: string | null) => Promise<void>;
 };
@@ -40,7 +46,9 @@ export const useAuth = () => useContext(Ctx);
 const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || "";
 
 declare global {
-  interface Window { google?: any; }
+  interface Window {
+    google?: any;
+  }
 }
 
 let gsiScriptPromise: Promise<void> | null = null;
@@ -70,6 +78,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSigningIn(true);
     setSignInError(null);
     try {
+      // Render's free tier can take 30-50s to wake from a cold start —
+      // give this real room instead of failing silently and fast.
       const res = await api.googleSignIn(response.credential);
       await setToken(res.session_token);
       setUser(res.user);
@@ -109,6 +119,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     (async () => {
+      // Don't let a slow/cold backend block the whole app behind a spinner.
+      // Kick off Google's script load (fast, client-side) and unblock
+      // rendering immediately — if a saved session exists, validate it in
+      // the background and let `user` update whenever it resolves. The
+      // login screen already auto-redirects once `user` becomes truthy.
       try {
         await initGoogle();
       } catch (e) {
@@ -138,6 +153,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       initGoogle().then(() => {
         const el = document.getElementById(containerId);
         if (el && window.google?.accounts?.id) {
+          // Clear any stale button from a previous mount before re-rendering,
+          // otherwise repeated calls can stack duplicate/broken iframes.
           el.innerHTML = "";
           window.google.accounts.id.renderButton(el, {
             theme: "outline",
@@ -154,6 +171,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try { await api.logout(); } catch {}
     await setToken(null);
     setUser(null);
+    // Without this, Google Identity Services silently suppresses the next
+    // sign-in attempt (button click / prompt does nothing) because it still
+    // thinks there's an active selected session from before.
     if (Platform.OS === "web" && window.google?.accounts?.id) {
       try {
         window.google.accounts.id.disableAutoSelect();
