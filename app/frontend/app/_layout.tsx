@@ -26,7 +26,7 @@ function AuthGate() {
   const router = useRouter();
 
   useEffect(() => {
-    if (loading) return;
+    if (loading && !PREVIEW_MODE) return;
     const inTabs = segments[0] === "(tabs)";
     if (!PREVIEW_MODE && !user && inTabs) router.replace("/");
     if (!PREVIEW_MODE && user && !inTabs && segments[0] !== "post-request" && segments[0] !== "games" && segments[0] !== "chat" && segments[0] !== "pool") {
@@ -34,7 +34,7 @@ function AuthGate() {
     }
   }, [user, loading, segments]);
 
-  if (loading) {
+  if (loading && !PREVIEW_MODE) {
     return <AnimatedSplash />;
   }
 
