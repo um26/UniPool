@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 520" preserveAspectRatio="xMidYMid slice">
+<defs>
+  <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#3458d4"/><stop offset=".72" stop-color="#17336f"/><stop offset="1" stop-color="#0b1735"/></linearGradient>
+  <linearGradient id="runway" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#1b315a"/><stop offset="1" stop-color="#071127"/></linearGradient>
+  <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#f7f8fb"/><stop offset="1" stop-color="#dce2ea"/></linearGradient>
+  <linearGradient id="brick" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#a84b35"/><stop offset="1" stop-color="#713124"/></linearGradient>
+  <radialGradient id="glow"><stop stop-color="#ffd38a" stop-opacity=".85"/><stop offset="1" stop-color="#ffd38a" stop-opacity="0"/></radialGradient>
+  <pattern id="motif" width="180" height="180" patternUnits="userSpaceOnUse"><circle cx="90" cy="90" r="62" fill="none" stroke="#fff" stroke-opacity=".055" stroke-width="3"/><path d="M90 18v144M18 90h144M40 40l100 100M140 40L40 140" stroke="#fff" stroke-opacity=".035" stroke-width="3"/></pattern>
+  <filter id="shadow"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-opacity=".35"/></filter>
+</defs>
+<rect width="1600" height="520" fill="url(#sky)"/>
+<rect width="1600" height="520" fill="url(#motif)"/>
+<!-- clouds -->
+<g fill="#fff" opacity=".16"><path d="M90 135c18-31 65-30 81 0 29-17 67 2 64 31H38c-2-25 24-43 52-31z"/><path d="M1320 115c18-31 65-30 81 0 29-17 67 2 64 31h-197c-2-25 24-43 52-31z"/></g>
+<!-- distant hills -->
+<path d="M0 350L150 250l90 78 150-110 135 120 160-100 140 115 170-125 150 115 130-80 190 112v120H0z" fill="#10254c" opacity=".65"/>
+<!-- MU building glow -->
+<ellipse cx="800" cy="360" rx="400" ry="110" fill="url(#glow)" opacity=".35"/>
+<!-- Mahindra University inspired building: white wings, red brick center, triangular pediment -->
+<g filter="url(#shadow)">
+  <rect x="385" y="205" width="830" height="180" rx="4" fill="url(#wall)"/>
+  <rect x="450" y="250" width="700" height="135" fill="url(#brick)"/>
+  <rect x="385" y="205" width="830" height="20" fill="#fff"/>
+  <!-- left/right upper wings -->
+  <rect x="405" y="225" width="285" height="70" fill="#eef2f6"/>
+  <rect x="910" y="225" width="285" height="70" fill="#eef2f6"/>
+  <!-- central portico -->
+  <path d="M650 205L800 105l150 100z" fill="#f7f8fb" stroke="#d5dbe3" stroke-width="4"/>
+  <path d="M680 205L800 125l120 80z" fill="#fff"/>
+  <!-- MU logo -->
+  <path d="M790 138l18-13 18 13v27l-18 12-18-12z" fill="#df263f"/>
+  <text x="800" y="181" text-anchor="middle" font-family="Arial,sans-serif" font-size="20" font-weight="800" fill="#111827">Mahindra</text>
+  <text x="800" y="200" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="700" fill="#111827">University</text>
+  <!-- windows -->
+  <g fill="#9eb9d0" stroke="#fff" stroke-width="5">
+    <path d="M425 242h48v36h-48zM490 242h48v36h-48zM555 242h48v36h-48zM620 242h48v36h-48z"/>
+    <path d="M932 242h48v36h-48zM997 242h48v36h-48zM1062 242h48v36h-48zM1127 242h48v36h-48z"/>
+  </g>
+  <!-- columns and entrance -->
+  <rect x="665" y="205" width="270" height="180" fill="#f5f7fa"/>
+  <rect x="690" y="230" width="220" height="155" fill="#dfe8ef"/>
+  <g fill="#fff" stroke="#d2d8df" stroke-width="3"><rect x="680" y="205" width="24" height="180"/><rect x="736" y="205" width="24" height="180"/><rect x="840" y="205" width="24" height="180"/><rect x="896" y="205" width="24" height="180"/></g>
+  <rect x="765" y="285" width="70" height="100" fill="#6f8ea4" stroke="#fff" stroke-width="5"/>
+  <!-- logo on brick -->
+  <text x="525" y="350" font-family="Arial,sans-serif" font-size="18" font-weight="800" fill="#fff">◆ Mahindra</text><text x="545" y="371" font-family="Arial,sans-serif" font-size="13" fill="#fff">University</text>
+  <!-- landscaping -->
+  <g fill="#123d2d"><circle cx="430" cy="378" r="28"/><circle cx="470" cy="376" r="33"/><circle cx="1140" cy="378" r="28"/><circle cx="1180" cy="376" r="33"/></g>
+</g>
+<!-- runway -->
+<rect y="390" width="1600" height="130" fill="url(#runway)"/>
+<path d="M0 425H1600" stroke="#fff" stroke-opacity=".75" stroke-width="3" stroke-dasharray="18 18"/>
+<path d="M0 405H1600M0 500H1600" stroke="#8fa6c7" stroke-opacity=".45" stroke-width="2"/>
+<g fill="#ffd36b"><circle cx="80" cy="448" r="4"/><circle cx="240" cy="448" r="4"/><circle cx="400" cy="448" r="4"/><circle cx="1200" cy="448" r="4"/><circle cx="1360" cy="448" r="4"/><circle cx="1520" cy="448" r="4"/></g>
+<!-- A1 centered under building -->
+<circle cx="800" cy="408" r="13" fill="#fff"/><circle cx="800" cy="408" r="7" fill="#72d4c9"/><text x="800" y="452" text-anchor="middle" font-family="Arial,sans-serif" font-size="24" font-weight="800" fill="#fff">A1</text>
+<!-- small parked aircraft silhouettes at edges, leaving center free for animation -->
+<g fill="#f8fbff" opacity=".9"><path d="M120 385h115l42 10-42 10H120l-25-10z"/><path d="M1465 385h70l40 10-40 10h-70l-20-10z"/></g>
+</svg>
