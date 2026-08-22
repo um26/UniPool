@@ -24,18 +24,12 @@ export type UniUser = {
 type AuthCtx = {
   user: UniUser | null;
   loading: boolean;
-  // True while we're mid-way exchanging a Google credential with our backend.
   signingIn: boolean;
-  // Set (with a message) if the last sign-in attempt failed. Cleared on next attempt.
   signInError: string | null;
-  // On web this opens the Google Sign-In popup itself, so no args needed.
-  // Exposed so screens can trigger it from a custom button if desired.
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
-  // Web-only: mount a Google button into a DOM node.
   renderGoogleButton: (containerId: string) => void;
-  // Email/username + password auth.
   signInWithPassword: (identifier: string, password: string, turnstileToken?: string | null) => Promise<void>;
   signUpWithPassword: (email: string, password: string, name: string, username?: string, turnstileToken?: string | null) => Promise<void>;
 };
@@ -46,9 +40,7 @@ export const useAuth = () => useContext(Ctx);
 const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || "";
 
 declare global {
-  interface Window {
-    google?: any;
-  }
+  interface Window { google?: any; }
 }
 
 let gsiScriptPromise: Promise<void> | null = null;
@@ -78,8 +70,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSigningIn(true);
     setSignInError(null);
     try {
-      // Render's free tier can take 30-50s to wake from a cold start —
-      // give this real room instead of failing silently and fast.
       const res = await api.googleSignIn(response.credential);
       await setToken(res.session_token);
       setUser(res.user);
@@ -87,8 +77,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.warn("Google sign-in failed", e);
       setSignInError(
         e?.message === "Failed to fetch" || e?.name === "TypeError"
-          ? "Couldn't reach the server. It may be waking up from sleep — please try again in a few seconds."
-          : e?.message || "Sign-in failed. Please try again."
+          ? "Couldn't reach the server. It may be waking from sleep — please try again in a few seconds."
+          : e?.message || "Google sign-in failed. Please try again."
       );
     } finally {
       setSigningIn(false);
@@ -96,9 +86,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const initGoogle = useCallback(async () => {
-    if (Platform.OS !== "web" || !GOOGLE_CLIENT_ID) return;
+    if (Platform.OS !== "web") return;
+    if (!GOOGLE_CLIENT_ID) {
+      throw new Error("Google sign-in is not configured for this deployment.");
+    }
     await loadGoogleScript();
-    if (!window.google?.accounts?.id) return;
+    if (!window.google?.accounts?.id) throw new Error("Google Sign-In could not be loaded.");
     window.google.accounts.id.initialize({
       client_id: GOOGLE_CLIENT_ID,
       callback: handleCredential,
@@ -119,15 +112,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     (async () => {
-      // Don't let a slow/cold backend block the whole app behind a spinner.
-      // Kick off Google's script load (fast, client-side) and unblock
-      // rendering immediately — if a saved session exists, validate it in
-      // the background and let `user` update whenever it resolves. The
-      // login screen already auto-redirects once `user` becomes truthy.
       try {
-        await initGoogle();
+        if (Platform.OS === "web" && GOOGLE_CLIENT_ID) await initGoogle();
       } catch (e) {
-        console.warn("Google script failed to load (ad-blocker?)", e);
+        console.warn("Google sign-in initialization failed", e);
       } finally {
         setLoading(false);
       }
@@ -137,43 +125,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [initGoogle, refresh]);
 
   const signIn = useCallback(async () => {
+    setSignInError(null);
     if (Platform.OS !== "web") {
-      console.warn("Google sign-in is currently only wired up for web.");
+      setSignInError("Google sign-in is currently available on the web app.");
       return;
     }
-    await initGoogle();
-    if (window.google?.accounts?.id) {
+    try {
+      await initGoogle();
       window.google.accounts.id.prompt();
+    } catch (e: any) {
+      setSignInError(e?.message || "Google sign-in is unavailable right now.");
     }
   }, [initGoogle]);
 
-  const renderGoogleButton = useCallback(
-    (containerId: string) => {
-      if (Platform.OS !== "web") return;
-      initGoogle().then(() => {
-        const el = document.getElementById(containerId);
-        if (el && window.google?.accounts?.id) {
-          // Clear any stale button from a previous mount before re-rendering,
-          // otherwise repeated calls can stack duplicate/broken iframes.
-          el.innerHTML = "";
-          window.google.accounts.id.renderButton(el, {
-            theme: "outline",
-            size: "large",
-            width: 280,
-          });
-        }
-      });
-    },
-    [initGoogle]
-  );
+  const renderGoogleButton = useCallback((containerId: string) => {
+    if (Platform.OS !== "web") return;
+    if (!GOOGLE_CLIENT_ID) {
+      setSignInError("Google sign-in needs to be configured for this deployment.");
+      return;
+    }
+    initGoogle().then(() => {
+      const el = document.getElementById(containerId);
+      if (el && window.google?.accounts?.id) {
+        el.innerHTML = "";
+        window.google.accounts.id.renderButton(el, {
+          theme: "outline",
+          size: "large",
+          width: 320,
+          text: "continue_with",
+          shape: "pill",
+        });
+      }
+    }).catch((e: any) => setSignInError(e?.message || "Google sign-in is unavailable right now."));
+  }, [initGoogle]);
 
   const signOut = useCallback(async () => {
     try { await api.logout(); } catch {}
     await setToken(null);
     setUser(null);
-    // Without this, Google Identity Services silently suppresses the next
-    // sign-in attempt (button click / prompt does nothing) because it still
-    // thinks there's an active selected session from before.
     if (Platform.OS === "web" && window.google?.accounts?.id) {
       try {
         window.google.accounts.id.disableAutoSelect();
