@@ -49,11 +49,16 @@ export default function Turnstile({ onToken, resetKey }: { onToken: (token: stri
           sitekey: TURNSTILE_SITE_KEY,
           callback: (token: string) => onToken(token),
           "expired-callback": () => onToken(null),
-          "error-callback": () => onToken(null),
+          "error-callback": () => {
+            console.warn("Turnstile verification widget reported an error");
+            onToken(null);
+          },
         });
         setReady(true);
       })
-      .catch(() => {});
+      .catch((error) => {
+        console.warn("Turnstile could not load or render", error);
+      });
     return () => {
       cancelled = true;
       if (window.turnstile && widgetId.current) {

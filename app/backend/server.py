@@ -78,6 +78,11 @@ BRANCH_CODES = {
     "cse": "CSE",
     "ari": "Artificial Intelligence",
     "cie": "Civil Engineering",
+    "ecm": "Electronics and Computer Engineering",
+    "ece": "Electronics and Communication Engineering",
+    "mec": "Mechatronics Engineering",
+    "mee": "Mechanical Engineering",
+    "bit": "Biotechnology",
 }
 
 
