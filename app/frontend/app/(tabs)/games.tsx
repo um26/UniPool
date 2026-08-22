@@ -7,7 +7,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 
-import { SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
+import { SPACING, RADIUS, FONT, FONT_DISPLAY, ThemeColors } from "@/src/theme";
 import { useTheme } from "@/src/theme_context/ThemeContext";
 
 export default function GamesHub() {
@@ -59,7 +59,7 @@ export default function GamesHub() {
   );
 }
 
-const makeStyles = (colors: ReturnType<typeof import("@/src/theme").LIGHT_COLORS extends never ? never : () => never>) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
   header: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.md, paddingBottom: SPACING.md },
   title: { fontSize: FONT["2xl"], fontWeight: "800", color: colors.onSurface, fontFamily: FONT_DISPLAY },
