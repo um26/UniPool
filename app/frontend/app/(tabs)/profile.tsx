@@ -452,9 +452,14 @@ export default function ProfileScreen() {
                 </Pressable>
               </>
             ) : (
-              <Pressable testID={`reopen-${item.pool_id}`} onPress={() => reopenQuery(item.pool_id)} style={styles.actionBtn} hitSlop={8}>
-                <Ionicons name="refresh" size={20} color={colors.indigo} />
-              </Pressable>
+              <>
+                <Pressable testID={`receipt-${item.pool_id}`} onPress={() => router.push(`/trip-receipt/${item.pool_id}`)} style={styles.actionBtn} hitSlop={8}>
+                  <Ionicons name="receipt-outline" size={20} color={colors.saffron} />
+                </Pressable>
+                <Pressable testID={`reopen-${item.pool_id}`} onPress={() => reopenQuery(item.pool_id)} style={styles.actionBtn} hitSlop={8}>
+                  <Ionicons name="refresh" size={20} color={colors.indigo} />
+                </Pressable>
+              </>
             )}
             <Pressable testID={`delete-${item.pool_id}`} onPress={() => remove(item.pool_id)} hitSlop={8} style={styles.actionBtn}>
               <Ionicons name="trash" size={20} color={colors.error} />

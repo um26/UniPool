@@ -122,9 +122,14 @@ export default function HomeFeed() {
             <Text style={styles.hello}>Namaste, {user?.name?.split(" ")[0] || "traveller"}</Text>
             <Text style={styles.subhello}>Where's your next journey?</Text>
           </View>
-          <Pressable testID="toggle-map-view" onPress={() => { Haptics.selectionAsync(); setShowMap((m) => !m); }} style={styles.avatar}>
-            <Ionicons name={showMap ? "list" : "map"} size={18} color={colors.indigo} />
-          </Pressable>
+          <View style={{ flexDirection: "row" }}>
+            <Pressable testID="toggle-map-view" onPress={() => { Haptics.selectionAsync(); setShowMap((m) => !m); }} style={styles.avatar}>
+              <Ionicons name={showMap ? "list" : "map"} size={18} color={colors.indigo} />
+            </Pressable>
+            <Pressable testID="open-heatmap" onPress={() => { Haptics.selectionAsync(); router.push("/heatmap"); }} style={[styles.avatar, { marginLeft: 8 }]}>
+              <Ionicons name="flame" size={18} color={colors.saffron} />
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.searchRow}>

@@ -42,6 +42,7 @@ export const api = {
   logout: () => req("/auth/logout", { method: "POST" }),
   updateProfile: (patch: any) => req("/profile", { method: "PATCH", body: JSON.stringify(patch) }),
   listPools: () => req("/pools"),
+  routeHeatmap: () => req("/analytics/route-heatmap"),
   myPools: () => req("/pools/mine"),
   myMatches: () => req("/pools/matches"),
   createPool: (body: any) => req("/pools", { method: "POST", body: JSON.stringify(body) }),

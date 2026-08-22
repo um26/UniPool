@@ -25,7 +25,7 @@ function AuthGate() {
     if (loading) return;
     const inTabs = segments[0] === "(tabs)";
     if (!user && inTabs) router.replace("/");
-    if (user && !inTabs && segments[0] !== "post-request" && segments[0] !== "games" && segments[0] !== "chat" && segments[0] !== "pool") {
+    if (user && !inTabs && segments[0] !== "post-request" && segments[0] !== "games" && segments[0] !== "chat" && segments[0] !== "pool" && segments[0] !== "heatmap" && segments[0] !== "trip-receipt") {
       router.replace("/(tabs)");
     }
   }, [user, loading, segments]);
@@ -45,6 +45,8 @@ function AuthGate() {
       <Stack.Screen name="games/rickshaw-rush" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="chat/[userId]" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="pool/[poolId]" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="heatmap" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="trip-receipt/[poolId]" options={{ animation: "slide_from_bottom" }} />
     </Stack>
   );
 }

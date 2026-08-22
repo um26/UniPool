@@ -1024,6 +1024,52 @@ async def get_pool(pool_id: str, authorization: Optional[str] = Header(None)):
     return results[0]
 
 
+@api.get("/analytics/route-heatmap")
+async def route_heatmap(authorization: Optional[str] = Header(None)):
+    """Anonymized aggregate view across all pools ever posted — popular
+    routes and popular travel hours. No user-identifying fields returned."""
+    await get_current_user(authorization)
+
+    route_pipeline = [
+        {"$project": {
+            "from_norm": {"$toLower": {"$trim": {"input": "$from_location"}}},
+            "to_norm": {"$toLower": {"$trim": {"input": "$to_location"}}},
+            "from_location": 1,
+            "to_location": 1,
+        }},
+        {"$group": {
+            "_id": {"from": "$from_norm", "to": "$to_norm"},
+            "count": {"$sum": 1},
+            "from_label": {"$first": "$from_location"},
+            "to_label": {"$first": "$to_location"},
+        }},
+        {"$sort": {"count": -1}},
+        {"$limit": 20},
+    ]
+    routes = await db.pools.aggregate(route_pipeline).to_list(20)
+
+    hour_pipeline = [
+        {"$group": {
+            "_id": {"$hour": {"date": "$travel_datetime", "timezone": "Asia/Kolkata"}},
+            "count": {"$sum": 1},
+        }},
+        {"$sort": {"_id": 1}},
+    ]
+    hours = await db.pools.aggregate(hour_pipeline).to_list(24)
+    hour_map = {h["_id"]: h["count"] for h in hours}
+
+    total = await db.pools.count_documents({})
+
+    return {
+        "total_pools": total,
+        "routes": [
+            {"from": r["from_label"], "to": r["to_label"], "count": r["count"]}
+            for r in routes
+        ],
+        "hourly": [{"hour": h, "count": hour_map.get(h, 0)} for h in range(24)],
+    }
+
+
 @api.patch("/pools/{pool_id}/close", response_model=PoolRequestOut)
 async def close_pool(pool_id: str, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
