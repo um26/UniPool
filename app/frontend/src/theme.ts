@@ -38,9 +38,17 @@ export const DARK_COLORS = {
   muted: "#9A93A8",
 };
 
+// Backward-compatible static export — light palette, used by any file not
+// yet wired into ThemeContext. Prefer `useTheme().colors` in new/updated code.
 export const COLORS = LIGHT_COLORS;
+
 export const SPACING = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32, xxxl: 48 };
 export const RADIUS = { sm: 6, md: 12, lg: 20, pill: 999 };
 export const FONT = { sm: 12, base: 14, lg: 16, xl: 20, "2xl": 24, "3xl": 30 };
+
+// Display font for hero headings/logo — pairs with Manrope (the app-wide
+// default body font, set globally in src/utils/setupFonts.ts) for a more
+// editorial, premium feel on the handful of largest headlines.
 export const FONT_DISPLAY = "Lexend, -apple-system, sans-serif";
+
 export type ThemeColors = typeof LIGHT_COLORS;
