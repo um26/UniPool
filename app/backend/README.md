@@ -19,7 +19,7 @@ python -m venv venv
 python -m pip install -r requirements.txt
 
 # Start the development server
-python -m uvicorn app:app --reload --host 0.0.0.0 --port 8001
+python -m uvicorn app:app --reload --host 0.0.0.0 --port 8001 or uvicorn app:app --reload --host 0.0.0.0 --port 8001
 ```
 
 The API is available at:
