@@ -28,10 +28,10 @@ export default function LoginScreen() {
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
 
   useEffect(() => {
-    // One deliberately slow airport turnaround: land -> taxi -> park ->
-    // passenger handoff -> taxi -> take off. Then the scene loops.
+    // Full turnaround: approach from the sky -> land -> taxi -> slow down ->
+    // park at MU for ~2s -> taxi out -> accelerate -> take off.
     travel.value = withRepeat(
-      withTiming(1, { duration: 12000, easing: Easing.linear }),
+      withTiming(1, { duration: 16000, easing: Easing.linear }),
       -1,
       false
     );
@@ -46,22 +46,24 @@ export default function LoginScreen() {
   }, [user]);
 
   const arrivingPlaneStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(travel.value, [0, 0.035, 0.56, 0.63, 0.68], [0, 1, 1, 1, 0]),
+    opacity: interpolate(travel.value, [0, 0.025, 0.58, 0.64, 0.69], [0, 1, 1, 1, 0]),
     transform: [
-      { translateX: interpolate(travel.value, [0, 0.12, 0.28, 0.44, 0.56], [-76, -18, 36, 126, 188]) },
-      { translateY: interpolate(travel.value, [0, 0.12, 0.28, 0.44, 0.56], [-58, -20, 7, 10, 10]) },
-      { rotate: `${interpolate(travel.value, [0, 0.12, 0.28, 0.44, 0.56], [-16, -6, 0, 0, 0])}deg` },
-      { scale: interpolate(travel.value, [0, 0.12, 0.56], [0.88, 1, 1]) },
+      // Starts comfortably outside the viewport, then drops onto the runway.
+      { translateX: interpolate(travel.value, [0, 0.08, 0.18, 0.30, 0.42, 0.54, 0.60], [-110, -68, -25, width * 0.12, width * 0.28, width * 0.43, width * 0.50]) },
+      { translateY: interpolate(travel.value, [0, 0.08, 0.18, 0.30, 0.42, 0.54, 0.60], [-78, -58, -34, -10, 6, 12, 12]) },
+      { rotate: `${interpolate(travel.value, [0, 0.08, 0.18, 0.30, 0.42], [-18, -13, -7, -2, 0])}deg` },
+      { scale: interpolate(travel.value, [0, 0.18, 0.60], [0.82, 0.96, 1]) },
     ],
   }));
 
   const departingPlaneStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(travel.value, [0, 0.62, 0.68, 0.98, 1], [0, 0, 1, 1, 0]),
+    opacity: interpolate(travel.value, [0.635, 0.69, 0.72, 0.97, 1], [0, 1, 1, 1, 0]),
     transform: [
-      { translateX: interpolate(travel.value, [0.62, 0.72, 0.84, 0.92, 1], [188, 208, width * 0.62, width * 0.82, width + 72]) },
-      { translateY: interpolate(travel.value, [0.62, 0.80, 0.90, 1], [10, 10, -8, -74]) },
-      { rotate: `${interpolate(travel.value, [0.62, 0.84, 0.92, 1], [0, 0, -7, -14])}deg` },
-      { scale: interpolate(travel.value, [0.62, 0.92, 1], [1, 1, 0.82]) },
+      // Starts exactly where the arriving plane parked, then leaves the stand.
+      { translateX: interpolate(travel.value, [0.69, 0.73, 0.82, 0.90, 0.96, 1], [width * 0.50, width * 0.53, width * 0.66, width * 0.82, width * 0.94, width + 90]) },
+      { translateY: interpolate(travel.value, [0.69, 0.82, 0.90, 0.96, 1], [12, 12, 8, -18, -86]) },
+      { rotate: `${interpolate(travel.value, [0.69, 0.86, 0.94, 1], [0, 0, -7, -16])}deg` },
+      { scale: interpolate(travel.value, [0.69, 0.94, 1], [1, 1, 0.78]) },
     ],
   }));
 
@@ -81,8 +83,8 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container} testID="login-screen">
-      <LinearGradient colors={[COLORS.indigo, "#2D46B5", "#15213D"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-      <Image source={{ uri: "https://images.pexels.com/photos/9693916/pexels-photo-9693916.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940" }} style={[StyleSheet.absoluteFill, { opacity: 0.045 }]} contentFit="cover" />
+      <LinearGradient colors={[COLORS.indigo, "#304FC0", "#172544"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+      <Image source={{ uri: "https://images.pexels.com/photos/9693916/pexels-photo-9693916.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940" }} style={[StyleSheet.absoluteFill, { opacity: 0.035 }]} contentFit="cover" />
 
       <View style={styles.top}>
         <View style={styles.logoRow}>
@@ -96,21 +98,45 @@ export default function LoginScreen() {
         <View style={styles.horizonGlow} />
         <View style={[styles.cloud, styles.cloudOne]} />
         <View style={[styles.cloud, styles.cloudTwo]} />
+        <View style={[styles.cloud, styles.cloudThree]} />
 
+        {/* Stylised Mahindra University campus building: intentionally recognizable as MU,
+            but kept compact so it reads as part of the airport scene rather than a terminal. */}
         <View style={styles.muBuilding}>
           <View style={styles.muRoof} />
-          <View style={styles.muUpperGlass}><View style={styles.glassColumn} /><View style={styles.glassColumn} /><View style={styles.glassColumn} /></View>
-          <View style={styles.muWing}><View style={styles.muWindow} /><View style={styles.muWindow} /><View style={styles.muWindow} /><View style={styles.muWindow} /></View>
-          <View style={styles.muWingRight}><View style={styles.muWindow} /><View style={styles.muWindow} /><View style={styles.muWindow} /><View style={styles.muWindow} /></View>
-          <View style={styles.muSign}><Text style={styles.muSignTitle}>MU</Text><Text style={styles.muSignSub}>MAHINDRA UNIVERSITY</Text></View>
+          <View style={styles.muTower}>
+            <View style={styles.muTowerGlass} />
+            <Text style={styles.muSignTitle}>MU</Text>
+            <Text style={styles.muSignSub}>MAHINDRA UNIVERSITY</Text>
+          </View>
+          <View style={styles.muWing}>
+            {[0, 1, 2, 3].map((i) => <View key={i} style={styles.muWindow} />)}
+          </View>
+          <View style={styles.muWingRight}>
+            {[0, 1, 2, 3].map((i) => <View key={i} style={styles.muWindow} />)}
+          </View>
+          <View style={styles.muSteps} />
         </View>
 
-        <View style={styles.controlTower}><View style={styles.towerTop}><Ionicons name="radio" size={11} color={COLORS.saffron} /></View><View style={styles.towerStem} /></View>
-        <View style={styles.runway}><View style={styles.runwayCenter} /><View style={styles.runwayEdge} /></View>
-        <View style={styles.gate}><View style={styles.gateLight} /><Text style={styles.gateLabel}>A1</Text></View>
+        <View style={styles.controlTower}>
+          <View style={styles.towerTop}><Ionicons name="radio" size={11} color={COLORS.saffron} /></View>
+          <View style={styles.towerStem} />
+        </View>
 
-        <Animated.View style={[styles.planeIcon, arrivingPlaneStyle]}><Ionicons name="airplane" size={29} color={COLORS.cream} /></Animated.View>
-        <Animated.View style={[styles.planeIcon, departingPlaneStyle]}><Ionicons name="airplane" size={29} color={COLORS.cream} /></Animated.View>
+        <View style={styles.runway}>
+          <View style={styles.runwayCenter} />
+          <View style={styles.runwayEdge} />
+          <View style={styles.runwayLightOne} />
+          <View style={styles.runwayLightTwo} />
+        </View>
+
+        <View style={styles.gate}>
+          <View style={styles.gateLight} />
+          <Text style={styles.gateLabel}>A1</Text>
+        </View>
+
+        <Animated.View style={[styles.planeIcon, arrivingPlaneStyle]}><Ionicons name="airplane" size={30} color={COLORS.cream} /></Animated.View>
+        <Animated.View style={[styles.planeIcon, departingPlaneStyle]}><Ionicons name="airplane" size={30} color={COLORS.cream} /></Animated.View>
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ maxHeight: "62%" }}>
@@ -167,31 +193,34 @@ const styles = StyleSheet.create({
   logoBadge: { width: 50, height: 50, borderRadius: RADIUS.pill, backgroundColor: "rgba(255,244,222,0.12)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(255,244,222,0.30)", shadowColor: COLORS.saffron, shadowOpacity: 0.25, shadowRadius: 14, shadowOffset: { width: 0, height: 0 } },
   logo: { fontSize: 38, fontWeight: "800", color: COLORS.cream, letterSpacing: 0.3, fontFamily: FONT_DISPLAY },
   tagline: { color: "rgba(255,244,222,0.84)", marginTop: SPACING.md, fontSize: FONT.lg, textAlign: "center" },
-  airportScene: { flex: 1, minHeight: 190, maxHeight: 220, marginTop: 4, position: "relative", overflow: "hidden" },
-  horizonGlow: { position: "absolute", left: "16%", right: "14%", top: "24%", height: 80, borderRadius: 80, backgroundColor: "rgba(145,168,255,0.08)" },
-  cloud: { position: "absolute", height: 18, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.055)" },
-  cloudOne: { width: 90, left: "12%", top: 20 },
-  cloudTwo: { width: 120, right: "9%", top: 46 },
-  muBuilding: { position: "absolute", left: "54%", bottom: 54, width: 238, height: 96, borderRadius: 6, backgroundColor: "rgba(245,247,251,0.96)", borderWidth: 1, borderColor: "rgba(255,255,255,0.62)", shadowColor: "#081126", shadowOpacity: 0.20, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 5 },
-  muRoof: { position: "absolute", left: -8, right: -8, top: -7, height: 9, borderRadius: 5, backgroundColor: "rgba(246,184,90,0.95)" },
-  muUpperGlass: { position: "absolute", left: 78, top: 8, width: 82, height: 42, backgroundColor: "#8FA8D7", borderWidth: 1, borderColor: "rgba(255,255,255,0.65)", flexDirection: "row", justifyContent: "space-evenly", paddingHorizontal: 7 },
-  glassColumn: { width: 2, backgroundColor: "rgba(255,255,255,0.56)" },
-  muWing: { position: "absolute", left: 8, top: 48, width: 90, height: 35, backgroundColor: "#DDE4F0", flexDirection: "row", justifyContent: "space-evenly", alignItems: "center", paddingHorizontal: 7 },
-  muWingRight: { position: "absolute", right: 8, top: 48, width: 90, height: 35, backgroundColor: "#DDE4F0", flexDirection: "row", justifyContent: "space-evenly", alignItems: "center", paddingHorizontal: 7 },
-  muWindow: { width: 11, height: 20, borderRadius: 2, backgroundColor: "#9CB3DB", borderWidth: 1, borderColor: "#7E98C4" },
-  muSign: { position: "absolute", left: 96, bottom: 4, alignItems: "center" },
-  muSignTitle: { fontSize: 13, lineHeight: 14, fontWeight: "900", color: "#243B73", letterSpacing: 1 },
-  muSignSub: { fontSize: 5.5, lineHeight: 7, fontWeight: "800", color: "#53627D", letterSpacing: 0.35 },
-  controlTower: { position: "absolute", right: 7, bottom: 54, alignItems: "center" },
-  towerTop: { width: 27, height: 19, borderRadius: 6, backgroundColor: "rgba(255,255,255,0.88)", alignItems: "center", justifyContent: "center" },
-  towerStem: { width: 7, height: 43, backgroundColor: "rgba(255,255,255,0.64)", borderBottomLeftRadius: 4, borderBottomRightRadius: 4 },
-  runway: { position: "absolute", left: -10, right: -10, bottom: 26, height: 30, backgroundColor: "rgba(7,12,20,0.42)" },
-  runwayCenter: { position: "absolute", left: 10, right: 10, top: 14, borderTopWidth: 2, borderStyle: "dashed", borderColor: "rgba(255,244,222,0.72)" },
-  runwayEdge: { position: "absolute", left: 0, right: 0, bottom: 3, borderTopWidth: 1, borderColor: "rgba(255,255,255,0.16)" },
-  gate: { position: "absolute", left: "47%", bottom: 58, alignItems: "center" },
-  gateLight: { width: 9, height: 9, borderRadius: 5, backgroundColor: COLORS.saffron, shadowColor: COLORS.saffron, shadowOpacity: 0.75, shadowRadius: 9, shadowOffset: { width: 0, height: 0 } },
-  gateLabel: { marginTop: 2, color: "rgba(255,244,222,0.76)", fontSize: 9, fontWeight: "800" },
-  planeIcon: { position: "absolute", left: 0, top: "44%", width: 34, height: 34, alignItems: "center", justifyContent: "center" },
+  airportScene: { flex: 1, minHeight: 230, maxHeight: 250, marginTop: 2, position: "relative", overflow: "hidden" },
+  horizonGlow: { position: "absolute", left: "14%", right: "12%", top: "22%", height: 100, borderRadius: 100, backgroundColor: "rgba(145,168,255,0.09)" },
+  cloud: { position: "absolute", height: 16, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.06)" },
+  cloudOne: { width: 100, left: "8%", top: 25 },
+  cloudTwo: { width: 125, right: "7%", top: 38 },
+  cloudThree: { width: 70, left: "35%", top: 12, opacity: 0.7 },
+  muBuilding: { position: "absolute", left: "55%", bottom: 54, width: 205, height: 105, borderRadius: 7, backgroundColor: "rgba(239,244,250,0.98)", borderWidth: 1, borderColor: "rgba(255,255,255,0.72)", shadowColor: "#081126", shadowOpacity: 0.28, shadowRadius: 13, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
+  muRoof: { position: "absolute", left: -8, right: -8, top: -8, height: 10, borderRadius: 6, backgroundColor: COLORS.saffron },
+  muTower: { position: "absolute", left: 67, top: 10, width: 71, height: 58, backgroundColor: "#D5DFEE", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#B8C8DE" },
+  muTowerGlass: { position: "absolute", left: 8, right: 8, top: 7, height: 23, backgroundColor: "#829BC8", opacity: 0.9 },
+  muSignTitle: { marginTop: 18, fontSize: 14, lineHeight: 15, fontWeight: "900", color: "#223A70", letterSpacing: 1.2 },
+  muSignSub: { marginTop: 1, fontSize: 5.3, lineHeight: 6, fontWeight: "900", color: "#52617B", letterSpacing: 0.25 },
+  muWing: { position: "absolute", left: 8, top: 65, width: 82, height: 31, backgroundColor: "#D8E1EE", flexDirection: "row", justifyContent: "space-evenly", alignItems: "center", paddingHorizontal: 5 },
+  muWingRight: { position: "absolute", right: 8, top: 65, width: 82, height: 31, backgroundColor: "#D8E1EE", flexDirection: "row", justifyContent: "space-evenly", alignItems: "center", paddingHorizontal: 5 },
+  muWindow: { width: 10, height: 18, borderRadius: 2, backgroundColor: "#91A9D2", borderWidth: 1, borderColor: "#718AB8" },
+  muSteps: { position: "absolute", bottom: 0, left: 87, width: 31, height: 7, backgroundColor: "#B5C2D5", borderTopLeftRadius: 3, borderTopRightRadius: 3 },
+  controlTower: { position: "absolute", right: 8, bottom: 54, alignItems: "center" },
+  towerTop: { width: 28, height: 20, borderRadius: 6, backgroundColor: "rgba(255,255,255,0.90)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.5)" },
+  towerStem: { width: 7, height: 45, backgroundColor: "rgba(255,255,255,0.66)", borderBottomLeftRadius: 4, borderBottomRightRadius: 4 },
+  runway: { position: "absolute", left: -10, right: -10, bottom: 25, height: 34, backgroundColor: "rgba(7,12,20,0.50)" },
+  runwayCenter: { position: "absolute", left: 12, right: 12, top: 16, borderTopWidth: 2, borderStyle: "dashed", borderColor: "rgba(255,244,222,0.82)" },
+  runwayEdge: { position: "absolute", left: 0, right: 0, bottom: 3, borderTopWidth: 1, borderColor: "rgba(255,255,255,0.18)" },
+  runwayLightOne: { position: "absolute", left: "30%", top: 12, width: 3, height: 3, borderRadius: 2, backgroundColor: "rgba(255,244,222,0.72)" },
+  runwayLightTwo: { position: "absolute", left: "72%", top: 12, width: 3, height: 3, borderRadius: 2, backgroundColor: "rgba(255,244,222,0.72)" },
+  gate: { position: "absolute", left: "50%", bottom: 58, alignItems: "center" },
+  gateLight: { width: 9, height: 9, borderRadius: 5, backgroundColor: COLORS.saffron, shadowColor: COLORS.saffron, shadowOpacity: 0.85, shadowRadius: 10, shadowOffset: { width: 0, height: 0 } },
+  gateLabel: { marginTop: 2, color: "rgba(255,244,222,0.84)", fontSize: 9, fontWeight: "900", letterSpacing: 0.4 },
+  planeIcon: { position: "absolute", left: 0, top: "66%", width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   bottomCard: { backgroundColor: COLORS.surface, borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: SPACING.xl, paddingBottom: SPACING.xxxl, shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 24, shadowOffset: { width: 0, height: -8 }, elevation: 12 },
   heading: { fontSize: FONT["2xl"], fontWeight: "800", color: COLORS.onSurface, marginBottom: SPACING.sm, fontFamily: FONT_DISPLAY, letterSpacing: -0.3 },
   subheading: { fontSize: FONT.base, color: COLORS.muted, marginBottom: SPACING.xl, lineHeight: 20 },
