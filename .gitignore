@@ -22,6 +22,12 @@ yarn-error.log*
 .env.local
 .env.*.local
 
+# Exception: this file only contains public EXPO_PUBLIC_* values (Expo
+# inlines these into the client bundle at build time regardless of secrecy
+# anyway), and Vercel's build needs it present since it reads .env files
+# directly from the checked-out repo. Keep everything else .env-ignored.
+!app/frontend/.env
+
 # OS / editor
 .DS_Store
 Thumbs.db
@@ -30,7 +36,6 @@ Thumbs.db
 # Secrets — never commit these
 app/backend/.env
 app/backend/.env.local
-app/frontend/.env
 app/frontend/.env.local
 
 # Node / Expo
