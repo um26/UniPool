@@ -35,28 +35,48 @@ export default function MessagesScreen() {
   const [items, setItems] = useState<Convo[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    try { setItems(await api.listConversations()); } catch (e) { console.warn(e); }
-    finally { setLoading(false); setRefreshing(false); }
+    try {
+      setError(null);
+      setItems(await api.listConversations());
+    } catch (e: any) {
+      console.warn(e);
+      setError(e?.message || "Unable to load your conversations.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <LinearGradient colors={isDark ? [colors.surface2, colors.surface3] : [colors.indigo, "#3949AB"]} style={styles.header}>
+      <LinearGradient colors={isDark ? [colors.surface2, colors.surface2] : [colors.indigo, "#3949AB"]} style={styles.header}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.md }}>
-          <Ionicons name="chatbubbles" size={26} color="#fff" />
+          <View style={styles.headerIcon}><Ionicons name="chatbubbles" size={21} color={isDark ? colors.saffron : "#fff"} /></View>
           <View>
             <Text style={styles.title}>Chats</Text>
-            <Text style={styles.sub}>Message your matched travellers directly</Text>
+            <Text style={styles.sub}>Your ride conversations</Text>
           </View>
         </View>
+        {!loading && !error && items.length > 0 ? <View style={styles.headerCount}><Text style={styles.headerCountText}>{items.length}</Text></View> : null}
       </LinearGradient>
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.indigo} /></View>
+      ) : error ? (
+        <View style={styles.state}>
+          <View style={styles.stateIcon}><Ionicons name="cloud-offline-outline" size={28} color={colors.error} /></View>
+          <Text style={styles.emptyTitle}>Couldn't load chats</Text>
+          <Text style={styles.emptySub}>{error}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Retry loading chats" onPress={() => { setLoading(true); load(); }} style={styles.retry}>
+            <Ionicons name="refresh" size={16} color="#fff" />
+            <Text style={styles.retryText}>Try again</Text>
+          </Pressable>
+        </View>
       ) : (
         <FlatList
           data={items}
@@ -65,9 +85,13 @@ export default function MessagesScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Ionicons name="chatbubble-ellipses-outline" size={64} color={colors.borderStrong} />
+              <View style={styles.emptyIcon}><Ionicons name="chatbubble-ellipses-outline" size={30} color={colors.indigo} /></View>
               <Text style={styles.emptyTitle}>No conversations yet</Text>
-              <Text style={styles.emptySub}>Message someone from your Matches tab to start chatting.</Text>
+              <Text style={styles.emptySub}>Once you match with someone, your conversation will appear here.</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Open matches" onPress={() => router.push("/matches")} style={styles.emptyCta}>
+                <Ionicons name="sparkles" size={16} color="#fff" />
+                <Text style={styles.emptyCtaText}>Find a match</Text>
+              </Pressable>
             </View>
           }
           renderItem={({ item }) => (
@@ -102,11 +126,21 @@ export default function MessagesScreen() {
 
 const makeStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
-  header: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.md, paddingBottom: SPACING.lg, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
+  header: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.md, paddingBottom: SPACING.lg, borderBottomLeftRadius: 22, borderBottomRightRadius: 22, borderBottomWidth: 1, borderBottomColor: isDark ? colors.border : "rgba(255,255,255,0.18)" },
+  headerIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: isDark ? colors.surface3 : "rgba(255,255,255,0.14)" },
+  headerCount: { position: "absolute", right: SPACING.lg, top: SPACING.lg, minWidth: 30, height: 30, paddingHorizontal: 8, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: isDark ? colors.surface3 : "rgba(255,255,255,0.16)" },
+  headerCountText: { color: isDark ? colors.onSurface : "#fff", fontWeight: "800", fontSize: 12 },
   title: { color: isDark ? colors.onSurface : "#fff", fontSize: FONT["2xl"], fontWeight: "800", fontFamily: FONT_DISPLAY },
   sub: { color: isDark ? colors.onSurface2 : "rgba(255,255,255,0.9)", marginTop: 2 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  state: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: SPACING.xl },
+  stateIcon: { width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface2, marginBottom: SPACING.md },
+  retry: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: SPACING.lg, backgroundColor: colors.indigo, borderRadius: RADIUS.pill, paddingHorizontal: 18, paddingVertical: 11 },
+  retryText: { color: "#fff", fontWeight: "800" },
   empty: { alignItems: "center", paddingVertical: 80, paddingHorizontal: SPACING.xl },
+  emptyIcon: { width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface2, marginBottom: SPACING.md },
+  emptyCta: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: SPACING.lg, backgroundColor: colors.indigo, borderRadius: RADIUS.pill, paddingHorizontal: 18, paddingVertical: 11 },
+  emptyCtaText: { color: "#fff", fontWeight: "800" },
   emptyTitle: { marginTop: SPACING.md, fontSize: FONT.xl, fontWeight: "700", color: colors.onSurface },
   emptySub: { marginTop: 4, color: colors.muted, textAlign: "center" },
   row: { flexDirection: "row", alignItems: "center", gap: SPACING.md, backgroundColor: colors.card, borderRadius: RADIUS.lg, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: colors.border },
