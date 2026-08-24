@@ -38,7 +38,7 @@ function isSameDay(iso: string, ref: Date) {
 export default function HomeFeed() {
   const router = useRouter(); const { user } = useAuth(); const { colors, isDark } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [pools, setPools] = useState<Pool[]>([]); const [loading, setLoading] = useState(true); const [refreshing, setRefreshing] = useState(false);
+  const [pools, setPools] = useState<Pool[]>([]); const [loading, setLoading] = useState(true); const [refreshing, setRefreshing] = useState(false); const [error, setError] = useState<string | null>(null);
   const [chip, setChip] = useState("All"); const [search, setSearch] = useState(""); const [showMap, setShowMap] = useState(false);
   const [requesting, setRequesting] = useState<Set<string>>(new Set()); const [reportTarget, setReportTarget] = useState<{ user_id: string; user_name: string } | null>(null);
   const [confettiKey, setConfettiKey] = useState(0); const knownAccepted = useRef<Set<string> | null>(null);
@@ -48,7 +48,7 @@ export default function HomeFeed() {
       const acceptedNow = new Set<string>(list.filter((p: Pool) => p.my_request_status === "accepted").map((p: Pool) => p.pool_id));
       if (knownAccepted.current && [...acceptedNow].some((id) => !knownAccepted.current!.has(id))) setConfettiKey((k) => k + 1);
       knownAccepted.current = acceptedNow;
-    } catch (e) { console.warn(e); } finally { setLoading(false); setRefreshing(false); }
+    } catch (e: any) { console.warn(e); setError(e?.message || "We couldn’t load the pool feed."); } finally { setLoading(false); setRefreshing(false); }
   }, []);
   const sendRequest = useCallback(async (pool: Pool) => {
     setRequesting((s) => new Set(s).add(pool.pool_id)); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -65,7 +65,7 @@ export default function HomeFeed() {
     if (chip === "Railway" && !/station|railway|junction|jn/i.test(`${p.from_location} ${p.to_location}`)) return false;
     if (search.trim()) { const q = search.trim().toLowerCase(); const haystack = `${p.from_location} ${p.to_location} ${p.user_name}`.toLowerCase(); if (!haystack.includes(q)) return false; }
     return true;
-  }), [pools, chip, search]);
+  }).sort((a, b) => new Date(a.travel_datetime).getTime() - new Date(b.travel_datetime).getTime()), [pools, chip, search]);
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <Confetti burstKey={confettiKey} />
@@ -82,7 +82,8 @@ export default function HomeFeed() {
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>{CHIPS.map((c) => <Pressable key={c} testID={`chip-${c.toLowerCase().replace(" ", "-")}`} onPress={() => { Haptics.selectionAsync(); setChip(c); }} style={[styles.chip, chip === c && styles.chipActive]}><Text style={[styles.chipText, chip === c && styles.chipTextActive]}>{c}</Text></Pressable>)}</ScrollView>
       </LinearGradient>
-      {loading ? <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 140 }}><PoolFeedSkeleton /></ScrollView> : showMap ? <PoolMapView pools={filtered} /> : <FlatList data={filtered} keyExtractor={(i) => i.pool_id} contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 140 }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.indigo} />} ListEmptyComponent={<View style={styles.empty}><Ionicons name="map-outline" size={56} color={colors.borderStrong} /><Text style={styles.emptyTitle}>No pools yet</Text><Text style={styles.emptySub}>Be the first to post a cab-pool for this route.</Text></View>} renderItem={({ item }) => <PoolCard pool={item} mine={item.user_id === user?.user_id} busy={requesting.has(item.pool_id)} onRequest={() => sendRequest(item)} onOpenReport={() => setReportTarget({ user_id: item.user_id, user_name: item.user_name })} colors={colors} styles={styles} />} />}
+      {!loading && !error && <View style={styles.resultBar}><Text style={styles.resultText}>{filtered.length} {filtered.length === 1 ? "ride" : "rides"} · {chip === "All" ? "all dates" : chip.toLowerCase()}</Text>{(search.trim() || chip !== "All") && <Pressable onPress={() => { setSearch(""); setChip("All"); }}><Text style={styles.clearFilters}>Clear filters</Text></Pressable>}</View>}
+      {loading ? <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 140 }}><PoolFeedSkeleton /></ScrollView> : error ? <View style={styles.errorState}><View style={styles.errorIcon}><Ionicons name="cloud-offline-outline" size={28} color={colors.error} /></View><Text style={styles.emptyTitle}>Couldn’t load rides</Text><Text style={styles.emptySub}>{error}</Text><Pressable accessibilityLabel="Retry loading rides" onPress={() => { setLoading(true); load(); }} style={styles.retry}><Ionicons name="refresh" size={16} color="#fff" /><Text style={styles.retryText}>Try again</Text></Pressable></View> : showMap ? <PoolMapView pools={filtered} /> : <FlatList data={filtered} keyExtractor={(i) => i.pool_id} contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 140 }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.indigo} />} ListEmptyComponent={<View style={styles.empty}><Ionicons name={search.trim() || chip !== "All" ? "search-outline" : "map-outline"} size={56} color={colors.borderStrong} /><Text style={styles.emptyTitle}>{search.trim() || chip !== "All" ? "No matching rides" : "No pools yet"}</Text><Text style={styles.emptySub}>{search.trim() || chip !== "All" ? "Try another route or clear your filters." : "Be the first to post a cab-pool for this route."}</Text></View>} renderItem={({ item }) => <PoolCard pool={item} mine={item.user_id === user?.user_id} busy={requesting.has(item.pool_id)} onRequest={() => sendRequest(item)} onOpenReport={() => setReportTarget({ user_id: item.user_id, user_name: item.user_name })} colors={colors} styles={styles} />} />}
       <PressableScale testID="create-pool-fab" onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); router.push("/post-request"); }} style={styles.fab} scaleTo={0.92}><LinearGradient colors={[colors.saffron, "#F57F17"]} style={styles.fabBg}><Ionicons name="add" size={26} color="#fff" /><Text style={styles.fabText}>Post Pool</Text></LinearGradient></PressableScale>
       {reportTarget && <ReportBlockModal visible={!!reportTarget} onClose={() => setReportTarget(null)} userId={reportTarget.user_id} userName={reportTarget.user_name} onBlocked={load} />}
     </SafeAreaView>
@@ -120,7 +121,10 @@ const makeStyles = (colors: any) => StyleSheet.create({
   searchInput: { flex: 1, color: "#FFFFFF", fontSize: FONT.base },
   chip: { flexShrink: 0, height: 36, paddingHorizontal: 14, borderRadius: RADIUS.pill, backgroundColor: "rgba(255,255,255,0.10)", borderWidth: 1, borderColor: "rgba(255,255,255,0.20)", alignItems: "center", justifyContent: "center" },
   chipActive: { backgroundColor: colors.saffron, borderColor: colors.saffron }, chipText: { color: "#FFFFFF", fontSize: 13, fontWeight: "600" }, chipTextActive: { color: "#fff" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" }, empty: { alignItems: "center", justifyContent: "center", paddingVertical: 80 }, emptyTitle: { marginTop: SPACING.md, fontSize: FONT.xl, fontWeight: "700", color: colors.onSurface }, emptySub: { marginTop: 4, color: colors.muted },
+  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  resultBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm }, resultText: { color: colors.muted, fontSize: FONT.sm, fontWeight: "600" }, clearFilters: { color: colors.indigo, fontSize: FONT.sm, fontWeight: "800" },
+  errorState: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: SPACING.xxl }, errorIcon: { width: 58, height: 58, borderRadius: 29, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center", marginBottom: SPACING.md }, retry: { marginTop: SPACING.lg, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.indigo, borderRadius: RADIUS.pill, paddingHorizontal: 18, paddingVertical: 11 }, retryText: { color: "#fff", fontWeight: "800" },
+  empty: { alignItems: "center", justifyContent: "center", paddingVertical: 80 }, emptyTitle: { marginTop: SPACING.md, fontSize: FONT.xl, fontWeight: "700", color: colors.onSurface }, emptySub: { marginTop: 4, color: colors.muted },
   card: { backgroundColor: colors.card, borderRadius: RADIUS.lg, padding: SPACING.lg, marginBottom: SPACING.md, borderWidth: 1, borderColor: colors.border, shadowColor: "#000", shadowOpacity: 0.10, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 3 },
   cardHeader: { flexDirection: "row", alignItems: "center", gap: SPACING.md, marginBottom: SPACING.md }, cardAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.cream, alignItems: "center", justifyContent: "center" }, cardName: { fontSize: FONT.lg, fontWeight: "700", color: colors.onSurface }, cardWhen: { color: colors.muted, fontSize: FONT.sm, marginTop: 2 },
   badge: { backgroundColor: colors.cream, paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.pill }, badgeText: { color: colors.onCream, fontSize: 11, fontWeight: "700" },

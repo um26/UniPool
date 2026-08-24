@@ -8,6 +8,8 @@ import { useTheme } from "@/src/theme_context/ThemeContext";
 
 export default function TabsLayout() {
   const { colors, isDark } = useTheme();
+  const barBg = isDark ? "rgba(11,18,32,0.96)" : "rgba(255,255,255,0.96)";
+
   return (
     <Tabs
       screenOptions={({ route }) => ({
@@ -15,18 +17,28 @@ export default function TabsLayout() {
         tabBarShowLabel: true,
         tabBarActiveTintColor: colors.saffron,
         tabBarInactiveTintColor: colors.muted,
-        tabBarLabelStyle: { fontSize: 11, fontWeight: "600", marginBottom: 4 },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: "700", marginBottom: 4 },
         tabBarStyle: {
           position: "absolute",
-          borderTopWidth: 0,
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
           elevation: 0,
           height: 74,
           paddingTop: 8,
-          backgroundColor: Platform.OS === "android" ? (isDark ? "rgba(18,16,22,0.96)" : "rgba(255,249,242,0.96)") : "transparent",
+          backgroundColor: Platform.OS === "android" ? barBg : "transparent",
         },
         tabBarBackground: () => (
-          <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+          <BlurView
+            intensity={isDark ? 18 : 24}
+            tint={isDark ? "dark" : "light"}
+            style={[StyleSheet.absoluteFill, { backgroundColor: barBg }]}
+          />
         ),
+        tabBarAccessibilityLabel:
+          route.name === "index" ? "Pool" :
+          route.name === "matches" ? "Matches" :
+          route.name === "messages" ? "Chats" :
+          route.name === "games" ? "Play games" : "Profile",
         tabBarIcon: ({ color, focused }) => {
           const map: Record<string, any> = {
             index: focused ? "car-sport" : "car-sport-outline",
@@ -36,7 +48,14 @@ export default function TabsLayout() {
             profile: focused ? "person-circle" : "person-circle-outline",
           };
           return (
-            <View style={[styles.iconWrap, focused && { backgroundColor: isDark ? "rgba(255,183,77,0.18)" : "rgba(255,153,51,0.15)" }]}>
+            <View
+              style={[
+                styles.iconWrap,
+                focused && {
+                  backgroundColor: isDark ? "rgba(255,184,77,0.14)" : "rgba(244,166,42,0.12)",
+                },
+              ]}
+            >
               <Ionicons name={map[route.name] || "ellipse"} size={22} color={color} />
             </View>
           );
