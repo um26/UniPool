@@ -104,6 +104,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       callback: handleCredential,
       auto_select: false,
       cancel_on_tap_outside: true,
+      error_callback: (error: any) => {
+        console.warn("Google Identity Services error", error);
+        setSignInError(
+          error?.type === "popup_failed_to_open"
+            ? "Google sign-in popup was blocked. Please allow popups for UniPool and try again."
+            : "Google sign-in could not start. Please try again."
+        );
+      },
     });
   }, [handleCredential]);
 
