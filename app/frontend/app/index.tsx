@@ -75,48 +75,50 @@ export default function LoginScreen() {
 
   // The second aircraft runs along the runway first, reaches MU, then climbs away.
   const departingPlaneStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(travel.value, [0.76, 0.80, 0.88, 0.96, 1.00], [0, 1, 1, 1, 0]),
+    opacity: interpolate(travel.value, [0.77, 0.80, 0.88, 0.96, 1.00], [0, 1, 1, 1, 0]),
     transform: [
       {
         translateX: interpolate(
           travel.value,
-          [0.76, 0.80, 0.84, 0.88, 0.92, 0.96, 1.00],
+          [0.77, 0.80, 0.84, 0.88, 0.92, 0.96, 1.00],
           [-100, width * 0.03, width * 0.25, width * 0.40, MU_POSITION, width * 0.72, width + 100]
         )
       },
       {
-        translateY: interpolate(travel.value, [0.76, 0.84, 0.88, 0.92, 0.96, 1.00], [0, 0, 0, -35, -100, -180])
+        translateY: interpolate(travel.value, [0.77, 0.84, 0.88, 0.92, 0.96, 1.00], [0, 0, 0, -35, -100, -180])
       },
       {
-        rotate: `${interpolate(travel.value, [0.76, 0.88, 0.92, 0.96, 1.00], [0, 0, -7, -14, -20])}deg`
+        rotate: `${interpolate(travel.value, [0.77, 0.88, 0.92, 0.96, 1.00], [0, 0, -7, -14, -20])}deg`
       },
       {
-        scale: interpolate(travel.value, [0.76, 0.96, 1.00], [1, 0.9, 0.65])
+        scale: interpolate(travel.value, [0.77, 0.96, 1.00], [1, 0.9, 0.65])
       }
     ]
   }));
 
-  // The cab uses a separate lower lane. It enters at a good cruising speed,
-  // progressively decelerates into MU, waits for exactly ~1.5s, then accelerates away.
+  // The cab runs only after the first aircraft has landed and finishes before
+  // the second aircraft begins its takeoff sequence. It starts quickly, eases
+  // into a stop in front of MU for ~1.5s, then accelerates away.
   const cabStyle = useAnimatedStyle(() => ({
     opacity: interpolate(
       travel.value,
-      [0.02, 0.05, 0.16, 0.26, 0.34, 0.39, 0.42, 0.503, 0.55, 0.62, 0.72, 0.80],
-      [0,    1,    1,    1,    1,    1,    1,     1,    1,    1,    1,    0]
+      [0.525, 0.535, 0.625, 0.64, 0.70, 0.705, 0.75, 0.765],
+      [0,     1,     1,     1,    1,    1,     1,    0]
     ),
     transform: [
       {
         translateX: interpolate(
           travel.value,
-          [0.05, 0.16, 0.26, 0.34, 0.39, 0.42, 0.503, 0.55, 0.62, 0.72, 0.80],
-          [-90, width * 0.12, width * 0.25, width * 0.36, width * 0.43, MU_POSITION - 18, MU_POSITION - 18, MU_POSITION + 4, width * 0.60, width * 0.76, width + 90]
+          [0.535, 0.55, 0.565, 0.58, 0.595, 0.61, 0.625, 0.64, 0.70, 0.705, 0.72, 0.74, 0.765],
+          [-100, width * 0.07, width * 0.16, width * 0.25, width * 0.33, width * 0.39, MU_POSITION - 42, MU_POSITION - 18, MU_POSITION - 18, MU_POSITION - 10, width * 0.58, width * 0.74, width + 100]
         )
       },
       {
-        translateY: interpolate(travel.value, [0.05, 0.42, 0.80], [10, 0, 0])
+        // Keep the cab perfectly level; no initial 5-degree visual drift.
+        translateY: interpolate(travel.value, [0.535, 0.765], [0, 0])
       },
       {
-        scale: interpolate(travel.value, [0.05, 0.42, 0.80], [0.82, 1, 0.96])
+        scale: interpolate(travel.value, [0.535, 0.625, 0.765], [0.82, 1, 1])
       }
     ]
   }));
@@ -142,7 +144,10 @@ export default function LoginScreen() {
         <Animated.View style={[styles.animatedPlane, arrivingPlaneStyle]}><Ionicons name="airplane" size={40} color="#fff" /></Animated.View>
         <Animated.View style={[styles.animatedPlane, departingPlaneStyle]}><Ionicons name="airplane" size={40} color="#fff" /></Animated.View>
         <Animated.View style={[styles.animatedCab, cabStyle]}>
-          <FontAwesome5 name="car-side" size={42} color={COLORS.saffron} solid />
+          <View style={styles.cabVisual}>
+            <FontAwesome5 name="car-side" size={52} color={COLORS.saffron} solid />
+            <Text style={styles.cabLabel}>TAXI / CAB</Text>
+          </View>
         </Animated.View>
       </View>
 
@@ -197,7 +202,9 @@ const styles = StyleSheet.create({
   tagline: { color: "rgba(255,255,255,0.94)", marginTop: 10, fontSize: 16, fontWeight: "600" },
   taglineAccent: { color: COLORS.saffron },
   animatedPlane: { position: "absolute", left: 0, top: 365, zIndex: 8, width: 52, height: 42, alignItems: "center", justifyContent: "center" },
-  animatedCab: { position: "absolute", left: 0, top: 398, zIndex: 7, width: 64, height: 42, alignItems: "center", justifyContent: "center" },
+  animatedCab: { position: "absolute", left: 0, top: 395, zIndex: 7, width: 96, height: 58, alignItems: "center", justifyContent: "center" },
+  cabVisual: { width: 96, height: 58, alignItems: "center", justifyContent: "center" },
+  cabLabel: { position: "absolute", top: -2, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.92)", color: "#1B2745", fontSize: 8, fontWeight: "800", letterSpacing: 0.4 },
   bottomCard: { padding: 28, paddingBottom: 44 },
   heading: { fontSize: 25, fontWeight: "800", color: COLORS.text, fontFamily: FONT_DISPLAY },
   subheading: { marginTop: 6, color: COLORS.muted, fontSize: 15, lineHeight: 22 },
