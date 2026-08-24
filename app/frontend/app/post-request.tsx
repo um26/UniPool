@@ -49,6 +49,7 @@ export default function PostRequestScreen() {
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [loadingExisting, setLoadingExisting] = useState(isEditing);
+  const [routeSwapped, setRouteSwapped] = useState(false);
 
   useEffect(() => {
     if (!isEditing) return;
@@ -75,6 +76,17 @@ export default function PostRequestScreen() {
       }
     })();
   }, [isEditing, edit]);
+
+  const swapRoute = () => { setFrom(to); setTo(from); setRouteSwapped((v) => !v); Haptics.selectionAsync(); };
+
+  const applyDatePreset = (days: number) => {
+    const d = new Date(); d.setDate(d.getDate() + days);
+    const ist = toISTParts(d); setDate(ist.date);
+    if (days === 0) {
+      const later = new Date(Date.now() + 60 * 60 * 1000); setTime(toISTParts(later).time);
+    }
+    Haptics.selectionAsync();
+  };
 
   const submit = async () => {
     if (!from.trim() || !to.trim()) return Alert.alert("Missing", "From & To are required");
@@ -124,10 +136,15 @@ export default function PostRequestScreen() {
           <Field label="From (city / area)" testID="input-from" styles={styles}>
             <TextInput testID="from-input" value={from} onChangeText={setFrom} placeholder="e.g. IIT Delhi" style={styles.input} placeholderTextColor={colors.muted} />
           </Field>
-          <Field label="To (city / area)" testID="input-to" styles={styles}>
+          <View style={styles.routeInputs}>
+            <View style={{ flex: 1 }}>
+              <Field label="To (city / area)" testID="input-to" styles={styles}>
             <TextInput testID="to-input" value={to} onChangeText={setTo} placeholder="e.g. IGI Airport T3" style={styles.input} placeholderTextColor={colors.muted} />
           </Field>
 
+          <View style={styles.presetRow}>
+            {[0, 1, 2].map((days) => <Pressable key={days} onPress={() => applyDatePreset(days)} style={[styles.preset, date === toISTParts(new Date(Date.now() + days * 86400000)).date && styles.presetActive]}><Text style={[styles.presetText, date === toISTParts(new Date(Date.now() + days * 86400000)).date && styles.presetTextActive]}>{days === 0 ? "Today" : days === 1 ? "Tomorrow" : "In 2 days"}</Text></Pressable>)}
+          </View>
           <View style={{ flexDirection: "row", gap: SPACING.md }}>
             <Field style={{ flex: 1 }} label="Date (IST)" testID="input-date" styles={styles}>
               <TextInput testID="date-input" value={date} onChangeText={setDate} placeholder="YYYY-MM-DD" style={styles.input} placeholderTextColor={colors.muted} />
@@ -165,7 +182,8 @@ export default function PostRequestScreen() {
           </Field>
 
           <Field label="Notes (optional)" testID="input-notes" styles={styles}>
-            <TextInput testID="notes-input" value={notes} onChangeText={setNotes} placeholder="Any details" style={[styles.input, { height: 80, textAlignVertical: "top" }]} multiline placeholderTextColor={colors.muted} />
+            <TextInput testID="notes-input" value={notes} onChangeText={(v) => setNotes(v.slice(0, 240))} placeholder="Any details" style={[styles.input, { height: 80, textAlignVertical: "top" }]} multiline maxLength={240} placeholderTextColor={colors.muted} />
+            <Text style={styles.counter}>{notes.length}/240</Text>
           </Field>
         </ScrollView>
         )}
@@ -196,6 +214,14 @@ function Field({ label, children, testID, style, styles }: any) {
 
 const makeStyles = (colors: any) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
+  routeInputs: { flexDirection: "row", alignItems: "flex-end", gap: SPACING.sm },
+  swapBtn: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border, marginBottom: SPACING.lg },
+  presetRow: { flexDirection: "row", gap: SPACING.sm, marginBottom: SPACING.sm },
+  preset: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: RADIUS.pill, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border },
+  presetActive: { backgroundColor: colors.indigo, borderColor: colors.indigo },
+  presetText: { color: colors.onSurface, fontSize: 12, fontWeight: "700" },
+  presetTextActive: { color: "#fff" },
+  counter: { textAlign: "right", color: colors.muted, fontSize: 11, marginTop: 4 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   title: { fontSize: FONT.xl, fontWeight: "800", color: colors.onSurface },
   label: { fontSize: FONT.sm, fontWeight: "700", color: colors.muted, marginBottom: 6, letterSpacing: 0.4 },
