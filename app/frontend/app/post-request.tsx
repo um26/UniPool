@@ -133,17 +133,25 @@ export default function PostRequestScreen() {
           </View>
         ) : (
         <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 140 }}>
-          <Field label="From (city / area)" testID="input-from" styles={styles}>
-            <TextInput testID="from-input" value={from} onChangeText={setFrom} placeholder="e.g. IIT Delhi" style={styles.input} placeholderTextColor={colors.muted} />
-          </Field>
           <View style={styles.routeInputs}>
             <View style={{ flex: 1 }}>
+              <Field label="From (city / area)" testID="input-from" styles={styles}>
+                <TextInput testID="from-input" value={from} onChangeText={setFrom} placeholder="e.g. IIT Delhi" style={styles.input} placeholderTextColor={colors.muted} />
+              </Field>
               <Field label="To (city / area)" testID="input-to" styles={styles}>
-            <TextInput testID="to-input" value={to} onChangeText={setTo} placeholder="e.g. IGI Airport T3" style={styles.input} placeholderTextColor={colors.muted} />
-          </Field>
+                <TextInput testID="to-input" value={to} onChangeText={setTo} placeholder="e.g. IGI Airport T3" style={styles.input} placeholderTextColor={colors.muted} />
+              </Field>
+            </View>
+            <Pressable accessibilityRole="button" accessibilityLabel="Swap from and to locations" testID="swap-route" onPress={swapRoute} style={styles.swapBtn}>
+              <Ionicons name="swap-vertical" size={19} color={colors.indigo} />
+            </Pressable>
+          </View>
 
           <View style={styles.presetRow}>
-            {[0, 1, 2].map((days) => <Pressable key={days} onPress={() => applyDatePreset(days)} style={[styles.preset, date === toISTParts(new Date(Date.now() + days * 86400000)).date && styles.presetActive]}><Text style={[styles.presetText, date === toISTParts(new Date(Date.now() + days * 86400000)).date && styles.presetTextActive]}>{days === 0 ? "Today" : days === 1 ? "Tomorrow" : "In 2 days"}</Text></Pressable>)}
+            {[0, 1, 2].map((days) => {
+              const presetDate = toISTParts(new Date(Date.now() + days * 86400000)).date;
+              return <Pressable key={days} onPress={() => applyDatePreset(days)} style={[styles.preset, date === presetDate && styles.presetActive]}><Text style={[styles.presetText, date === presetDate && styles.presetTextActive]}>{days === 0 ? "Today" : days === 1 ? "Tomorrow" : "In 2 days"}</Text></Pressable>;
+            })}
           </View>
           <View style={{ flexDirection: "row", gap: SPACING.md }}>
             <Field style={{ flex: 1 }} label="Date (IST)" testID="input-date" styles={styles}>
