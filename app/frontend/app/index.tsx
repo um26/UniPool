@@ -142,8 +142,7 @@ export default function LoginScreen() {
         <Animated.View style={[styles.animatedPlane, arrivingPlaneStyle]}><Ionicons name="airplane" size={40} color="#fff" /></Animated.View>
         <Animated.View style={[styles.animatedPlane, departingPlaneStyle]}><Ionicons name="airplane" size={40} color="#fff" /></Animated.View>
         <Animated.View style={[styles.animatedCab, cabStyle]}>
-          <View style={styles.cabSign}><Text style={styles.cabSignText}>TAXI</Text></View>
-          <FontAwesome5 name="taxi" size={34} color={COLORS.saffron} solid />
+          <FontAwesome5 name="car-side" size={42} color={COLORS.saffron} solid />
         </Animated.View>
       </View>
 
@@ -198,9 +197,7 @@ const styles = StyleSheet.create({
   tagline: { color: "rgba(255,255,255,0.94)", marginTop: 10, fontSize: 16, fontWeight: "600" },
   taglineAccent: { color: COLORS.saffron },
   animatedPlane: { position: "absolute", left: 0, top: 365, zIndex: 8, width: 52, height: 42, alignItems: "center", justifyContent: "center" },
-  animatedCab: { position: "absolute", left: 0, top: 398, zIndex: 7, width: 50, height: 38, alignItems: "center", justifyContent: "center" },
-  cabSign: { position: "absolute", top: -5, left: 17, minWidth: 20, height: 8, paddingHorizontal: 3, borderRadius: 3, backgroundColor: "#fff", borderWidth: 1, borderColor: "rgba(0,0,0,0.14)", alignItems: "center", justifyContent: "center", zIndex: 2 },
-  cabSignText: { fontSize: 4.5, lineHeight: 6, fontWeight: "900", color: "#18243b", letterSpacing: 0.2 },
+  animatedCab: { position: "absolute", left: 0, top: 398, zIndex: 7, width: 64, height: 42, alignItems: "center", justifyContent: "center" },
   bottomCard: { padding: 28, paddingBottom: 44 },
   heading: { fontSize: 25, fontWeight: "800", color: COLORS.text, fontFamily: FONT_DISPLAY },
   subheading: { marginTop: 6, color: COLORS.muted, fontSize: 15, lineHeight: 22 },
