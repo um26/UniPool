@@ -315,10 +315,10 @@ export default function ProfileScreen() {
               </Pressable>
             )}
 
-            <View style={styles.themeRow}>
+            <View style={styles.themeRow} accessibilityRole="summary">
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                 <Ionicons name={isDark ? "moon" : "sunny"} size={18} color={colors.indigo} />
-                <Text style={styles.themeLabel}>Dark mode</Text>
+                <Text style={styles.themeLabel}>Appearance</Text>
               </View>
               <View style={styles.themeSegment}>
                 {[
@@ -329,6 +329,9 @@ export default function ProfileScreen() {
                   <Pressable
                     key={opt.k}
                     testID={`theme-${opt.k}`}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Use ${opt.k} appearance`}
+                    accessibilityState={{ selected: mode === opt.k }}
                     onPress={() => { setMode(opt.k); Haptics.selectionAsync(); }}
                     style={[styles.themeOption, mode === opt.k && styles.themeOptionActive]}
                   >
@@ -533,7 +536,7 @@ function Stat({ label, value, styles }: { label: string; value: number; styles: 
 
 const makeStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
-  header: { alignItems: "center", paddingVertical: SPACING.xl, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
+  header: { alignItems: "center", paddingVertical: SPACING.xl, borderBottomLeftRadius: 22, borderBottomRightRadius: 22, borderBottomWidth: 1, borderBottomColor: isDark ? colors.border : "rgba(255,255,255,0.18)" },
   avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.cream, alignItems: "center", justifyContent: "center", marginBottom: SPACING.md },
   avatarText: { color: colors.indigo, fontSize: 28, fontWeight: "800" },
   name: { color: isDark ? colors.onSurface : "#fff", fontSize: FONT.xl, fontWeight: "800", fontFamily: FONT_DISPLAY },
@@ -558,9 +561,9 @@ const makeStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   pushToggle: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: SPACING.md, backgroundColor: colors.card, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: colors.indigo, paddingVertical: 12 },
   pushToggleActive: { backgroundColor: colors.indigo },
   pushToggleText: { color: colors.indigo, fontWeight: "700", fontSize: 13 },
-  themeRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: SPACING.md, backgroundColor: colors.card, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: colors.border, paddingVertical: 10, paddingHorizontal: 14 },
+  themeRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: SPACING.md, backgroundColor: colors.surface2, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: colors.border, paddingVertical: 10, paddingHorizontal: 14 },
   themeLabel: { color: colors.onSurface, fontWeight: "700", fontSize: 13 },
-  themeSegment: { flexDirection: "row", gap: 4, backgroundColor: colors.surface2, borderRadius: RADIUS.pill, padding: 3 },
+  themeSegment: { flexDirection: "row", gap: 4, backgroundColor: colors.card, borderRadius: RADIUS.pill, padding: 3, borderWidth: 1, borderColor: colors.border },
   themeOption: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
   themeOptionActive: { backgroundColor: colors.indigo },
 
