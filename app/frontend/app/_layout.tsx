@@ -1,7 +1,7 @@
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
-import { LogBox } from "react-native";
+import { LogBox, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -10,6 +10,7 @@ import { AuthProvider, useAuth } from "@/src/auth/AuthContext";
 import { ThemeProvider, useTheme } from "@/src/theme_context/ThemeContext";
 import { applyPremiumFontDefaults } from "@/src/utils/setupFonts";
 import AnimatedSplash from "@/src/components/AnimatedSplash";
+import AmbientDepth from "@/src/components/AmbientDepth";
 
 LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
@@ -34,20 +35,23 @@ function AuthGate() {
     return <AnimatedSplash />;
   }
   return (
-    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface } }}>
-      <Stack.Screen name="index" />
-      <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="post-request" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
-      <Stack.Screen name="games/trivia" options={{ animation: "slide_from_right" }} />
-      <Stack.Screen name="games/tap-plane" options={{ animation: "slide_from_right" }} />
-      <Stack.Screen name="games/memory-match" options={{ animation: "slide_from_right" }} />
-      <Stack.Screen name="games/word-scramble" options={{ animation: "slide_from_right" }} />
-      <Stack.Screen name="games/rickshaw-rush" options={{ animation: "slide_from_right" }} />
-      <Stack.Screen name="chat/[userId]" options={{ animation: "slide_from_right" }} />
-      <Stack.Screen name="pool/[poolId]" options={{ animation: "slide_from_right" }} />
-      <Stack.Screen name="heatmap" options={{ animation: "slide_from_right" }} />
-      <Stack.Screen name="trip-receipt/[poolId]" options={{ animation: "slide_from_bottom" }} />
-    </Stack>
+    <View style={{ flex: 1, backgroundColor: colors.surface }}>
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface } }}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="post-request" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+        <Stack.Screen name="games/trivia" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="games/tap-plane" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="games/memory-match" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="games/word-scramble" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="games/rickshaw-rush" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="chat/[userId]" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="pool/[poolId]" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="heatmap" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="trip-receipt/[poolId]" options={{ animation: "slide_from_bottom" }} />
+      </Stack>
+      <AmbientDepth />
+    </View>
   );
 }
 
