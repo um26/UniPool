@@ -50,7 +50,7 @@ function AuthGate() {
         <Stack.Screen name="heatmap" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="trip-receipt/[poolId]" options={{ animation: "slide_from_bottom" }} />
       </Stack>
-      <AmbientDepth />
+      {user && <AmbientDepth />}
     </View>
   );
 }
