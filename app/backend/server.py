@@ -26,7 +26,7 @@ mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url, tz_aware=True, tzinfo=timezone.utc)
 db = client[os.environ["DB_NAME"]]
 
-GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID") or "122772084677-2tmsqh751kle4b411e5rksjbieb4ige0.apps.googleusercontent.com"
 
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
@@ -827,7 +827,11 @@ async def login(body: LoginRequest, request: Request):
     user = await db.users.find_one(
         {"$or": [{"email": identifier.lower()}, {"username": identifier}]}, {"_id": 0}
     )
-    if not user or not user.get("password_hash") or not _verify_password(body.password, user["password_hash"]):
+    if not user:
+        raise HTTPException(status_code=401, detail="Incorrect email/username or password")
+    if not user.get("password_hash"):
+        raise HTTPException(status_code=401, detail="This account uses Google sign-in. Please continue with Google.")
+    if not _verify_password(body.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Incorrect email/username or password")
 
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"last_login": _now_utc()}})
