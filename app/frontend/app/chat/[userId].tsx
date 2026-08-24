@@ -3,245 +3,35 @@ import { View, Text, StyleSheet, FlatList, TextInput, Pressable, KeyboardAvoidin
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
-
 import { SPACING, RADIUS, FONT } from "@/src/theme";
 import { useTheme } from "@/src/theme_context/ThemeContext";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/auth/AuthContext";
 import ReportBlockModal from "@/src/components/ReportBlockModal";
 
-type Msg = {
-  message_id: string;
-  from_user_id: string;
-  to_user_id: string;
-  text: string;
-  created_at: string;
-  read: boolean;
-};
-
-function timeAgo(iso?: string) {
-  if (!iso) return "";
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
+type Msg = { message_id: string; from_user_id: string; to_user_id: string; text: string; created_at: string; read: boolean };
+function timeAgo(iso?: string) { if (!iso) return ""; const diff = Date.now() - new Date(iso).getTime(); const mins = Math.floor(diff / 60000); if (mins < 1) return "just now"; if (mins < 60) return `${mins}m ago`; const hrs = Math.floor(mins / 60); if (hrs < 24) return `${hrs}h ago`; return `${Math.floor(hrs / 24)}d ago`; }
 
 export default function ChatThread() {
-  const { userId, name } = useLocalSearchParams<{ userId: string; name?: string }>();
-  const router = useRouter();
-  const { user } = useAuth();
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [msgs, setMsgs] = useState<Msg[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [text, setText] = useState("");
-  const [sending, setSending] = useState(false);
-  const [otherTyping, setOtherTyping] = useState(false);
-  const [presence, setPresence] = useState<{ online: boolean; last_seen?: string }>({ online: false });
-  const [showReport, setShowReport] = useState(false);
-  const listRef = useRef<FlatList>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const presenceRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastTypingPingRef = useRef(0);
-
-  const load = useCallback(async (silent = false) => {
-    if (!userId) return;
-    if (!silent) setLoading(true);
-    try {
-      const thread = await api.getThread(userId);
-      setMsgs(thread);
-    } catch (e) {
-      console.warn(e);
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }, [userId]);
-
-  const pollTypingAndPresence = useCallback(async () => {
-    if (!userId) return;
-    try {
-      const [t, p] = await Promise.all([api.getTyping(userId), api.getPresence(userId)]);
-      setOtherTyping(t.typing);
-      setPresence(p);
-    } catch {}
-  }, [userId]);
-
-  useFocusEffect(
-    useCallback(() => {
-      load();
-      pollTypingAndPresence();
-      pollRef.current = setInterval(() => load(true), 4000);
-      presenceRef.current = setInterval(pollTypingAndPresence, 3000);
-      return () => {
-        if (pollRef.current) clearInterval(pollRef.current);
-        if (presenceRef.current) clearInterval(presenceRef.current);
-      };
-    }, [load, pollTypingAndPresence])
-  );
-
-  const onChangeText = (t: string) => {
-    setText(t);
-    const now = Date.now();
-    if (userId && now - lastTypingPingRef.current > 2000) {
-      lastTypingPingRef.current = now;
-      api.sendTyping(userId).catch(() => {});
-    }
-  };
-
-  const send = async () => {
-    const t = text.trim();
-    if (!t || !userId) return;
-    setSending(true);
-    setText("");
-    try {
-      const sent = await api.sendMessage(userId, t);
-      setMsgs((prev) => [...prev, sent]);
-      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
-    } catch (e: any) {
-      setText(t);
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const lastMineReadIndex = (() => {
-    for (let i = msgs.length - 1; i >= 0; i--) {
-      if (msgs[i].from_user_id === user?.user_id) return msgs[i].read ? i : -1;
-    }
-    return -1;
-  })();
-
-  return (
-    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
-        <View style={styles.header}>
-          <Pressable testID="chat-back" onPress={() => router.back()} hitSlop={12}>
-            <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
-          </Pressable>
-          <View style={{ alignItems: "center" }}>
-            <Text style={styles.headerName}>{name || "Chat"}</Text>
-            <View style={styles.statusRow}>
-              {otherTyping ? (
-                <Text style={styles.typingText}>typing...</Text>
-              ) : presence.online ? (
-                <>
-                  <View style={styles.onlineDot} />
-                  <Text style={styles.statusText}>Online</Text>
-                </>
-              ) : presence.last_seen ? (
-                <Text style={styles.statusText}>Last seen {timeAgo(presence.last_seen)}</Text>
-              ) : null}
-            </View>
-          </View>
-          <Pressable testID="chat-more" onPress={() => setShowReport(true)} hitSlop={12}>
-            <Ionicons name="ellipsis-vertical" size={22} color={colors.onSurface} />
-          </Pressable>
-        </View>
-
-        {loading ? (
-          <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-            <ActivityIndicator color={colors.indigo} />
-          </View>
-        ) : (
-          <FlatList
-            ref={listRef}
-            data={msgs}
-            keyExtractor={(m) => m.message_id}
-            contentContainerStyle={{ padding: SPACING.lg }}
-            onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
-            ListEmptyComponent={
-              <View style={{ alignItems: "center", paddingTop: 60 }}>
-                <Ionicons name="chatbubble-ellipses-outline" size={48} color={colors.borderStrong} />
-                <Text style={{ color: colors.muted, marginTop: SPACING.sm }}>Say hi and coordinate your ride!</Text>
-              </View>
-            }
-            renderItem={({ item, index }) => {
-              const mine = item.from_user_id === user?.user_id;
-              const showRead = mine && index === lastMineReadIndex;
-              const showSent = mine && !showRead && index === msgs.length - 1;
-              return (
-                <View style={[styles.bubbleRow, mine && { justifyContent: "flex-end" }]}>
-                  <View>
-                    <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs]}>
-                      <Text style={[styles.bubbleText, mine && { color: "#fff" }]}>{item.text}</Text>
-                    </View>
-                    {(showRead || showSent) && (
-                      <View style={styles.receiptRow}>
-                        <Ionicons
-                          name={showRead ? "checkmark-done" : "checkmark"}
-                          size={14}
-                          color={showRead ? colors.indigo : colors.muted}
-                        />
-                        <Text style={styles.receiptText}>{showRead ? "Read" : "Sent"}</Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              );
-            }}
-            ListFooterComponent={
-              otherTyping ? (
-                <View style={[styles.bubbleRow]}>
-                  <View style={[styles.bubble, styles.bubbleTheirs, styles.typingBubble]}>
-                    <View style={styles.typingDot} />
-                    <View style={styles.typingDot} />
-                    <View style={styles.typingDot} />
-                  </View>
-                </View>
-              ) : null
-            }
-          />
-        )}
-
-        <View style={styles.inputRow}>
-          <TextInput
-            testID="chat-input"
-            value={text}
-            onChangeText={onChangeText}
-            placeholder="Type a message..."
-            placeholderTextColor={colors.muted}
-            style={styles.input}
-            multiline
-          />
-          <Pressable testID="chat-send" onPress={send} disabled={sending || !text.trim()} style={[styles.sendBtn, (!text.trim() || sending) && { opacity: 0.5 }]}>
-            <Ionicons name="send" size={18} color="#fff" />
-          </Pressable>
-        </View>
-      </KeyboardAvoidingView>
-
-      <ReportBlockModal
-        visible={showReport}
-        onClose={() => setShowReport(false)}
-        userId={userId as string}
-        userName={(name as string) || "this user"}
-        onBlocked={() => router.back()}
-      />
-    </SafeAreaView>
-  );
+  const { userId, name } = useLocalSearchParams<{ userId: string; name?: string }>(); const router = useRouter(); const { user } = useAuth(); const { colors } = useTheme(); const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [msgs, setMsgs] = useState<Msg[]>([]); const [loading, setLoading] = useState(true); const [text, setText] = useState(""); const [sending, setSending] = useState(false); const [otherTyping, setOtherTyping] = useState(false); const [presence, setPresence] = useState<{ online: boolean; last_seen?: string }>({ online: false }); const [showReport, setShowReport] = useState(false);
+  const listRef = useRef<FlatList>(null); const pollRef = useRef<ReturnType<typeof setInterval> | null>(null); const presenceRef = useRef<ReturnType<typeof setInterval> | null>(null); const lastTypingPingRef = useRef(0);
+  const load = useCallback(async (silent = false) => { if (!userId) return; if (!silent) setLoading(true); try { setMsgs(await api.getThread(userId)); } catch (e) { console.warn(e); } finally { if (!silent) setLoading(false); } }, [userId]);
+  const pollTypingAndPresence = useCallback(async () => { if (!userId) return; try { const [t, p] = await Promise.all([api.getTyping(userId), api.getPresence(userId)]); setOtherTyping(t.typing); setPresence(p); } catch {} }, [userId]);
+  useFocusEffect(useCallback(() => { load(); pollTypingAndPresence(); pollRef.current = setInterval(() => load(true), 4000); presenceRef.current = setInterval(pollTypingAndPresence, 3000); return () => { if (pollRef.current) clearInterval(pollRef.current); if (presenceRef.current) clearInterval(presenceRef.current); }; }, [load, pollTypingAndPresence]));
+  const onChangeText = (t: string) => { setText(t); const now = Date.now(); if (userId && now - lastTypingPingRef.current > 2000) { lastTypingPingRef.current = now; api.sendTyping(userId).catch(() => {}); } };
+  const send = async () => { const t = text.trim(); if (!t || !userId) return; setSending(true); setText(""); try { const sent = await api.sendMessage(userId, t); setMsgs((prev) => [...prev, sent]); setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100); } catch { setText(t); } finally { setSending(false); } };
+  const lastMineReadIndex = (() => { for (let i = msgs.length - 1; i >= 0; i--) { if (msgs[i].from_user_id === user?.user_id) return msgs[i].read ? i : -1; } return -1; })();
+  return <SafeAreaView style={styles.safe} edges={["top", "bottom"]}><KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+    <View style={styles.header}><Pressable testID="chat-back" onPress={() => router.back()} hitSlop={12}><Ionicons name="chevron-back" size={24} color={colors.onSurface} /></Pressable><View style={{ alignItems: "center" }}><Text style={styles.headerName}>{name || "Chat"}</Text><View style={styles.statusRow}>{otherTyping ? <Text style={styles.typingText}>typing...</Text> : presence.online ? <><View style={styles.onlineDot} /><Text style={styles.statusText}>Online</Text></> : presence.last_seen ? <Text style={styles.statusText}>Last seen {timeAgo(presence.last_seen)}</Text> : null}</View></View><Pressable testID="chat-more" onPress={() => setShowReport(true)} hitSlop={12}><Ionicons name="ellipsis-vertical" size={22} color={colors.onSurface} /></Pressable></View>
+    {loading ? <View style={styles.center}><ActivityIndicator color={colors.indigo} /></View> : <FlatList ref={listRef} data={msgs} keyExtractor={(m) => m.message_id} contentContainerStyle={{ padding: SPACING.lg }} onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })} ListEmptyComponent={<View style={styles.empty}><Ionicons name="chatbubble-ellipses-outline" size={48} color={colors.borderStrong} /><Text style={styles.emptyText}>Say hi and coordinate your ride!</Text></View>} renderItem={({ item, index }) => { const mine = item.from_user_id === user?.user_id; const showRead = mine && index === lastMineReadIndex; const showSent = mine && !showRead && index === msgs.length - 1; return <View style={[styles.bubbleRow, mine && { justifyContent: "flex-end" }]}><View style={styles.messageWrap}><View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs]}><Text style={[styles.bubbleText, mine && { color: "#fff" }]}>{item.text}</Text></View>{(showRead || showSent) && <View style={styles.receiptRow}><Ionicons name={showRead ? "checkmark-done" : "checkmark"} size={14} color={showRead ? colors.indigo : colors.muted} /><Text style={styles.receiptText}>{showRead ? "Read" : "Sent"}</Text></View>}</View></View>; }} ListFooterComponent={otherTyping ? <View style={styles.bubbleRow}><View style={[styles.bubble, styles.bubbleTheirs, styles.typingBubble]}><View style={styles.typingDot} /><View style={styles.typingDot} /><View style={styles.typingDot} /></View></View> : null} />}
+    <View style={styles.inputRow}><TextInput testID="chat-input" value={text} onChangeText={onChangeText} placeholder="Type a message..." placeholderTextColor={colors.muted} style={styles.input} multiline /><Pressable testID="chat-send" onPress={send} disabled={sending || !text.trim()} style={[styles.sendBtn, (!text.trim() || sending) && { opacity: 0.5 }]}><Ionicons name="send" size={18} color="#fff" /></Pressable></View>
+  </KeyboardAvoidingView><ReportBlockModal visible={showReport} onClose={() => setShowReport(false)} userId={userId as string} userName={(name as string) || "this user"} onBlocked={() => router.back()} /></SafeAreaView>;
 }
-
 const makeStyles = (colors: any) => StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.surface },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  headerName: { fontSize: FONT.lg, fontWeight: "800", color: colors.onSurface },
-  statusRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2, minHeight: 14 },
-  onlineDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.success },
-  statusText: { fontSize: 11, color: colors.muted },
-  typingText: { fontSize: 11, color: colors.saffron, fontWeight: "700", fontStyle: "italic" },
-  bubbleRow: { flexDirection: "row", marginBottom: SPACING.sm },
-  bubble: { maxWidth: "78%", borderRadius: RADIUS.lg, paddingHorizontal: 14, paddingVertical: 10 },
-  bubbleMine: { backgroundColor: colors.indigo, borderBottomRightRadius: 4 },
-  bubbleTheirs: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderBottomLeftRadius: 4 },
-  bubbleText: { fontSize: FONT.base, color: colors.onSurface },
-  receiptRow: { flexDirection: "row", alignItems: "center", gap: 3, justifyContent: "flex-end", marginTop: 2, marginRight: 4 },
-  receiptText: { fontSize: 10, color: colors.muted },
-  typingBubble: { flexDirection: "row", gap: 4, alignItems: "center", paddingVertical: 14 },
-  typingDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.muted },
-  inputRow: { flexDirection: "row", alignItems: "flex-end", gap: SPACING.sm, padding: SPACING.md, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface },
-  input: { flex: 1, backgroundColor: colors.card, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14, paddingVertical: 10, maxHeight: 100, fontSize: FONT.base, color: colors.onSurface },
-  sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.saffron, alignItems: "center", justifyContent: "center" },
+  safe: { flex: 1, backgroundColor: colors.surface }, center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.surface },
+  headerName: { fontSize: FONT.lg, fontWeight: "800", color: colors.onSurface }, statusRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2, minHeight: 14 }, onlineDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.success }, statusText: { fontSize: 11, color: colors.muted }, typingText: { fontSize: 11, color: colors.saffron, fontWeight: "700", fontStyle: "italic" },
+  bubbleRow: { flexDirection: "row", width: "100%", marginBottom: SPACING.sm }, messageWrap: { maxWidth: "78%", minWidth: 52, flexShrink: 1 }, bubble: { width: "100%", borderRadius: RADIUS.lg, paddingHorizontal: 14, paddingVertical: 10 }, bubbleMine: { backgroundColor: colors.indigo, borderBottomRightRadius: 4 }, bubbleTheirs: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderBottomLeftRadius: 4 }, bubbleText: { fontSize: FONT.base, color: colors.onSurface, flexShrink: 1 }, receiptRow: { flexDirection: "row", alignItems: "center", gap: 3, justifyContent: "flex-end", marginTop: 2, marginRight: 4 }, receiptText: { fontSize: 10, color: colors.muted }, typingBubble: { width: 72, flexDirection: "row", gap: 4, alignItems: "center", paddingVertical: 14 }, typingDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.muted }, empty: { alignItems: "center", paddingTop: 60 }, emptyText: { color: colors.muted, marginTop: SPACING.sm },
+  inputRow: { flexDirection: "row", alignItems: "flex-end", gap: SPACING.sm, padding: SPACING.md, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface }, input: { flex: 1, backgroundColor: colors.card, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14, paddingVertical: 10, maxHeight: 100, fontSize: FONT.base, color: colors.onSurface }, sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.saffron, alignItems: "center", justifyContent: "center" },
 });
