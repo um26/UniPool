@@ -31,13 +31,17 @@ const CHIPS = ["All", "Today", "Tomorrow", "This week", "Airport", "Railway"];
 function formatDT(iso: string) {
   return new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 }
+function istDayKey(value: Date | string) {
+  const d = typeof value === "string" ? new Date(value) : value;
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}
 function isSameDay(iso: string, ref: Date) {
-  const d = new Date(iso); return d.getFullYear() === ref.getFullYear() && d.getMonth() === ref.getMonth() && d.getDate() === ref.getDate();
+  return istDayKey(iso) === istDayKey(ref);
 }
 
 export default function HomeFeed() {
   const router = useRouter(); const { user } = useAuth(); const { colors, isDark } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
   const [pools, setPools] = useState<Pool[]>([]); const [loading, setLoading] = useState(true); const [refreshing, setRefreshing] = useState(false); const [error, setError] = useState<string | null>(null);
   const [chip, setChip] = useState("All"); const [search, setSearch] = useState(""); const [showMap, setShowMap] = useState(false);
   const [requesting, setRequesting] = useState<Set<string>>(new Set()); const [reportTarget, setReportTarget] = useState<{ user_id: string; user_name: string } | null>(null);
@@ -60,7 +64,7 @@ export default function HomeFeed() {
   const filtered = useMemo(() => pools.filter((p) => {
     if (chip === "Today" && !isSameDay(p.travel_datetime, new Date())) return false;
     if (chip === "Tomorrow") { const t = new Date(); t.setDate(t.getDate() + 1); if (!isSameDay(p.travel_datetime, t)) return false; }
-    if (chip === "This week") { const d = new Date(p.travel_datetime); const now = new Date(); const weekOut = new Date(); weekOut.setDate(now.getDate() + 7); if (d < now || d > weekOut) return false; }
+    if (chip === "This week") { const now = Date.now(); const weekOut = now + 7 * 86400000; const d = new Date(p.travel_datetime).getTime(); if (d < now || d > weekOut) return false; }
     if (chip === "Airport" && !/airport|blr|del|bom|maa|hyd/i.test(`${p.from_location} ${p.to_location}`)) return false;
     if (chip === "Railway" && !/station|railway|junction|jn/i.test(`${p.from_location} ${p.to_location}`)) return false;
     if (search.trim()) { const q = search.trim().toLowerCase(); const haystack = `${p.from_location} ${p.to_location} ${p.user_name}`.toLowerCase(); if (!haystack.includes(q)) return false; }
@@ -69,7 +73,7 @@ export default function HomeFeed() {
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <Confetti burstKey={confettiKey} />
-      <LinearGradient colors={isDark ? [colors.surface2, colors.surface3] : [colors.indigo, "#283593"]} style={styles.header}>
+      <LinearGradient colors={isDark ? [colors.surface2, colors.surface2] : [colors.indigo, "#283593"]} style={styles.header}>
         <View style={styles.headerTop}><View><Text style={styles.hello}>Namaste, {user?.name?.split(" ")[0] || "traveller"}</Text><Text style={styles.subhello}>Where's your next journey?</Text></View>
           <View style={{ flexDirection: "row" }}>
             <Pressable testID="toggle-map-view" onPress={() => { Haptics.selectionAsync(); setShowMap((m) => !m); }} style={styles.avatar}><Ionicons name={showMap ? "list" : "map"} size={18} color={colors.indigo} /></Pressable>
@@ -109,18 +113,18 @@ function RequestCta({ pool, busy, onRequest, colors, styles }: { pool: Pool; bus
   return <Pressable testID={`request-${pool.pool_id}`} onPress={(e) => { e.stopPropagation(); onRequest(); }} disabled={busy} style={[styles.reqPill, styles.reqPillIdle, busy && { opacity: 0.6 }]}>{busy ? <ActivityIndicator size="small" color="#fff" /> : <><Ionicons name="hand-left-outline" size={16} color="#fff" /><Text style={styles.reqPillTextLight}>{status === "declined" ? "Request again" : "Request to join"}</Text></>}</Pressable>;
 }
 
-const makeStyles = (colors: any) => StyleSheet.create({
+const makeStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
-  header: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.md, paddingBottom: SPACING.lg, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
+  header: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.md, paddingBottom: SPACING.lg, borderBottomLeftRadius: 22, borderBottomRightRadius: 22, borderBottomWidth: 1, borderBottomColor: isDark ? colors.border : "rgba(255,255,255,0.18)" },
   headerTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  hello: { color: "#FFFFFF", fontSize: FONT.xl, fontWeight: "800", fontFamily: FONT_DISPLAY },
-  subhello: { color: "rgba(255,255,255,0.78)", marginTop: 2 },
+  hello: { color: isDark ? colors.onSurface : "#FFFFFF", fontSize: FONT.xl, fontWeight: "800", fontFamily: FONT_DISPLAY },
+  subhello: { color: isDark ? colors.onSurface2 : "rgba(255,255,255,0.78)", marginTop: 2 },
   avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.card, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border },
   chipRow: { paddingTop: SPACING.md, paddingRight: SPACING.lg, gap: SPACING.sm },
-  searchRow: { flexDirection: "row", alignItems: "center", gap: SPACING.sm, backgroundColor: "rgba(255,255,255,0.10)", borderRadius: RADIUS.pill, paddingHorizontal: 14, paddingVertical: 10, marginTop: SPACING.lg, borderWidth: 1, borderColor: "rgba(255,255,255,0.20)" },
-  searchInput: { flex: 1, color: "#FFFFFF", fontSize: FONT.base },
-  chip: { flexShrink: 0, height: 36, paddingHorizontal: 14, borderRadius: RADIUS.pill, backgroundColor: "rgba(255,255,255,0.10)", borderWidth: 1, borderColor: "rgba(255,255,255,0.20)", alignItems: "center", justifyContent: "center" },
-  chipActive: { backgroundColor: colors.saffron, borderColor: colors.saffron }, chipText: { color: "#FFFFFF", fontSize: 13, fontWeight: "600" }, chipTextActive: { color: "#fff" },
+  searchRow: { flexDirection: "row", alignItems: "center", gap: SPACING.sm, backgroundColor: isDark ? colors.card : "rgba(255,255,255,0.10)", borderRadius: RADIUS.pill, paddingHorizontal: 14, paddingVertical: 10, marginTop: SPACING.lg, borderWidth: 1, borderColor: isDark ? colors.border : "rgba(255,255,255,0.20)" },
+  searchInput: { flex: 1, color: isDark ? colors.onSurface : "#FFFFFF", fontSize: FONT.base },
+  chip: { flexShrink: 0, height: 36, paddingHorizontal: 14, borderRadius: RADIUS.pill, backgroundColor: isDark ? colors.card : "rgba(255,255,255,0.10)", borderWidth: 1, borderColor: isDark ? colors.border : "rgba(255,255,255,0.20)", alignItems: "center", justifyContent: "center" },
+  chipActive: { backgroundColor: colors.saffron, borderColor: colors.saffron }, chipText: { color: isDark ? colors.onSurface2 : "#FFFFFF", fontSize: 13, fontWeight: "600" }, chipTextActive: { color: "#fff" },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   resultBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm }, resultText: { color: colors.muted, fontSize: FONT.sm, fontWeight: "600" }, clearFilters: { color: colors.indigo, fontSize: FONT.sm, fontWeight: "800" },
   errorState: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: SPACING.xxl }, errorIcon: { width: 58, height: 58, borderRadius: 29, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center", marginBottom: SPACING.md }, retry: { marginTop: SPACING.lg, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.indigo, borderRadius: RADIUS.pill, paddingHorizontal: 18, paddingVertical: 11 }, retryText: { color: "#fff", fontWeight: "800" },
