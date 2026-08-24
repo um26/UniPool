@@ -82,7 +82,7 @@ export default function MessagesScreen() {
           data={items}
           keyExtractor={(i) => i.other_user_id}
           contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 140 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.indigo} />}
           ListEmptyComponent={
             <View style={styles.empty}>
               <View style={styles.emptyIcon}><Ionicons name="chatbubble-ellipses-outline" size={30} color={colors.indigo} /></View>
