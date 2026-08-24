@@ -12,6 +12,7 @@ import Turnstile from "@/src/components/Turnstile";
 
 const { width } = Dimensions.get("window");
 const HERO_URL = "https://raw.githubusercontent.com/um26/UniPool/5b90d0fd059122e21621eb2f5648da2fa64f0505/app/frontend/assets/mu-airport-hero.svg";
+const MU_POSITION = width * 0.50;
 
 export default function LoginScreen() {
   const { user, loading, signingIn, signInError, signIn, renderGoogleButton, signInWithPassword, signUpWithPassword } = useAuth();
@@ -36,121 +37,126 @@ export default function LoginScreen() {
 
   useEffect(() => { if (user) router.replace("/(tabs)"); }, [user]);
 
-  // Incoming aircraft stays outside the hero longer so the approach reads as a landing.
+  // Incoming aircraft approaches from the left, lands directly in front of MU,
+  // then stays level and taxis straight across the runway.
   const arrivingPlaneStyle = useAnimatedStyle(() => ({
-  opacity: interpolate(
-    travel.value,
-    [0.00, 0.08, 0.18, 0.28, 0.42, 0.52, 0.72, 0.80],
-    [0,    0,    1,    1,    1,    1,    1,    0]
-  ),
+    opacity: interpolate(
+      travel.value,
+      [0.00, 0.08, 0.18, 0.28, 0.42, 0.52, 0.72, 0.80],
+      [0,    0,    1,    1,    1,    1,    1,    0]
+    ),
+    transform: [
+      {
+        translateX: interpolate(
+          travel.value,
+          [0.08, 0.18, 0.28, 0.40, 0.52, 0.62, 0.72, 0.80],
+          [
+            -140,
+            -80,
+            width * 0.05,
+            width * 0.30,
+            MU_POSITION,
+            width * 0.62,
+            width * 0.80,
+            width * 0.96
+          ]
+        )
+      },
+      {
+        translateY: interpolate(
+          travel.value,
+          [0.08, 0.18, 0.28, 0.40, 0.52, 0.62, 0.72, 0.80],
+          [-110, -90, -60, -25, 0, 0, 0, 0]
+        )
+      },
+      {
+        rotate: `${interpolate(
+          travel.value,
+          [0.08, 0.18, 0.28, 0.40, 0.52, 0.62, 0.72, 0.80],
+          [-18, -14, -8, -3, 0, 0, 0, 0]
+        )}deg`
+      },
+      {
+        scale: interpolate(
+          travel.value,
+          [0.08, 0.52],
+          [0.60, 1]
+        )
+      }
+    ]
+  }));
 
-  transform: [
-    {
-      translateX: interpolate(
-        travel.value,
-        [0.08, 0.18, 0.28, 0.40, 0.52, 0.62, 0.72, 0.80],
-        [
-          -140,          // outside left
-          -80,           // entering screen
-          width * 0.05,  // approaching
-          width * 0.30,  // getting close to MU
-          width * 0.50,  // LAND DIRECTLY IN FRONT OF MU
-          width * 0.62,  // starts taxiing
-          width * 0.80,  // continues
-          width * 0.96   // reaches right edge
-        ]
-      )
-    },
-
-    {
-      translateY: interpolate(
-        travel.value,
-        [0.08, 0.18, 0.28, 0.40, 0.52],
-        [
-          -110, // high in sky
-          -90,
-          -60,
-          -25,
-          0     // runway level
-        ]
-      )
-    },
-
-    {
-      rotate: `${interpolate(
-        travel.value,
-        [0.08, 0.18, 0.28, 0.40, 0.52],
-        [-18, -14, -8, -3, 0]
-      )}deg`
-    },
-
-    {
-      scale: interpolate(
-        travel.value,
-        [0.08, 0.52],
-        [0.60, 1]
-      )
-    }
-  ]
-}));
-
-  // Departure begins before the edge: the aircraft climbs while still clearly visible.
+  // The second aircraft runs along the runway first, reaches MU, then climbs away.
   const departingPlaneStyle = useAnimatedStyle(() => ({
-  opacity: interpolate(
-    travel.value,
-    [0.76, 0.80, 0.88, 0.96, 1.00],
-    [0,    1,    1,    1,    0]
-  ),
+    opacity: interpolate(
+      travel.value,
+      [0.76, 0.80, 0.88, 0.96, 1.00],
+      [0,    1,    1,    1,    0]
+    ),
+    transform: [
+      {
+        translateX: interpolate(
+          travel.value,
+          [0.76, 0.80, 0.84, 0.88, 0.92, 0.96, 1.00],
+          [-100, width * 0.03, width * 0.25, width * 0.40, MU_POSITION, width * 0.72, width + 100]
+        )
+      },
+      {
+        translateY: interpolate(
+          travel.value,
+          [0.76, 0.84, 0.88, 0.92, 0.96, 1.00],
+          [0, 0, 0, -35, -100, -180]
+        )
+      },
+      {
+        rotate: `${interpolate(
+          travel.value,
+          [0.76, 0.88, 0.92, 0.96, 1.00],
+          [0, 0, -7, -14, -20]
+        )}deg`
+      },
+      {
+        scale: interpolate(
+          travel.value,
+          [0.76, 0.96, 1.00],
+          [1, 0.9, 0.65]
+        )
+      }
+    ]
+  }));
 
-  transform: [
-    {
-      translateX: interpolate(
-        travel.value,
-        [0.76, 0.80, 0.84, 0.88, 0.92, 0.96, 1.00],
-        [
-          -100,          // starts off screen
-          width * 0.03,  // enters runway
-          width * 0.25,  // running
-          width * 0.40,  // approaching MU
-          width * 0.50,  // TAKEOFF POINT — IN FRONT OF MU
-          width * 0.72,  // airborne
-          width + 100    // completely off screen
-        ]
-      )
-    },
-
-    {
-      translateY: interpolate(
-        travel.value,
-        [0.76, 0.84, 0.88, 0.92, 0.96, 1.00],
-        [
-          0,    // runway
-          0,    // runway
-          0,    // runway
-          -35,  // beginning climb
-          -100, // climbing
-          -180  // leaving screen
-        ]
-      )
-    },
-
-    {
-      rotate: `${interpolate(
-        travel.value,
-        [0.76, 0.88, 0.92, 0.96, 1.00],
-        [0, 0, -7, -14, -20]
-      )}deg`
-    },
-
-    {
-      scale: interpolate(
-        travel.value,
-        [0.76, 0.96, 1.00],
-        [1, 0.9, 0.65]
-      )
-    }
-  ]
-}));
+  // A road cab uses a separate, lower lane. It eases into MU, pauses for ~2.7s,
+  // then accelerates away so it reads as a real pickup/drop-off rather than a loop.
+  const cabStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(
+      travel.value,
+      [0.02, 0.06, 0.18, 0.30, 0.40, 0.44, 0.59, 0.66, 0.78],
+      [0,    1,    1,    1,    1,    1,    1,    1,    0]
+    ),
+    transform: [
+      {
+        translateX: interpolate(
+          travel.value,
+          [0.06, 0.18, 0.30, 0.38, 0.42, 0.44, 0.59, 0.66, 0.78],
+          [-90, width * 0.08, width * 0.22, width * 0.36, MU_POSITION - 18, MU_POSITION, MU_POSITION, width * 0.70, width + 90]
+        )
+      },
+      {
+        translateY: interpolate(
+          travel.value,
+          [0.06, 0.42, 0.59, 0.78],
+          [10, 0, 0, 0]
+        )
+      },
+      {
+        scale: interpolate(
+          travel.value,
+          [0.06, 0.42, 0.59, 0.78],
+          [0.82, 1, 1, 0.96]
+        )
+      }
+    ]
+  }));
 
   const submitPasswordForm = async () => {
     setLocalError(null);
@@ -172,6 +178,10 @@ export default function LoginScreen() {
         </View>
         <Animated.View style={[styles.animatedPlane, arrivingPlaneStyle]}><Ionicons name="airplane" size={40} color="#fff" /></Animated.View>
         <Animated.View style={[styles.animatedPlane, departingPlaneStyle]}><Ionicons name="airplane" size={40} color="#fff" /></Animated.View>
+        <Animated.View style={[styles.animatedCab, cabStyle]}>
+          <View style={styles.cabSign}><Text style={styles.cabSignText}>TAXI</Text></View>
+          <Ionicons name="car-sport" size={34} color={COLORS.saffron} />
+        </Animated.View>
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ maxHeight: "62%" }}>
@@ -225,6 +235,9 @@ const styles = StyleSheet.create({
   tagline: { color: "rgba(255,255,255,0.94)", marginTop: 10, fontSize: 16, fontWeight: "600" },
   taglineAccent: { color: COLORS.saffron },
   animatedPlane: { position: "absolute", left: 0, top: 365, zIndex: 8, width: 52, height: 42, alignItems: "center", justifyContent: "center" },
+  animatedCab: { position: "absolute", left: 0, top: 398, zIndex: 7, width: 50, height: 38, alignItems: "center", justifyContent: "center" },
+  cabSign: { position: "absolute", top: -5, left: 17, minWidth: 20, height: 8, paddingHorizontal: 3, borderRadius: 3, backgroundColor: "#fff", borderWidth: 1, borderColor: "rgba(0,0,0,0.14)", alignItems: "center", justifyContent: "center", zIndex: 2 },
+  cabSignText: { fontSize: 4.5, lineHeight: 6, fontWeight: "900", color: "#18243b", letterSpacing: 0.2 },
   bottomCard: { backgroundColor: COLORS.surface, borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: SPACING.xl, paddingBottom: SPACING.xxxl, shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 24, shadowOffset: { width: 0, height: -8 }, elevation: 12 },
   heading: { fontSize: FONT["2xl"], fontWeight: "800", color: COLORS.onSurface, marginBottom: SPACING.sm, fontFamily: FONT_DISPLAY, letterSpacing: -0.3 },
   subheading: { fontSize: FONT.base, color: COLORS.muted, marginBottom: SPACING.xl, lineHeight: 20 },
