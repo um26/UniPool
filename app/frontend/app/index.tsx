@@ -27,7 +27,7 @@ export default function LoginScreen() {
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
 
   useEffect(() => {
-    travel.value = withRepeat(withTiming(1, { duration: 15000, easing: Easing.linear }), -1, false);
+    travel.value = withRepeat(withTiming(1, { duration: 18000, easing: Easing.linear }), -1, false);
   }, []);
 
   useEffect(() => {
@@ -38,25 +38,119 @@ export default function LoginScreen() {
 
   // Incoming aircraft stays outside the hero longer so the approach reads as a landing.
   const arrivingPlaneStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(travel.value, [0, 0.10, 0.15, 0.54, 0.60], [0, 0, 1, 1, 0]),
-    transform: [
-      { translateX: interpolate(travel.value, [0.10, 0.15, 0.22, 0.30, 0.38, 0.48, 0.55], [-120, -90, -40, width * 0.04, width * 0.17, width * 0.32, width * 0.46]) },
-      { translateY: interpolate(travel.value, [0.10, 0.15, 0.22, 0.30, 0.38, 0.48, 0.55], [-105, -85, -58, -30, -8, 2, 3]) },
-      { rotate: `${interpolate(travel.value, [0.10, 0.15, 0.22, 0.30, 0.38], [-20, -17, -11, -5, 0])}deg` },
-      { scale: interpolate(travel.value, [0.10, 0.30, 0.55], [0.62, 0.86, 1]) },
-    ],
-  }));
+  opacity: interpolate(
+    travel.value,
+    [0.00, 0.08, 0.18, 0.28, 0.42, 0.52, 0.72, 0.80],
+    [0,    0,    1,    1,    1,    1,    1,    0]
+  ),
+
+  transform: [
+    {
+      translateX: interpolate(
+        travel.value,
+        [0.08, 0.18, 0.28, 0.40, 0.52, 0.62, 0.72, 0.80],
+        [
+          -140,          // outside left
+          -80,           // entering screen
+          width * 0.05,  // approaching
+          width * 0.30,  // getting close to MU
+          width * 0.50,  // LAND DIRECTLY IN FRONT OF MU
+          width * 0.62,  // starts taxiing
+          width * 0.80,  // continues
+          width * 0.96   // reaches right edge
+        ]
+      )
+    },
+
+    {
+      translateY: interpolate(
+        travel.value,
+        [0.08, 0.18, 0.28, 0.40, 0.52],
+        [
+          -110, // high in sky
+          -90,
+          -60,
+          -25,
+          0     // runway level
+        ]
+      )
+    },
+
+    {
+      rotate: `${interpolate(
+        travel.value,
+        [0.08, 0.18, 0.28, 0.40, 0.52],
+        [-18, -14, -8, -3, 0]
+      )}deg`
+    },
+
+    {
+      scale: interpolate(
+        travel.value,
+        [0.08, 0.52],
+        [0.60, 1]
+      )
+    }
+  ]
+}));
 
   // Departure begins before the edge: the aircraft climbs while still clearly visible.
   const departingPlaneStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(travel.value, [0.52, 0.57, 0.76, 0.88, 0.94], [0, 1, 1, 1, 0]),
-    transform: [
-      { translateX: interpolate(travel.value, [0.57, 0.62, 0.72, 0.80, 0.88, 0.94], [width * 0.46, width * 0.49, width * 0.61, width * 0.72, width * 0.82, width + 90]) },
-      { translateY: interpolate(travel.value, [0.57, 0.72, 0.80, 0.88, 0.94], [3, 3, -4, -55, -125]) },
-      { rotate: `${interpolate(travel.value, [0.57, 0.76, 0.84, 0.94], [0, 0, -10, -18])}deg` },
-      { scale: interpolate(travel.value, [0.57, 0.94], [1, 0.65]) },
-    ],
-  }));
+  opacity: interpolate(
+    travel.value,
+    [0.76, 0.80, 0.88, 0.96, 1.00],
+    [0,    1,    1,    1,    0]
+  ),
+
+  transform: [
+    {
+      translateX: interpolate(
+        travel.value,
+        [0.76, 0.80, 0.84, 0.88, 0.92, 0.96, 1.00],
+        [
+          -100,          // starts off screen
+          width * 0.03,  // enters runway
+          width * 0.25,  // running
+          width * 0.40,  // approaching MU
+          width * 0.50,  // TAKEOFF POINT — IN FRONT OF MU
+          width * 0.72,  // airborne
+          width + 100    // completely off screen
+        ]
+      )
+    },
+
+    {
+      translateY: interpolate(
+        travel.value,
+        [0.76, 0.84, 0.88, 0.92, 0.96, 1.00],
+        [
+          0,    // runway
+          0,    // runway
+          0,    // runway
+          -35,  // beginning climb
+          -100, // climbing
+          -180  // leaving screen
+        ]
+      )
+    },
+
+    {
+      rotate: `${interpolate(
+        travel.value,
+        [0.76, 0.88, 0.92, 0.96, 1.00],
+        [0, 0, -7, -14, -20]
+      )}deg`
+    },
+
+    {
+      scale: interpolate(
+        travel.value,
+        [0.76, 0.96, 1.00],
+        [1, 0.9, 0.65]
+      )
+    }
+  ]
+}));
 
   const submitPasswordForm = async () => {
     setLocalError(null);
