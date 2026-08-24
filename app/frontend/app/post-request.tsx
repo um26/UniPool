@@ -49,7 +49,6 @@ export default function PostRequestScreen() {
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [loadingExisting, setLoadingExisting] = useState(isEditing);
-  const [routeSwapped, setRouteSwapped] = useState(false);
 
   useEffect(() => {
     if (!isEditing) return;
@@ -77,7 +76,7 @@ export default function PostRequestScreen() {
     })();
   }, [isEditing, edit]);
 
-  const swapRoute = () => { setFrom(to); setTo(from); setRouteSwapped((v) => !v); Haptics.selectionAsync(); };
+  const swapRoute = () => { setFrom(to); setTo(from); Haptics.selectionAsync(); };
 
   const applyDatePreset = (days: number) => {
     const d = new Date(); d.setDate(d.getDate() + days);
