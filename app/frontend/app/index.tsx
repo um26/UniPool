@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, Pressable, StyleSheet, ActivityIndicator, Dimensions, Platform, TextInput, KeyboardAvoidingView, ScrollView } from "react-native";
 import { Image } from "expo-image";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, FontAwesome5 } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing, interpolate } from "react-native-reanimated";
 
@@ -50,16 +50,7 @@ export default function LoginScreen() {
         translateX: interpolate(
           travel.value,
           [0.08, 0.18, 0.28, 0.40, 0.52, 0.62, 0.72, 0.80],
-          [
-            -140,
-            -80,
-            width * 0.05,
-            width * 0.30,
-            MU_POSITION,
-            width * 0.62,
-            width * 0.80,
-            width * 0.96
-          ]
+          [-140, -80, width * 0.05, width * 0.30, MU_POSITION, width * 0.62, width * 0.80, width * 0.96]
         )
       },
       {
@@ -77,22 +68,14 @@ export default function LoginScreen() {
         )}deg`
       },
       {
-        scale: interpolate(
-          travel.value,
-          [0.08, 0.52],
-          [0.60, 1]
-        )
+        scale: interpolate(travel.value, [0.08, 0.52], [0.60, 1])
       }
     ]
   }));
 
   // The second aircraft runs along the runway first, reaches MU, then climbs away.
   const departingPlaneStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(
-      travel.value,
-      [0.76, 0.80, 0.88, 0.96, 1.00],
-      [0,    1,    1,    1,    0]
-    ),
+    opacity: interpolate(travel.value, [0.76, 0.80, 0.88, 0.96, 1.00], [0, 1, 1, 1, 0]),
     transform: [
       {
         translateX: interpolate(
@@ -102,58 +85,38 @@ export default function LoginScreen() {
         )
       },
       {
-        translateY: interpolate(
-          travel.value,
-          [0.76, 0.84, 0.88, 0.92, 0.96, 1.00],
-          [0, 0, 0, -35, -100, -180]
-        )
+        translateY: interpolate(travel.value, [0.76, 0.84, 0.88, 0.92, 0.96, 1.00], [0, 0, 0, -35, -100, -180])
       },
       {
-        rotate: `${interpolate(
-          travel.value,
-          [0.76, 0.88, 0.92, 0.96, 1.00],
-          [0, 0, -7, -14, -20]
-        )}deg`
+        rotate: `${interpolate(travel.value, [0.76, 0.88, 0.92, 0.96, 1.00], [0, 0, -7, -14, -20])}deg`
       },
       {
-        scale: interpolate(
-          travel.value,
-          [0.76, 0.96, 1.00],
-          [1, 0.9, 0.65]
-        )
+        scale: interpolate(travel.value, [0.76, 0.96, 1.00], [1, 0.9, 0.65])
       }
     ]
   }));
 
-  // A road cab uses a separate, lower lane. It eases into MU, pauses for ~2.7s,
-  // then accelerates away so it reads as a real pickup/drop-off rather than a loop.
+  // The cab uses a separate lower lane. It enters at a good cruising speed,
+  // progressively decelerates into MU, waits for exactly ~1.5s, then accelerates away.
   const cabStyle = useAnimatedStyle(() => ({
     opacity: interpolate(
       travel.value,
-      [0.02, 0.06, 0.18, 0.30, 0.40, 0.44, 0.59, 0.66, 0.78],
-      [0,    1,    1,    1,    1,    1,    1,    1,    0]
+      [0.02, 0.05, 0.16, 0.26, 0.34, 0.39, 0.42, 0.503, 0.55, 0.62, 0.72, 0.80],
+      [0,    1,    1,    1,    1,    1,    1,     1,    1,    1,    1,    0]
     ),
     transform: [
       {
         translateX: interpolate(
           travel.value,
-          [0.06, 0.18, 0.30, 0.38, 0.42, 0.44, 0.59, 0.66, 0.78],
-          [-90, width * 0.08, width * 0.22, width * 0.36, MU_POSITION - 18, MU_POSITION, MU_POSITION, width * 0.70, width + 90]
+          [0.05, 0.16, 0.26, 0.34, 0.39, 0.42, 0.503, 0.55, 0.62, 0.72, 0.80],
+          [-90, width * 0.12, width * 0.25, width * 0.36, width * 0.43, MU_POSITION - 18, MU_POSITION - 18, MU_POSITION + 4, width * 0.60, width * 0.76, width + 90]
         )
       },
       {
-        translateY: interpolate(
-          travel.value,
-          [0.06, 0.42, 0.59, 0.78],
-          [10, 0, 0, 0]
-        )
+        translateY: interpolate(travel.value, [0.05, 0.42, 0.80], [10, 0, 0])
       },
       {
-        scale: interpolate(
-          travel.value,
-          [0.06, 0.42, 0.59, 0.78],
-          [0.82, 1, 1, 0.96]
-        )
+        scale: interpolate(travel.value, [0.05, 0.42, 0.80], [0.82, 1, 0.96])
       }
     ]
   }));
@@ -180,7 +143,7 @@ export default function LoginScreen() {
         <Animated.View style={[styles.animatedPlane, departingPlaneStyle]}><Ionicons name="airplane" size={40} color="#fff" /></Animated.View>
         <Animated.View style={[styles.animatedCab, cabStyle]}>
           <View style={styles.cabSign}><Text style={styles.cabSignText}>TAXI</Text></View>
-          <Ionicons name="car-sport" size={34} color={COLORS.saffron} />
+          <FontAwesome5 name="taxi" size={34} color={COLORS.saffron} solid />
         </Animated.View>
       </View>
 
@@ -238,14 +201,27 @@ const styles = StyleSheet.create({
   animatedCab: { position: "absolute", left: 0, top: 398, zIndex: 7, width: 50, height: 38, alignItems: "center", justifyContent: "center" },
   cabSign: { position: "absolute", top: -5, left: 17, minWidth: 20, height: 8, paddingHorizontal: 3, borderRadius: 3, backgroundColor: "#fff", borderWidth: 1, borderColor: "rgba(0,0,0,0.14)", alignItems: "center", justifyContent: "center", zIndex: 2 },
   cabSignText: { fontSize: 4.5, lineHeight: 6, fontWeight: "900", color: "#18243b", letterSpacing: 0.2 },
-  bottomCard: { backgroundColor: COLORS.surface, borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: SPACING.xl, paddingBottom: SPACING.xxxl, shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 24, shadowOffset: { width: 0, height: -8 }, elevation: 12 },
-  heading: { fontSize: FONT["2xl"], fontWeight: "800", color: COLORS.onSurface, marginBottom: SPACING.sm, fontFamily: FONT_DISPLAY, letterSpacing: -0.3 },
-  subheading: { fontSize: FONT.base, color: COLORS.muted, marginBottom: SPACING.xl, lineHeight: 20 },
-  googleBtnWrap: { alignItems: "center", justifyContent: "center", minHeight: 44 }, fallbackLink: { color: COLORS.muted, fontSize: FONT.sm, textDecorationLine: "underline" }, signingInText: { color: COLORS.muted, fontSize: FONT.sm, marginTop: SPACING.sm, textAlign: "center", maxWidth: 260 }, errorText: { color: COLORS.error, fontSize: FONT.sm, marginTop: SPACING.sm, textAlign: "center", maxWidth: 280 },
-  dividerRow: { flexDirection: "row", alignItems: "center", gap: SPACING.md, marginVertical: SPACING.lg }, dividerLine: { flex: 1, height: 1, backgroundColor: COLORS.border }, dividerText: { color: COLORS.muted, fontSize: FONT.sm, fontWeight: "600" },
-  emailToggleBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: SPACING.sm, borderWidth: 1, borderColor: COLORS.indigo, borderRadius: RADIUS.pill, paddingVertical: 14 }, emailToggleText: { color: COLORS.indigo, fontWeight: "700", fontSize: FONT.base },
-  segmentRow: { flexDirection: "row", backgroundColor: COLORS.surface2, borderRadius: RADIUS.pill, padding: 4, marginBottom: SPACING.lg }, segment: { flex: 1, paddingVertical: 10, borderRadius: RADIUS.pill, alignItems: "center" }, segmentActive: { backgroundColor: COLORS.indigo }, segmentText: { fontWeight: "700", color: COLORS.muted, fontSize: FONT.sm }, segmentTextActive: { color: "#fff" },
-  input: { backgroundColor: "#fff", borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 14, paddingVertical: 12, fontSize: FONT.base, color: COLORS.onSurface, marginBottom: SPACING.md },
-  googleBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: SPACING.md, backgroundColor: "#fff", borderRadius: RADIUS.pill, paddingVertical: 16, borderWidth: 1, borderColor: COLORS.border, shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
-  gLogo: { width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#eee" }, googleText: { fontSize: FONT.lg, fontWeight: "700", color: COLORS.onSurface }, footerRow: { marginTop: SPACING.lg, flexDirection: "row", alignItems: "center", gap: SPACING.sm, justifyContent: "center" }, footerText: { color: COLORS.muted, fontSize: FONT.sm },
+  bottomCard: { padding: 28, paddingBottom: 44 },
+  heading: { fontSize: 25, fontWeight: "800", color: COLORS.text, fontFamily: FONT_DISPLAY },
+  subheading: { marginTop: 6, color: COLORS.muted, fontSize: 15, lineHeight: 22 },
+  googleBtnWrap: { marginTop: 20, minHeight: 44, alignItems: "center", justifyContent: "center" },
+  googleBtn: { minHeight: 48, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 10, paddingHorizontal: 18 },
+  googleText: { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  gLogo: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#fff" },
+  dividerRow: { flexDirection: "row", alignItems: "center", gap: 10, marginVertical: 18 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: COLORS.border },
+  dividerText: { color: COLORS.muted, fontSize: 12, fontWeight: "700" },
+  emailToggleBtn: { minHeight: 48, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
+  emailToggleText: { color: COLORS.indigo, fontWeight: "800" },
+  segmentRow: { flexDirection: "row", backgroundColor: COLORS.surfaceAlt, borderRadius: RADIUS.lg, padding: 3, marginTop: 18, marginBottom: 14 },
+  segment: { flex: 1, minHeight: 42, alignItems: "center", justifyContent: "center", borderRadius: RADIUS.lg },
+  segmentActive: { backgroundColor: COLORS.indigo },
+  segmentText: { color: COLORS.muted, fontWeight: "800" },
+  segmentTextActive: { color: "#fff" },
+  input: { minHeight: 50, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 14, marginTop: 10, color: COLORS.text, backgroundColor: COLORS.surface },
+  errorText: { marginTop: 10, color: "#C62828", fontWeight: "700" },
+  footerRow: { marginTop: 22, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  footerText: { color: COLORS.muted, fontSize: 12, fontWeight: "600" },
+  fallbackLink: { color: COLORS.indigo, fontWeight: "700", fontSize: 12 },
+  signingInText: { marginTop: 6, color: COLORS.muted, fontSize: 12, textAlign: "center" },
 });
