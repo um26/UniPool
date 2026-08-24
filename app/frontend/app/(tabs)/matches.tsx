@@ -49,10 +49,12 @@ export default function MatchesScreen() {
   const [removingKey, setRemovingKey] = useState<string | null>(null);
   const [reportTarget, setReportTarget] = useState<{ user_id: string; user_name: string } | null>(null);
   const [confettiKey, setConfettiKey] = useState(0);
+  const [error, setError] = useState<string | null>(null);
   const knownConfirmedKeys = useRef<Set<string> | null>(null);
 
   const load = useCallback(async () => {
     try {
+      setError(null);
       const [matches, rides] = await Promise.all([api.myMatches(), api.confirmedMatches()]);
       setItems(matches);
       setConfirmed(rides);
@@ -64,7 +66,10 @@ export default function MatchesScreen() {
       }
       knownConfirmedKeys.current = keysNow;
     }
-    catch (e) { console.warn(e); }
+    catch (e: any) {
+      console.warn(e);
+      setError(e?.message || "Unable to load your matches.");
+    }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
@@ -99,7 +104,7 @@ export default function MatchesScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <Confetti burstKey={confettiKey} />
-      <LinearGradient colors={isDark ? [colors.surface2, colors.surface3] : [colors.saffron, "#F57F17"]} style={styles.header}>
+      <LinearGradient colors={isDark ? [colors.surface2, colors.surface2] : [colors.saffron, "#F57F17"]} style={styles.header}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.md }}>
           <Ionicons name="sparkles" size={26} color="#fff" />
           <View>
@@ -113,6 +118,16 @@ export default function MatchesScreen() {
         <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 140 }}>
           <PoolFeedSkeleton count={3} />
         </ScrollView>
+      ) : error ? (
+        <View style={styles.errorState}>
+          <View style={styles.errorIcon}><Ionicons name="cloud-offline-outline" size={28} color={colors.error} /></View>
+          <Text style={styles.emptyTitle}>Couldn't load matches</Text>
+          <Text style={styles.emptySub}>{error}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Retry loading matches" onPress={() => { setLoading(true); load(); }} style={styles.retry}>
+            <Ionicons name="refresh" size={16} color="#fff" />
+            <Text style={styles.ctaText}>Try again</Text>
+          </Pressable>
+        </View>
       ) : (
         <FlatList
           data={items}
@@ -264,10 +279,13 @@ export default function MatchesScreen() {
 
 const makeStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
-  header: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.md, paddingBottom: SPACING.lg, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
+  header: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.md, paddingBottom: SPACING.lg, borderBottomLeftRadius: 22, borderBottomRightRadius: 22, borderBottomWidth: 1, borderBottomColor: isDark ? colors.border : "rgba(255,255,255,0.18)" },
   title: { color: isDark ? colors.onSurface : "#fff", fontSize: FONT["2xl"], fontWeight: "800", fontFamily: FONT_DISPLAY },
   sub: { color: isDark ? colors.onSurface2 : "rgba(255,255,255,0.9)", marginTop: 2 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  errorState: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: SPACING.xl },
+  errorIcon: { width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface2, marginBottom: SPACING.md },
+  retry: { flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: colors.indigo, borderRadius: RADIUS.pill, paddingHorizontal: 18, paddingVertical: 11, marginTop: SPACING.lg },
   empty: { alignItems: "center", paddingVertical: 80, paddingHorizontal: SPACING.xl },
   emptyTitle: { marginTop: SPACING.md, fontSize: FONT.xl, fontWeight: "700", color: colors.onSurface },
   emptySub: { marginTop: 4, color: colors.muted, textAlign: "center" },
