@@ -55,7 +55,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const push = usePushNotifications();
   const { colors, isDark, mode, setMode } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
   const [myPools, setMyPools] = useState<Pool[]>([]);
   const [gender, setGender] = useState<string>(user?.gender || "any");
   const [tab, setTab] = useState<"open" | "closed">("open");
@@ -216,7 +216,7 @@ export default function ProfileScreen() {
         contentContainerStyle={{ paddingBottom: 140 }}
         ListHeaderComponent={
           <>
-            <LinearGradient colors={[colors.indigo, "#3949AB"]} style={styles.header}>
+            <LinearGradient colors={isDark ? [colors.surface2, colors.surface3] : [colors.indigo, "#3949AB"]} style={styles.header}>
               <View style={styles.avatar}><Text style={styles.avatarText}>{user?.name?.[0]?.toUpperCase() || "U"}</Text></View>
               <Text style={styles.name}>{user?.name}</Text>
               <Text style={styles.email}>{user?.email}</Text>
@@ -531,18 +531,18 @@ function Stat({ label, value, styles }: { label: string; value: number; styles: 
   );
 }
 
-const makeStyles = (colors: any) => StyleSheet.create({
+const makeStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
   header: { alignItems: "center", paddingVertical: SPACING.xl, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
   avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.cream, alignItems: "center", justifyContent: "center", marginBottom: SPACING.md },
   avatarText: { color: colors.indigo, fontSize: 28, fontWeight: "800" },
-  name: { color: "#fff", fontSize: FONT.xl, fontWeight: "800", fontFamily: FONT_DISPLAY },
-  email: { color: "rgba(255,236,194,0.9)", marginTop: 4 },
-  myRatingRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8, backgroundColor: "rgba(255,236,194,0.15)", borderRadius: RADIUS.pill, paddingHorizontal: 12, paddingVertical: 5 },
-  myRatingText: { color: colors.cream, fontSize: 12, fontWeight: "700" },
+  name: { color: isDark ? colors.onSurface : "#fff", fontSize: FONT.xl, fontWeight: "800", fontFamily: FONT_DISPLAY },
+  email: { color: isDark ? colors.onSurface2 : "rgba(255,236,194,0.9)", marginTop: 4 },
+  myRatingRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8, backgroundColor: isDark ? colors.surface3 : "rgba(255,236,194,0.15)", borderRadius: RADIUS.pill, paddingHorizontal: 12, paddingVertical: 5 },
+  myRatingText: { color: isDark ? colors.onSurface : colors.cream, fontSize: 12, fontWeight: "700" },
   adminBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.cream, borderRadius: RADIUS.pill, paddingHorizontal: 10, paddingVertical: 4, marginTop: SPACING.sm },
   adminBadgeText: { color: colors.indigo, fontWeight: "800", fontSize: 11 },
-  collegeCard: { backgroundColor: "#fff", marginHorizontal: SPACING.lg, marginTop: SPACING.lg, borderRadius: RADIUS.lg, padding: SPACING.lg, borderWidth: 1, borderColor: colors.border },
+  collegeCard: { backgroundColor: colors.card, marginHorizontal: SPACING.lg, marginTop: SPACING.lg, borderRadius: RADIUS.lg, padding: SPACING.lg, borderWidth: 1, borderColor: colors.border },
   collegeCardHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
   collegeCardTitle: { fontSize: FONT.base, fontWeight: "800", color: colors.onSurface },
   idCardWrap: { marginHorizontal: SPACING.lg, marginTop: SPACING.lg },
@@ -551,11 +551,11 @@ const makeStyles = (colors: any) => StyleSheet.create({
   verifyBtnText: { color: "#fff", fontWeight: "700", fontSize: FONT.sm },
   sectionLabel: { fontSize: FONT.sm, fontWeight: "700", color: colors.muted, marginTop: SPACING.lg, marginBottom: SPACING.sm, letterSpacing: 0.8, textTransform: "uppercase" },
   prefRow: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.sm },
-  prefChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: RADIUS.pill, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border },
+  prefChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: RADIUS.pill, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
   prefChipActive: { backgroundColor: colors.indigo, borderColor: colors.indigo },
   prefText: { color: colors.onSurface, fontWeight: "600", fontSize: 13 },
 
-  pushToggle: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: SPACING.md, backgroundColor: "#fff", borderRadius: RADIUS.pill, borderWidth: 1, borderColor: colors.indigo, paddingVertical: 12 },
+  pushToggle: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: SPACING.md, backgroundColor: colors.card, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: colors.indigo, paddingVertical: 12 },
   pushToggleActive: { backgroundColor: colors.indigo },
   pushToggleText: { color: colors.indigo, fontWeight: "700", fontSize: 13 },
   themeRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: SPACING.md, backgroundColor: colors.card, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: colors.border, paddingVertical: 10, paddingHorizontal: 14 },
@@ -565,12 +565,12 @@ const makeStyles = (colors: any) => StyleSheet.create({
   themeOptionActive: { backgroundColor: colors.indigo },
 
   segmentRow: { flexDirection: "row", gap: SPACING.sm, marginBottom: SPACING.sm },
-  segment: { flex: 1, paddingVertical: 10, borderRadius: RADIUS.pill, alignItems: "center", backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border },
+  segment: { flex: 1, paddingVertical: 10, borderRadius: RADIUS.pill, alignItems: "center", backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
   segmentActive: { backgroundColor: colors.indigo, borderColor: colors.indigo },
   segmentText: { fontWeight: "700", color: colors.onSurface },
   segmentTextActive: { color: "#fff" },
 
-  mine: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: colors.border, gap: SPACING.sm },
+  mine: { flexDirection: "row", alignItems: "center", backgroundColor: colors.card, borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: colors.border, gap: SPACING.sm },
   mineRoute: { fontSize: FONT.base, fontWeight: "700", color: colors.onSurface },
   mineWhen: { color: colors.muted, marginTop: 2, fontSize: FONT.sm },
   mineTravelersWrap: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
@@ -579,21 +579,21 @@ const makeStyles = (colors: any) => StyleSheet.create({
   actionBtn: { padding: 4 },
   emptyMine: { color: colors.muted, padding: SPACING.md, textAlign: "center" },
 
-  reqCard: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: colors.saffron, gap: SPACING.sm },
+  reqCard: { flexDirection: "row", alignItems: "center", backgroundColor: colors.card, borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: colors.saffron, gap: SPACING.sm },
   reqName: { fontSize: FONT.base, fontWeight: "700", color: colors.onSurface },
   reqRoute: { color: colors.onSurface, marginTop: 2, fontSize: FONT.sm, fontWeight: "600" },
   reqWhen: { color: colors.muted, marginTop: 1, fontSize: FONT.sm },
   reqBtn: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
   reqBtnAccept: { backgroundColor: colors.success },
-  reqBtnDecline: { backgroundColor: "#fff", borderWidth: 1, borderColor: colors.error },
-  blockedRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#fff", borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: colors.border },
+  reqBtnDecline: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.error },
+  blockedRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: colors.card, borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: colors.border },
   blockedName: { fontSize: FONT.base, fontWeight: "600", color: colors.onSurface },
   unblockBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: colors.indigo },
   unblockText: { color: colors.indigo, fontWeight: "700", fontSize: 12 },
 
-  adminToggle: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#fff", borderRadius: RADIUS.pill, borderWidth: 1, borderColor: colors.border, paddingVertical: 12, paddingHorizontal: SPACING.lg, justifyContent: "center" },
+  adminToggle: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.card, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: colors.border, paddingVertical: 12, paddingHorizontal: SPACING.lg, justifyContent: "center" },
   adminToggleText: { color: colors.indigo, fontWeight: "700", flex: 1, textAlign: "center" },
-  adminPanel: { marginTop: SPACING.sm, backgroundColor: "#fff", borderRadius: RADIUS.md, borderWidth: 1, borderColor: colors.border, padding: SPACING.md },
+  adminPanel: { marginTop: SPACING.sm, backgroundColor: colors.card, borderRadius: RADIUS.md, borderWidth: 1, borderColor: colors.border, padding: SPACING.md },
   statsRow: { flexDirection: "row", gap: SPACING.sm, marginBottom: SPACING.md },
   statBox: { flex: 1, alignItems: "center", backgroundColor: colors.surface2, borderRadius: RADIUS.md, paddingVertical: SPACING.sm },
   statValue: { fontSize: FONT.xl, fontWeight: "800", color: colors.indigo },
@@ -602,6 +602,6 @@ const makeStyles = (colors: any) => StyleSheet.create({
   adminRoute: { fontWeight: "700", color: colors.onSurface },
   adminMeta: { color: colors.muted, fontSize: FONT.sm, marginTop: 2 },
 
-  logout: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: SPACING.xl, paddingVertical: 14, borderRadius: RADIUS.pill, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.error },
+  logout: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: SPACING.xl, paddingVertical: 14, borderRadius: RADIUS.pill, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.error },
   logoutText: { color: colors.error, fontWeight: "700" },
 });

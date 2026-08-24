@@ -10,7 +10,6 @@ import { AuthProvider, useAuth } from "@/src/auth/AuthContext";
 import { ThemeProvider, useTheme } from "@/src/theme_context/ThemeContext";
 import { applyPremiumFontDefaults } from "@/src/utils/setupFonts";
 import AnimatedSplash from "@/src/components/AnimatedSplash";
-import AmbientDepth from "@/src/components/AmbientDepth";
 
 LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
@@ -50,7 +49,6 @@ function AuthGate() {
         <Stack.Screen name="heatmap" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="trip-receipt/[poolId]" options={{ animation: "slide_from_bottom" }} />
       </Stack>
-      {user && <AmbientDepth />}
     </View>
   );
 }

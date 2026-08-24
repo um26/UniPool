@@ -39,8 +39,8 @@ function fmtWhen(iso: string) {
 export default function MatchesScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
   const [items, setItems] = useState<Pool[]>([]);
   const [confirmed, setConfirmed] = useState<ConfirmedRide[]>([]);
   const [loading, setLoading] = useState(true);
@@ -99,7 +99,7 @@ export default function MatchesScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <Confetti burstKey={confettiKey} />
-      <LinearGradient colors={[colors.saffron, "#F57F17"]} style={styles.header}>
+      <LinearGradient colors={isDark ? [colors.surface2, colors.surface3] : [colors.saffron, "#F57F17"]} style={styles.header}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.md }}>
           <Ionicons name="sparkles" size={26} color="#fff" />
           <View>
@@ -262,18 +262,18 @@ export default function MatchesScreen() {
   );
 }
 
-const makeStyles = (colors: any) => StyleSheet.create({
+const makeStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
   header: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.md, paddingBottom: SPACING.lg, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
-  title: { color: "#fff", fontSize: FONT["2xl"], fontWeight: "800", fontFamily: FONT_DISPLAY },
-  sub: { color: "rgba(255,255,255,0.9)", marginTop: 2 },
+  title: { color: isDark ? colors.onSurface : "#fff", fontSize: FONT["2xl"], fontWeight: "800", fontFamily: FONT_DISPLAY },
+  sub: { color: isDark ? colors.onSurface2 : "rgba(255,255,255,0.9)", marginTop: 2 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   empty: { alignItems: "center", paddingVertical: 80, paddingHorizontal: SPACING.xl },
   emptyTitle: { marginTop: SPACING.md, fontSize: FONT.xl, fontWeight: "700", color: colors.onSurface },
   emptySub: { marginTop: 4, color: colors.muted, textAlign: "center" },
   sectionLabel: { fontSize: FONT.sm, fontWeight: "700", color: colors.muted, marginBottom: SPACING.sm, letterSpacing: 0.8, textTransform: "uppercase" },
-  card: { backgroundColor: "#fff", borderRadius: RADIUS.lg, padding: SPACING.lg, marginBottom: SPACING.md, borderWidth: 1, borderColor: colors.border, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
-  rideCard: { backgroundColor: "#fff", borderRadius: RADIUS.lg, padding: SPACING.lg, marginBottom: SPACING.md, borderWidth: 1, borderColor: colors.success, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
+  card: { backgroundColor: colors.card, borderRadius: RADIUS.lg, padding: SPACING.lg, marginBottom: SPACING.md, borderWidth: 1, borderColor: colors.border, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
+  rideCard: { backgroundColor: colors.card, borderRadius: RADIUS.lg, padding: SPACING.lg, marginBottom: SPACING.md, borderWidth: 1, borderColor: colors.success, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
   rowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: SPACING.sm },
   matchBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.success, paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.pill },
   matchBadgeText: { color: "#fff", fontSize: 11, fontWeight: "800", letterSpacing: 0.5 },
@@ -286,7 +286,7 @@ const makeStyles = (colors: any) => StyleSheet.create({
   notes: { color: colors.muted, fontStyle: "italic", marginBottom: SPACING.md },
   cta: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.indigo, paddingVertical: 12, paddingHorizontal: 16, borderRadius: RADIUS.pill },
   ctaRow: { flexDirection: "row", gap: SPACING.sm, marginTop: SPACING.md },
-  ctaGhost: { backgroundColor: "#fff", borderWidth: 1, borderColor: colors.indigo, flex: 0 },
-  ctaDanger: { backgroundColor: "#fff", borderWidth: 1, borderColor: colors.error, flex: 0 },
+  ctaGhost: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.indigo, flex: 0 },
+  ctaDanger: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.error, flex: 0 },
   ctaText: { color: "#fff", fontWeight: "700" },
 });

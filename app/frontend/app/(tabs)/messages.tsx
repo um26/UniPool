@@ -30,8 +30,8 @@ function fmt(dt: string) {
 
 export default function MessagesScreen() {
   const router = useRouter();
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
   const [items, setItems] = useState<Convo[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -45,7 +45,7 @@ export default function MessagesScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <LinearGradient colors={[colors.indigo, "#3949AB"]} style={styles.header}>
+      <LinearGradient colors={isDark ? [colors.surface2, colors.surface3] : [colors.indigo, "#3949AB"]} style={styles.header}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.md }}>
           <Ionicons name="chatbubbles" size={26} color="#fff" />
           <View>
@@ -100,11 +100,11 @@ export default function MessagesScreen() {
   );
 }
 
-const makeStyles = (colors: any) => StyleSheet.create({
+const makeStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
   header: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.md, paddingBottom: SPACING.lg, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
-  title: { color: "#fff", fontSize: FONT["2xl"], fontWeight: "800", fontFamily: FONT_DISPLAY },
-  sub: { color: "rgba(255,255,255,0.9)", marginTop: 2 },
+  title: { color: isDark ? colors.onSurface : "#fff", fontSize: FONT["2xl"], fontWeight: "800", fontFamily: FONT_DISPLAY },
+  sub: { color: isDark ? colors.onSurface2 : "rgba(255,255,255,0.9)", marginTop: 2 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   empty: { alignItems: "center", paddingVertical: 80, paddingHorizontal: SPACING.xl },
   emptyTitle: { marginTop: SPACING.md, fontSize: FONT.xl, fontWeight: "700", color: colors.onSurface },
