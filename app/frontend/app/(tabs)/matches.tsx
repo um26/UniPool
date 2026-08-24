@@ -106,7 +106,7 @@ export default function MatchesScreen() {
       <Confetti burstKey={confettiKey} />
       <LinearGradient colors={isDark ? [colors.surface2, colors.surface2] : [colors.saffron, "#F57F17"]} style={styles.header}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.md }}>
-          <Ionicons name="sparkles" size={26} color="#fff" />
+          <Ionicons name="sparkles" size={26} color={isDark ? colors.saffron : "#fff"} />
           <View>
             <Text style={styles.title}>Your Matches</Text>
             <Text style={styles.sub}>Fellow travellers within a ±1 hour window</Text>
@@ -133,7 +133,7 @@ export default function MatchesScreen() {
           data={items}
           keyExtractor={(i) => i.pool_id}
           contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 140 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.indigo} />}
           ListHeaderComponent={
             confirmed.length > 0 ? (
               <>
