@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, Pressable, StyleSheet, ActivityIndicator, Dimensions, Platform, TextInput, KeyboardAvoidingView, ScrollView } from "react-native";
 import { Image } from "expo-image";
-import { Ionicons, FontAwesome5 } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing, interpolate } from "react-native-reanimated";
 
@@ -38,33 +38,34 @@ export default function LoginScreen() {
   useEffect(() => { if (user) router.replace("/(tabs)"); }, [user]);
 
   // Incoming aircraft approaches from the left, lands directly in front of MU,
-  // then stays level and taxis straight across the runway.
+  // then stays level and taxis straight across the runway. It remains visible
+  // until the next aircraft has already started entering, keeping the runway active.
   const arrivingPlaneStyle = useAnimatedStyle(() => ({
     opacity: interpolate(
       travel.value,
-      [0.00, 0.08, 0.18, 0.28, 0.42, 0.52, 0.72, 0.80],
-      [0,    0,    1,    1,    1,    1,    1,    0]
+      [0.00, 0.08, 0.18, 0.28, 0.42, 0.52, 0.72, 0.80, 0.82],
+      [0,    0,    1,    1,    1,    1,    1,    1,    0]
     ),
     transform: [
       {
         translateX: interpolate(
           travel.value,
-          [0.08, 0.18, 0.28, 0.40, 0.52, 0.62, 0.72, 0.80],
-          [-140, -80, width * 0.05, width * 0.30, MU_POSITION, width * 0.62, width * 0.80, width * 0.96]
+          [0.08, 0.18, 0.28, 0.40, 0.52, 0.62, 0.72, 0.80, 0.82],
+          [-140, -80, width * 0.05, width * 0.30, MU_POSITION, width * 0.62, width * 0.80, width * 0.96, width * 1.02]
         )
       },
       {
         translateY: interpolate(
           travel.value,
-          [0.08, 0.18, 0.28, 0.40, 0.52, 0.62, 0.72, 0.80],
-          [-110, -90, -60, -25, 0, 0, 0, 0]
+          [0.08, 0.18, 0.28, 0.40, 0.52, 0.62, 0.72, 0.80, 0.82],
+          [-110, -90, -60, -25, 0, 0, 0, 0, 0]
         )
       },
       {
         rotate: `${interpolate(
           travel.value,
-          [0.08, 0.18, 0.28, 0.40, 0.52, 0.62, 0.72, 0.80],
-          [-18, -14, -8, -3, 0, 0, 0, 0]
+          [0.08, 0.18, 0.28, 0.40, 0.52, 0.62, 0.72, 0.80, 0.82],
+          [-18, -14, -8, -3, 0, 0, 0, 0, 0]
         )}deg`
       },
       {
@@ -73,52 +74,38 @@ export default function LoginScreen() {
     ]
   }));
 
-  // The second aircraft runs along the runway first, reaches MU, then climbs away.
+  // The second aircraft starts entering before the first aircraft has fully
+  // left the screen. It runs straight on the runway, reaches MU, then climbs away.
   const departingPlaneStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(travel.value, [0.77, 0.80, 0.88, 0.96, 1.00], [0, 1, 1, 1, 0]),
-    transform: [
-      {
-        translateX: interpolate(
-          travel.value,
-          [0.77, 0.80, 0.84, 0.88, 0.92, 0.96, 1.00],
-          [-100, width * 0.03, width * 0.25, width * 0.40, MU_POSITION, width * 0.72, width + 100]
-        )
-      },
-      {
-        translateY: interpolate(travel.value, [0.77, 0.84, 0.88, 0.92, 0.96, 1.00], [0, 0, 0, -35, -100, -180])
-      },
-      {
-        rotate: `${interpolate(travel.value, [0.77, 0.88, 0.92, 0.96, 1.00], [0, 0, -7, -14, -20])}deg`
-      },
-      {
-        scale: interpolate(travel.value, [0.77, 0.96, 1.00], [1, 0.9, 0.65])
-      }
-    ]
-  }));
-
-  // The cab runs only after the first aircraft has landed and finishes before
-  // the second aircraft begins its takeoff sequence. It starts quickly, eases
-  // into a stop in front of MU for ~1.5s, then accelerates away.
-  const cabStyle = useAnimatedStyle(() => ({
     opacity: interpolate(
       travel.value,
-      [0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8],
-      [0,     1,     1,     1,    1,    1,     1,    0]
+      [0.75, 0.77, 0.80, 0.88, 0.96, 1.00],
+      [0,    1,    1,    1,    1,    0]
     ),
     transform: [
       {
         translateX: interpolate(
           travel.value,
-          [0.535, 0.55, 0.565, 0.58, 0.595, 0.61, 0.625, 0.64, 0.70, 0.705, 0.72, 0.74, 0.765],
-          [-100, width * 0.07, width * 0.16, width * 0.25, width * 0.33, width * 0.39, MU_POSITION - 42, MU_POSITION - 18, MU_POSITION - 18, MU_POSITION - 10, width * 0.58, width * 0.74, width + 100]
+          [0.75, 0.77, 0.80, 0.84, 0.88, 0.92, 0.96, 1.00],
+          [-100, -20, width * 0.03, width * 0.25, width * 0.40, MU_POSITION, width * 0.72, width + 100]
         )
       },
       {
-        // Keep the cab perfectly level; no initial 5-degree visual drift.
-        translateY: interpolate(travel.value, [0.535, 0.765], [0, 0])
+        translateY: interpolate(
+          travel.value,
+          [0.75, 0.84, 0.88, 0.92, 0.96, 1.00],
+          [0, 0, 0, -35, -100, -180]
+        )
       },
       {
-        scale: interpolate(travel.value, [0.535, 0.625, 0.765], [0.82, 1, 1])
+        rotate: `${interpolate(
+          travel.value,
+          [0.75, 0.88, 0.92, 0.96, 1.00],
+          [0, 0, -7, -14, -20]
+        )}deg`
+      },
+      {
+        scale: interpolate(travel.value, [0.75, 0.96, 1.00], [1, 0.9, 0.65])
       }
     ]
   }));
@@ -143,12 +130,6 @@ export default function LoginScreen() {
         </View>
         <Animated.View style={[styles.animatedPlane, arrivingPlaneStyle]}><Ionicons name="airplane" size={40} color="#fff" /></Animated.View>
         <Animated.View style={[styles.animatedPlane, departingPlaneStyle]}><Ionicons name="airplane" size={40} color="#fff" /></Animated.View>
-        <Animated.View style={[styles.animatedCab, cabStyle]}>
-          <View style={styles.cabVisual}>
-            <FontAwesome5 name="car-side" size={52} color={COLORS.saffron} solid />
-            <Text style={styles.cabLabel}>CAB</Text>
-          </View>
-        </Animated.View>
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ maxHeight: "62%" }}>
@@ -202,9 +183,6 @@ const styles = StyleSheet.create({
   tagline: { color: "rgba(255,255,255,0.94)", marginTop: 10, fontSize: 16, fontWeight: "600" },
   taglineAccent: { color: COLORS.saffron },
   animatedPlane: { position: "absolute", left: 0, top: 365, zIndex: 8, width: 52, height: 42, alignItems: "center", justifyContent: "center" },
-  animatedCab: { position: "absolute", left: 0, top: 395, zIndex: 7, width: 96, height: 58, alignItems: "center", justifyContent: "center" },
-  cabVisual: { width: 96, height: 58, alignItems: "center", justifyContent: "center" },
-  cabLabel: { position: "absolute", top: -2, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.92)", color: "#1B2745", fontSize: 8, fontWeight: "800", letterSpacing: 0.4 },
   bottomCard: { padding: 28, paddingBottom: 44 },
   heading: { fontSize: 25, fontWeight: "800", color: COLORS.text, fontFamily: FONT_DISPLAY },
   subheading: { marginTop: 6, color: COLORS.muted, fontSize: 15, lineHeight: 22 },
