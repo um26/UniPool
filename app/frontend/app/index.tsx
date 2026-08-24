@@ -102,7 +102,7 @@ export default function LoginScreen() {
   const cabStyle = useAnimatedStyle(() => ({
     opacity: interpolate(
       travel.value,
-      [0.525, 0.535, 0.625, 0.64, 0.70, 0.705, 0.75, 0.765],
+      [0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8],
       [0,     1,     1,     1,    1,    1,     1,    0]
     ),
     transform: [
@@ -146,7 +146,7 @@ export default function LoginScreen() {
         <Animated.View style={[styles.animatedCab, cabStyle]}>
           <View style={styles.cabVisual}>
             <FontAwesome5 name="car-side" size={52} color={COLORS.saffron} solid />
-            <Text style={styles.cabLabel}>TAXI / CAB</Text>
+            <Text style={styles.cabLabel}>CAB</Text>
           </View>
         </Animated.View>
       </View>
