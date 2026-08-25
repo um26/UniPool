@@ -1,19 +1,25 @@
 """Join-request routes kept compatible with the UniPool client API."""
 
-from fastapi import APIRouter, HTTPException, Header
-from typing import List, Optional
 import logging
+from datetime import datetime, timezone
+from typing import List, Optional
 
-from services.request_service import (
-    create_join_request, list_pool_requests, incoming_requests,
-    my_requests, accept_request, decline_request, cancel_request,
-)
+from fastapi import APIRouter, Header, HTTPException
+
+from config.database import db
 from models.auth import JoinRequestOut
 from models.response import BaseResponse
+from services.request_service import (
+    accept_request,
+    cancel_request,
+    create_join_request,
+    decline_request,
+    incoming_requests,
+    list_pool_requests,
+    my_requests,
+)
 
 logger = logging.getLogger("unipool.routes.requests")
-# No global prefix: the public API historically mixes /pools/:id/requests and
-# /requests/* paths, and the frontend relies on those exact contracts.
 router = APIRouter(tags=["requests"])
 
 
@@ -22,6 +28,12 @@ async def get_current_user(authorization: Optional[str]) -> dict:
         return None
     from services.auth_service import get_current_user as get_user_from_session
     return await get_user_from_session(authorization)
+
+
+def _aware(dt: datetime) -> datetime:
+    if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 @router.post("/pools/{pool_id}/requests", response_model=JoinRequestOut)
@@ -40,10 +52,7 @@ async def create_join_request_endpoint(pool_id: str, authorization: Optional[str
         message = str(e)
         if "Pool not found" in message:
             raise HTTPException(status_code=404, detail=message)
-        if any(text in message for text in (
-            "own pool", "no longer accepting", "already confirmed",
-            "can't request", "already have a request",
-        )):
+        if any(text in message for text in ("own pool", "no longer accepting", "already confirmed", "can't request", "already have a request")):
             raise HTTPException(status_code=400, detail=message)
         raise HTTPException(status_code=500, detail=message)
 
@@ -95,6 +104,16 @@ async def accept_request_endpoint(request_id: str, authorization: Optional[str] 
     user = await get_current_user(authorization)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
+    request_doc = await db.join_requests.find_one({"request_id": request_id}, {"_id": 0})
+    if not request_doc:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if request_doc.get("pool_owner_id") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not your pool")
+    pool = await db.pools.find_one({"pool_id": request_doc["pool_id"]}, {"_id": 0})
+    if not pool:
+        raise HTTPException(status_code=404, detail="This trip no longer exists")
+    if pool.get("status") != "open" or _aware(pool["travel_datetime"]) <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="This trip is no longer accepting travellers")
     try:
         result = await accept_request(request_id, user["user_id"])
         if not result:
