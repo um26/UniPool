@@ -1,66 +1,63 @@
-"""
-Push notification helper functions.
-Contains utilities for sending push notifications via Web Push.
-"""
+"""Web Push helpers used by the UniPool trip lifecycle."""
 
+import asyncio
 import json
-from typing import Dict, Any
-from config.settings import VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT
 import logging
+from typing import Any, Dict, Iterable
+
+from pywebpush import webpush, WebPushException
+
+from config.database import db
+from config.settings import VAPID_PRIVATE_KEY, VAPID_SUBJECT
 
 logger = logging.getLogger("unipool.push")
 
-# Note: Actual webpush implementation would require the 'pywebpush' library
-# For now, we'll create placeholder functions that match the expected interface
 
-def send_push(user_id: str, title: str, body: str, url: str = "/") -> bool:
-    """
-    Send a push notification to a user.
+async def _deliver(subscription: Dict[str, Any], payload: str) -> bool:
+    try:
+        await asyncio.to_thread(
+            webpush,
+            subscription_info={
+                "endpoint": subscription["endpoint"],
+                "keys": subscription.get("keys") or {},
+            },
+            data=payload,
+            vapid_private_key=VAPID_PRIVATE_KEY,
+            vapid_claims={"sub": VAPID_SUBJECT},
+        )
+        return True
+    except WebPushException as exc:
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        if status in (404, 410):
+            await db.push_subscriptions.delete_one({"endpoint": subscription.get("endpoint")})
+        logger.warning("Web push failed (%s): %s", status, exc)
+        return False
+    except Exception as exc:
+        logger.warning("Web push failed: %s", exc)
+        return False
 
-    Args:
-        user_id: Target user ID
-        title: Notification title
-        body: Notification body text
-        url: URL to open when notification is clicked
 
-    Returns:
-        True if notification was sent successfully, False otherwise
-    """
-    # Placeholder implementation
-    # In a real implementation, this would:
-    # 1. Look up user's push subscription from database
-    # 2. Use pywebpush to send the notification
-    # 3. Handle any errors and return success/failure
+async def send_push(user_id: str, title: str, body: str, url: str = "/") -> bool:
+    """Send one notification to every active browser subscription for a user."""
+    if not VAPID_PRIVATE_KEY:
+        logger.info("Push skipped: VAPID_PRIVATE_KEY is not configured")
+        return False
 
-    logger.info(f"Push notification to user {user_id}: {title} - {body}")
-    # Simulate successful sending
-    return True
+    subscriptions = await db.push_subscriptions.find(
+        {"user_id": user_id}, {"_id": 0}
+    ).to_list(20)
+    if not subscriptions:
+        return False
 
-def send_push_to_multiple(user_ids: list[str], title: str, body: str, url: str = "/") -> dict:
-    """
-    Send push notifications to multiple users.
+    payload = json.dumps({"title": title, "body": body, "url": url})
+    results = await asyncio.gather(*(_deliver(sub, payload) for sub in subscriptions))
+    return any(results)
 
-    Args:
-        user_ids: List of target user IDs
-        title: Notification title
-        body: Notification body text
-        url: URL to open when notification is clicked
 
-    Returns:
-        Dictionary with success/failure counts
-    """
-    # Placeholder implementation
-    success_count = 0
-    failure_count = 0
-
-    for user_id in user_ids:
-        if send_push(user_id, title, body, url):
-            success_count += 1
-        else:
-            failure_count += 1
-
-    return {
-        "success": success_count,
-        "failure": failure_count,
-        "total": len(user_ids)
-    }
+async def send_push_to_multiple(
+    user_ids: Iterable[str], title: str, body: str, url: str = "/"
+) -> Dict[str, int]:
+    ids = list(dict.fromkeys(user_ids))
+    results = await asyncio.gather(*(send_push(uid, title, body, url) for uid in ids))
+    success = sum(1 for result in results if result)
+    return {"success": success, "failure": len(ids) - success, "total": len(ids)}
