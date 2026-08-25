@@ -30,9 +30,8 @@ function AuthGate() {
     }
   }, [user, loading, segments]);
 
-  if (loading) {
-    return <AnimatedSplash />;
-  }
+  if (loading) return <AnimatedSplash />;
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface } }}>
@@ -45,6 +44,7 @@ function AuthGate() {
         <Stack.Screen name="games/word-scramble" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="games/rickshaw-rush" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="chat/[userId]" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="chat/group/[conversationId]" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="pool/[poolId]" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="heatmap" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="trip-receipt/[poolId]" options={{ animation: "slide_from_bottom" }} />
