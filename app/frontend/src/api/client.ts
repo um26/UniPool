@@ -64,7 +64,7 @@ export const api = {
   getVapidKey: () => req("/push/vapid-public-key"),
   pushSubscribe: (sub: { endpoint: string; keys: any }) => req("/push/subscribe", { method: "POST", body: JSON.stringify(sub) }),
   pushUnsubscribe: (endpoint: string) => req("/push/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint }) }),
-  submitScore: (game: string, score: number) => req("/games/score", { method: "POST", body: JSON.stringify({ game, score }) }),
+  submitScore: (game: string, score: number) => req("/games/score", { method: "POST", body: JSON.stringify({ game, score })),
   getLeaderboard: (game: string) => req(`/games/leaderboard/${game}`),
   submitRating: (rated_user_id: string, stars: number, comment?: string, pool_id?: string) =>
     req("/ratings", { method: "POST", body: JSON.stringify({ rated_user_id, stars, comment, pool_id }) }),
@@ -86,8 +86,8 @@ export const api = {
   submitReport: (reportedUserId: string, reason: string, details?: string, poolId?: string) =>
     req("/reports", { method: "POST", body: JSON.stringify({ reported_user_id: reportedUserId, reason, details, pool_id: poolId }) }),
   verifyCollegeIdStart: (collegeEmail: string) => req("/profile/verify-college-id/start", { method: "POST", body: JSON.stringify({ college_email: collegeEmail }) }),
-  verifyCollegeIdConfirm: (code: string) => req("/profile/verify-college-id/confirm", { method: "POST", body: JSON.stringify({ code })),
+  verifyCollegeIdConfirm: (code: string) => req("/profile/verify-college-id/confirm", { method: "POST", body: JSON.stringify({ code }) }),
   getGroupThread: (conversationId: string) => req(`/messages/group/${conversationId}`),
   sendGroupMessage: (conversationId: string, text: string) =>
-    req(`/messages/group/${conversationId}`, { method: "POST", body: JSON.stringify({ text })),
+    req(`/messages/group/${conversationId}`, { method: "POST", body: JSON.stringify({ text }) }),
 };
