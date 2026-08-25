@@ -86,7 +86,8 @@ export const api = {
   submitReport: (reportedUserId: string, reason: string, details?: string, poolId?: string) =>
     req("/reports", { method: "POST", body: JSON.stringify({ reported_user_id: reportedUserId, reason, details, pool_id: poolId }) }),
   verifyCollegeIdStart: (collegeEmail: string) => req("/profile/verify-college-id/start", { method: "POST", body: JSON.stringify({ college_email: collegeEmail }) }),
-  verifyCollegeIdConfirm: (code: string) => req("/profile/verify-college-id/confirm", { method: "POST", body: JSON.stringify({ code }) }),
+  verifyCollegeIdConfirm: (code: string) => req("/profile/verify-college-id/confirm", { method: "POST", body: JSON.stringify({ code } }),),
+  ensureTripChat: (poolId: string) => req(`/messages/trip/ensure/${poolId}`, { method: "POST" }),
   getGroupThread: (conversationId: string) => req(`/messages/group/${conversationId}`),
   sendGroupMessage: (conversationId: string, text: string) =>
     req(`/messages/group/${conversationId}`, { method: "POST", body: JSON.stringify({ text }) }),
