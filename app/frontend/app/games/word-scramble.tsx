@@ -1,18 +1,24 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { View, Text, StyleSheet, Pressable, TextInput, Platform } from "react-native";
+import { View, Text, StyleSheet, Pressable, TextInput } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 
-import { COLORS, SPACING, RADIUS, FONT } from "@/src/theme";
+import { SPACING, RADIUS, FONT } from "@/src/theme";
+import { useTheme } from "@/src/theme_context/ThemeContext";
 import { api } from "@/src/api/client";
 import LeaderboardModal from "@/src/components/LeaderboardModal";
 
 const WORDS = [
-  "MUMBAI", "DELHI", "JAIPUR", "GOA", "KOLKATA", "CHENNAI",
-  "SHIMLA", "MANALI", "AGRA", "PUNE", "SURAT", "INDORE",
-  "RICKSHAW", "PLATFORM", "LUGGAGE", "TICKET", "JOURNEY", "HIGHWAY",
+  "MUMBAI", "DELHI", "JAIPUR", "GOA", "KOLKATA", "CHENNAI", "HYDERABAD", "BENGALURU", "PUNE", "SURAT",
+  "INDORE", "LUCKNOW", "AGRA", "VARANASI", "UDAIPUR", "JODHPUR", "AMRITSAR", "KOCHI", "MYSURU", "NAGPUR",
+  "SHIMLA", "MANALI", "MUSSOORIE", "NAINITAL", "DARJEELING", "GANGTOK", "SRINAGAR", "LEH", "OOTY", "MUNNAR",
+  "RISHIKESH", "HARIDWAR", "PONDICHERRY", "VADODARA", "AHMEDABAD", "BHUBANESWAR", "GUWAHATI", "CHANDIGARH", "PATNA", "RANCHI",
+  "RICKSHAW", "PLATFORM", "LUGGAGE", "TICKET", "JOURNEY", "HIGHWAY", "AIRPORT", "RAILWAY", "STATION", "TERMINAL",
+  "BOARDING", "PASSPORT", "BACKPACK", "COMPASS", "ITINERARY", "HOSTEL", "CHECKIN", "SUNRISE", "SUNSET", "MOUNTAIN",
+  "BEACH", "DESERT", "TEMPLE", "PALACE", "FORT", "MARKET", "CAMPING", "TREKKING", "TAXI", "METRO",
+  "EXPRESS", "VANDEBHARAT", "RUNWAY", "TRAVELLER", "CARRIAGE", "WINDOW", "TUNNEL", "BRIDGE", "ROUTE", "DESTINATION",
 ];
 
 const ROUND_SECONDS = 15;
@@ -22,7 +28,7 @@ function scramble(word: string): string {
   let letters = word.split("");
   let attempt = word;
   let guard = 0;
-  while (attempt === word && guard < 10) {
+  while (attempt === word && guard < 12) {
     letters = [...letters].sort(() => Math.random() - 0.5);
     attempt = letters.join("");
     guard++;
@@ -31,16 +37,14 @@ function scramble(word: string): string {
 }
 
 function pickWords(): string[] {
-  return [...WORDS]
-    .map((w) => ({ w, sort: Math.random() }))
-    .sort((a, b) => a.sort - b.sort)
-    .slice(0, TOTAL_ROUNDS)
-    .map((x) => x.w);
+  return [...WORDS].map((w) => ({ w, sort: Math.random() })).sort((a, b) => a.sort - b.sort).slice(0, TOTAL_ROUNDS).map((x) => x.w);
 }
 
 export default function WordScramble() {
   const router = useRouter();
-  const [words] = useState<string[]>(() => pickWords());
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [words, setWords] = useState<string[]>(() => pickWords());
   const [round, setRound] = useState(0);
   const [scrambled, setScrambled] = useState(() => scramble(words[0]));
   const [guess, setGuess] = useState("");
@@ -52,7 +56,7 @@ export default function WordScramble() {
 
   useEffect(() => {
     if (done) api.submitScore("word-scramble", score).catch(() => {});
-  }, [done]);
+  }, [done, score]);
 
   const current = words[round];
 
@@ -98,7 +102,7 @@ export default function WordScramble() {
 
   const restart = () => {
     const fresh = pickWords();
-    words.splice(0, words.length, ...fresh);
+    setWords(fresh);
     setRound(0);
     setScrambled(scramble(fresh[0]));
     setGuess("");
@@ -112,16 +116,12 @@ export default function WordScramble() {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.doneWrap}>
-          <Ionicons name="ribbon" size={64} color={COLORS.saffron} />
+          <Ionicons name="ribbon" size={64} color={colors.saffron} />
           <Text style={styles.doneTitle}>Score: {score}</Text>
-          <Text style={styles.doneSub}>
-            {score >= TOTAL_ROUNDS * 4 ? "Word wizard!" : score >= TOTAL_ROUNDS * 2 ? "Nicely done!" : "Give it another shot!"}
-          </Text>
-          <Pressable testID="scramble-restart" onPress={restart} style={styles.btn}><Text style={styles.btnText}>Play again</Text></Pressable>
-          <Pressable testID="scramble-leaderboard" onPress={() => setShowBoard(true)} style={{ marginTop: SPACING.sm }}>
-            <Text style={{ color: COLORS.indigo, fontWeight: "700", textDecorationLine: "underline" }}>View leaderboard</Text>
-          </Pressable>
-          <Pressable testID="scramble-back" onPress={() => router.back()} style={[styles.btn, styles.btnGhost]}><Text style={[styles.btnText, { color: COLORS.indigo }]}>Back</Text></Pressable>
+          <Text style={styles.doneSub}>{score >= TOTAL_ROUNDS * 4 ? "Word wizard!" : score >= TOTAL_ROUNDS * 2 ? "Nicely done!" : "Give it another shot!"}</Text>
+          <Pressable onPress={restart} style={styles.btn}><Text style={styles.btnText}>Play again</Text></Pressable>
+          <Pressable onPress={() => setShowBoard(true)} style={{ marginTop: SPACING.sm }}><Text style={styles.link}>View leaderboard</Text></Pressable>
+          <Pressable onPress={() => router.back()} style={[styles.btn, styles.btnGhost]}><Text style={[styles.btnText, { color: colors.indigo }]}>Back</Text></Pressable>
         </View>
         <LeaderboardModal visible={showBoard} onClose={() => setShowBoard(false)} game="word-scramble" gameLabel="Word Scramble" unit="pts" />
       </SafeAreaView>
@@ -131,45 +131,36 @@ export default function WordScramble() {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
-        <Pressable testID="scramble-close" onPress={() => router.back()} hitSlop={12}>
-          <Ionicons name="chevron-back" size={24} color={COLORS.onSurface} />
-        </Pressable>
+        <Pressable onPress={() => router.back()} hitSlop={12}><Ionicons name="chevron-back" size={24} color={colors.onSurface} /></Pressable>
         <Text style={styles.progress}>{round + 1} / {TOTAL_ROUNDS}</Text>
         <View style={styles.timerPill}>
-          <Ionicons name="time" size={14} color={timeLeft <= 5 ? COLORS.error : COLORS.indigo} />
-          <Text style={[styles.timerText, timeLeft <= 5 && { color: COLORS.error }]}>{timeLeft}s</Text>
+          <Ionicons name="time" size={14} color={timeLeft <= 5 ? colors.error : colors.indigo} />
+          <Text style={[styles.timerText, timeLeft <= 5 && { color: colors.error }]}>{timeLeft}s</Text>
         </View>
       </View>
 
       <Text style={styles.scoreText}>Score: {score}</Text>
-      <Text style={styles.hint}>Unscramble this Indian travel word</Text>
+      <Text style={styles.hint}>Unscramble this travel word</Text>
 
       <View style={styles.letterRow}>
         {scrambled.split("").map((letter, i) => (
-          <View key={i} style={styles.letterBox}>
-            <Text style={styles.letterText}>{letter}</Text>
-          </View>
+          <View key={i} style={styles.letterBox}><Text style={styles.letterText}>{letter}</Text></View>
         ))}
       </View>
 
       <View style={styles.inputRow}>
         <TextInput
-          testID="scramble-input"
           value={guess}
           onChangeText={setGuess}
           onSubmitEditing={submit}
           autoCapitalize="characters"
           autoCorrect={false}
           placeholder="Your answer"
-          placeholderTextColor={COLORS.muted}
-          style={[
-            styles.input,
-            feedback === "correct" && { borderColor: COLORS.success, backgroundColor: "#E8F9F0" },
-            feedback === "wrong" && { borderColor: COLORS.error, backgroundColor: "#FDEDED" },
-          ]}
+          placeholderTextColor={colors.muted}
+          style={[styles.input, feedback === "correct" && { borderColor: colors.success, backgroundColor: colors.surface2 }, feedback === "wrong" && { borderColor: colors.error, backgroundColor: colors.surface2 }]}
           editable={!feedback}
         />
-        <Pressable testID="scramble-submit" onPress={submit} disabled={!!feedback || !guess.trim()} style={[styles.submitBtn, (!!feedback || !guess.trim()) && { opacity: 0.5 }]}>
+        <Pressable onPress={submit} disabled={!!feedback || !guess.trim()} style={[styles.submitBtn, (!!feedback || !guess.trim()) && { opacity: 0.5 }]}>
           <Ionicons name="checkmark" size={22} color="#fff" />
         </Pressable>
       </View>
@@ -179,25 +170,26 @@ export default function WordScramble() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: COLORS.surface },
+const makeStyles = (colors: any) => StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.surface },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: SPACING.lg },
-  progress: { color: COLORS.muted, fontWeight: "700" },
-  timerPill: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: COLORS.surface2, borderRadius: RADIUS.pill, paddingHorizontal: 10, paddingVertical: 4 },
-  timerText: { fontWeight: "800", color: COLORS.indigo },
-  scoreText: { textAlign: "center", color: COLORS.muted, fontWeight: "700" },
-  hint: { textAlign: "center", fontSize: FONT.lg, fontWeight: "700", color: COLORS.onSurface, marginTop: SPACING.lg },
+  progress: { color: colors.muted, fontWeight: "700" },
+  timerPill: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.surface2, borderRadius: RADIUS.pill, paddingHorizontal: 10, paddingVertical: 4 },
+  timerText: { fontWeight: "800", color: colors.indigo },
+  scoreText: { textAlign: "center", color: colors.muted, fontWeight: "700" },
+  hint: { textAlign: "center", fontSize: FONT.lg, fontWeight: "700", color: colors.onSurface, marginTop: SPACING.lg },
   letterRow: { flexDirection: "row", justifyContent: "center", flexWrap: "wrap", gap: SPACING.sm, marginTop: SPACING.xl, paddingHorizontal: SPACING.lg },
-  letterBox: { width: 44, height: 52, borderRadius: RADIUS.sm, backgroundColor: COLORS.indigo, alignItems: "center", justifyContent: "center" },
-  letterText: { color: COLORS.cream, fontSize: FONT.xl, fontWeight: "800" },
+  letterBox: { minWidth: 40, height: 52, paddingHorizontal: 8, borderRadius: RADIUS.sm, backgroundColor: colors.indigo, alignItems: "center", justifyContent: "center" },
+  letterText: { color: colors.onIndigo, fontSize: FONT.lg, fontWeight: "800" },
   inputRow: { flexDirection: "row", gap: SPACING.sm, paddingHorizontal: SPACING.lg, marginTop: SPACING.xxl },
-  input: { flex: 1, backgroundColor: "#fff", borderRadius: RADIUS.md, borderWidth: 2, borderColor: COLORS.border, paddingHorizontal: 16, paddingVertical: 14, fontSize: FONT.lg, fontWeight: "700", color: COLORS.onSurface, letterSpacing: 1 },
-  submitBtn: { width: 52, height: 52, borderRadius: RADIUS.md, backgroundColor: COLORS.saffron, alignItems: "center", justifyContent: "center" },
-  answerReveal: { textAlign: "center", color: COLORS.error, marginTop: SPACING.md, fontWeight: "700" },
+  input: { flex: 1, backgroundColor: colors.card, borderRadius: RADIUS.md, borderWidth: 2, borderColor: colors.border, paddingHorizontal: 16, paddingVertical: 14, fontSize: FONT.lg, fontWeight: "700", color: colors.onSurface, letterSpacing: 1 },
+  submitBtn: { width: 52, height: 52, borderRadius: RADIUS.md, backgroundColor: colors.saffron, alignItems: "center", justifyContent: "center" },
+  answerReveal: { textAlign: "center", color: colors.error, marginTop: SPACING.md, fontWeight: "700" },
   doneWrap: { flex: 1, alignItems: "center", justifyContent: "center", padding: SPACING.xl },
-  doneTitle: { fontSize: FONT["2xl"], fontWeight: "800", color: COLORS.onSurface, marginTop: SPACING.md },
-  doneSub: { color: COLORS.muted, marginBottom: SPACING.xl, textAlign: "center" },
-  btn: { backgroundColor: COLORS.indigo, paddingHorizontal: 24, paddingVertical: 14, borderRadius: RADIUS.pill, marginTop: SPACING.sm, alignSelf: "stretch", alignItems: "center" },
-  btnGhost: { backgroundColor: "transparent", borderWidth: 1, borderColor: COLORS.indigo },
+  doneTitle: { fontSize: FONT["2xl"], fontWeight: "800", color: colors.onSurface, marginTop: SPACING.md },
+  doneSub: { color: colors.muted, marginBottom: SPACING.xl, textAlign: "center" },
+  btn: { backgroundColor: colors.indigo, paddingHorizontal: 24, paddingVertical: 14, borderRadius: RADIUS.pill, marginTop: SPACING.sm, alignSelf: "stretch", alignItems: "center" },
+  btnGhost: { backgroundColor: "transparent", borderWidth: 1, borderColor: colors.indigo },
   btnText: { color: "#fff", fontWeight: "800" },
+  link: { color: colors.indigo, fontWeight: "700", textDecorationLine: "underline" },
 });
