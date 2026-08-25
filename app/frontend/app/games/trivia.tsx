@@ -98,7 +98,7 @@ const makeStyles = (colors: any) => StyleSheet.create({
   optWrong: { backgroundColor: colors.error, borderColor: colors.error },
   optionIndex: { width: 32, height: 32, borderRadius: 16, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   optionIndexText: { fontWeight: "800", fontSize: 12 },
-  optText: { flex: 1, fontSize: FONT.base, color: colors.onSurface, fontWeight: "650" },
+  optText: { flex: 1, fontSize: FONT.base, color: colors.onSurface, fontWeight: "600" },
   trophy: { width: 82, height: 82, borderRadius: 41, backgroundColor: colors.cream, alignItems: "center", justifyContent: "center" },
   doneWrap: { flex: 1, alignItems: "center", justifyContent: "center", padding: SPACING.xl },
   doneTitle: { fontSize: FONT["2xl"], fontWeight: "800", color: colors.onSurface, marginTop: SPACING.lg },
