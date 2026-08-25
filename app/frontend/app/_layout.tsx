@@ -6,7 +6,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
-import { AuthProvider, useAuth } from "@/src/auth/AuthContext";
+import { useAuth, AuthProvider } from "@/src/auth/AuthContext";
 import { ThemeProvider, useTheme } from "@/src/theme_context/ThemeContext";
 import { applyPremiumFontDefaults } from "@/src/utils/setupFonts";
 import AnimatedSplash from "@/src/components/AnimatedSplash";
@@ -30,14 +30,21 @@ function TripChatAutoOpen() {
       if (running.current) return;
       running.current = true;
       try {
-        const [matches, confirmed] = await Promise.all([api.myMatches(), api.confirmedMatches()]);
+        const [rawMatches, confirmed] = await Promise.all([api.myMatches(), api.confirmedMatches()]);
+        const matches = await Promise.all((rawMatches || []).map(async (item: any) => {
+          if (item.conversation_id || !item.pool_id) return item;
+          try {
+            const chat = await api.ensureTripChat(item.pool_id);
+            return { ...item, conversation_id: chat.conversation_id, conversation_name: chat.name };
+          } catch {
+            return item;
+          }
+        }));
+
         const ids = new Set<string>();
-        for (const item of matches || []) if (item.conversation_id) ids.add(item.conversation_id);
+        for (const item of matches) if (item.conversation_id) ids.add(item.conversation_id);
         for (const item of confirmed || []) if (item.conversation_id) ids.add(item.conversation_id);
 
-        // The first poll establishes the baseline so an existing chat doesn't
-        // unexpectedly hijack the screen. New chats created by matching or
-        // accepting a request are opened automatically from then on.
         if (known.current === null) {
           known.current = ids;
           return;
@@ -47,8 +54,7 @@ function TripChatAutoOpen() {
         known.current = ids;
         if (!fresh) return;
 
-        const inChat = segments[0] === "chat";
-        if (!inChat) {
+        if (segments[0] !== "chat") {
           router.push({ pathname: "/chat/group/[conversationId]", params: { conversationId: fresh } });
         }
       } catch {
