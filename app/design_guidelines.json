@@ -1,48 +1,55 @@
 {
   "app_name": "UniPool",
-  "personality": "4 Tactile / Playful LIGHT",
-  "personality_one_liner": "A friendly, playful, and culturally warm campus ride-sharing hub that makes finding a cab-pool feel like an exciting start to a journey.",
+  "personality": "Premium / Simple / Purposeful",
+  "personality_one_liner": "A calm, trustworthy university mobility product that makes shared travel feel clear, safe and effortless.",
+  "principles": [
+    "The landing experience may be expressive; the signed-in product should prioritise clarity and speed.",
+    "Use motion to explain state changes, hierarchy or progress. Never animate merely because space is available.",
+    "Trust and route information should be easier to scan than decorative content.",
+    "Prefer one strong action per surface over several equally loud actions.",
+    "Light mode is the default. Dark mode is optional and must be equally complete.",
+    "Do not use decorative match percentages. Compatibility shown to users must come from backend matching logic.",
+    "Trip Mode must represent persisted trip state, not a local visual toggle."
+  ],
   "color": {
-    "surface": "#FFF9F2",
-    "onSurface": "#1C1917",
-    "surfaceSecondary": "#F5EAE0",
-    "onSurfaceSecondary": "#2D2622",
-    "surfaceTertiary": "#EBE0D5",
-    "onSurfaceTertiary": "#3D352F",
-    "surfaceInverse": "#1A237E",
-    "onSurfaceInverse": "#FFFFFF",
-    "brand": "#FF9933",
-    "brandPrimary": "#1A237E",
+    "surface": "#F8F7F3",
+    "onSurface": "#18202A",
+    "surfaceSecondary": "#F1F0EB",
+    "surfaceTertiary": "#E9E7E0",
+    "card": "#FFFFFF",
+    "brandPrimary": "#2447A8",
     "onBrandPrimary": "#FFFFFF",
-    "brandSecondary": "#FF9933",
-    "onBrandSecondary": "#1C1917",
-    "brandTertiary": "#FFECC2",
-    "onBrandTertiary": "#B05C00",
-    "success": "#10B981",
-    "onSuccess": "#FFFFFF",
-    "warning": "#F59E0B",
-    "onWarning": "#1C1917",
-    "error": "#EF4444",
-    "onError": "#FFFFFF",
-    "info": "#3B82F6",
-    "onInfo": "#FFFFFF",
-    "border": "#E5D7CA",
-    "borderStrong": "#C2AFA0",
-    "divider": "#E5D7CA"
+    "brandAccent": "#F59B23",
+    "accentSoft": "#FFF2D9",
+    "success": "#168361",
+    "warning": "#B96C0D",
+    "error": "#C83D4D",
+    "muted": "#747B84",
+    "border": "#E2E0D8",
+    "borderStrong": "#C9C6BB"
+  },
+  "dark_color": {
+    "surface": "#111315",
+    "onSurface": "#F6F4EE",
+    "surfaceSecondary": "#191C1F",
+    "surfaceTertiary": "#23272B",
+    "card": "#171A1D",
+    "brandPrimary": "#8AA7FF",
+    "brandAccent": "#FFB34D",
+    "border": "#2D3237",
+    "muted": "#9DA4AB"
   },
   "typography": {
-    "displayFontFamily": "Plus Jakarta Sans",
-    "textFontFamily": "Plus Jakarta Sans",
-    "scale": {
-      "sm": 12,
-      "base": 14,
-      "lg": 16,
-      "xl": 20,
-      "2xl": 24
-    }
+    "displayFontFamily": "Lexend",
+    "textFontFamily": "System",
+    "rules": [
+      "Use display weight sparingly for page titles and key route names.",
+      "Body copy should remain compact and conversational.",
+      "Avoid all-caps labels except very short status labels."
+    ]
   },
   "spacing": {
-    "rule": "Use generous tactile padding. Cards and containers should feel chunky and touchable.",
+    "rule": "Use generous whitespace without oversized cards. Keep information density comfortable, especially on mobile.",
     "xs": 4,
     "sm": 8,
     "md": 12,
@@ -52,122 +59,85 @@
     "3xl": 48
   },
   "radius_tokens": {
-    "sm": 6,
+    "sm": 8,
     "md": 12,
-    "lg": 20,
+    "lg": 18,
+    "xl": 24,
     "pill": 999
   },
-  "shadow_tier": "2",
-  "navigation": "bottom_tabs",
-  "icon_set": "Phosphor",
-  "glassmorphism": {
-    "enabled": "true",
-    "do's": [
-      "Use on the bottom tab bar to let scrolling ride requests bleed through.",
-      "Use on sticky headers over the main feed.",
-      "Use for the Floating Action Button (FAB) background."
-    ],
-    "dont's": [
-      "Do not use on list item cards or form inputs.",
-      "Do not use on primary CTAs directly."
+  "navigation": {
+    "pattern": "bottom_tabs",
+    "primary_items": ["Home", "Matches", "Trips", "Chats", "Profile"],
+    "rule": "Do not add another primary tab unless it is central to Discover → Match → Request → Confirm → Trip Chat → Travel → Rate."
+  },
+  "motion": {
+    "duration_fast_ms": 140,
+    "duration_standard_ms": 220,
+    "duration_slow_ms": 360,
+    "rules": [
+      "Use subtle press scale or opacity feedback for touch targets.",
+      "Use skeletons for initial loading and inline progress for mutations.",
+      "Prefer cross-fades and small translations over dramatic spring effects.",
+      "Respect reduced-motion settings where available."
     ]
   },
-  "platform_libraries": {
-    "glass": {
-      "ios": "expo-glass-effect",
-      "android": "expo-blur",
-      "low_end_android_fallback": "solid surfaceSecondary"
-    },
-    "image": "expo-image",
-    "blur": "expo-blur",
-    "bottom_sheet": "@gorhom/bottom-sheet",
-    "animation": "react-native-reanimated",
-    "gesture": "react-native-gesture-handler"
+  "glassmorphism": {
+    "enabled": "limited",
+    "allowed": [
+      "Bottom navigation backdrop",
+      "Transient overlays when readability remains high"
+    ],
+    "disallowed": [
+      "Feed cards",
+      "Form inputs",
+      "Primary CTA surfaces",
+      "Decorative glass panels"
+    ]
   },
   "screens": [
     {
-      "name": "SplashLoading",
-      "purpose": "A travel-themed entry screen that sets the warm Indian journey motif.",
-      "states": {
-        "loading": "Animated plane or train moving along a route line over a subtle Rangoli pattern background.",
-        "empty": "N/A",
-        "error": "N/A"
-      },
-      "layout": "Full-bleed background image with a gradient scrim. Center an animated route line with a train/flight icon. Use a subtle spinner for processing Google Sign-in."
+      "name": "LandingAuth",
+      "layout": "Keep the university/airport hero and purposeful aircraft motion. Authentication should sit in a clean, high-contrast surface with one obvious primary path and a quieter alternative path."
     },
     {
       "name": "HomeFeed",
-      "purpose": "Browse open cab-pool requests and quickly post a new one.",
-      "states": {
-        "loading": "Skeleton cards representing ride listings.",
-        "empty": "Illustration of an empty road with a 'Be the first to post a pool!' CTA.",
-        "error": "Connection error message with a 'Retry' button."
-      },
-      "layout": "Top: Search bar and filter chips (Saffron active state). Middle: Vertically stacked, chunky cards showing from/to, date, time, and remaining seats. Bottom: Sticky Deep Indigo FAB 'Create Pool' hovering above the glass tab bar."
-    },
-    {
-      "name": "PostRequest",
-      "purpose": "Form to post a query for a cab share.",
-      "states": {
-        "loading": "Spinner over the 'Submit' button.",
-        "empty": "N/A",
-        "error": "Inline validation messages for required fields."
-      },
-      "layout": "Bottom sheet or modal. Single column inputs: From, To, Date, Time. Stepper for 'Companions'. Toggle for 'Luggage'. Sticky 'Post Request' CTA at the bottom inside KeyboardAvoidingView."
+      "layout": "Start with greeting/context, route search and a small filter row. Rank useful journeys first. Ride cards prioritise route, departure time, compatibility/trust and one request action. Map and heatmap are secondary utilities."
     },
     {
       "name": "Matches",
-      "purpose": "Show auto-matched requests within the +-1 hr window.",
-      "states": {
-        "loading": "Skeleton list items.",
-        "empty": "Illustration of a calendar/clock showing no current +-1hr matches.",
-        "error": "Failed to load matches, retry CTA."
-      },
-      "layout": "List of high-match cards. Each card highlights the overlapping time window and has a prominent 'Connect/Email' secondary CTA button."
+      "layout": "Show backend-ranked compatibility with clear reasons, time overlap, verified identity and one next action. Do not invent frontend scores."
     },
     {
-      "name": "MiniGames",
-      "purpose": "Timepass hub for users waiting for matches.",
-      "states": {
-        "loading": "Spinner.",
-        "empty": "N/A",
-        "error": "N/A"
-      },
-      "layout": "Two large, chunky feature cards using image backgrounds with gradient scrims. Top card: 'Travel Trivia' (India facts). Bottom card: 'Tap-the-Plane' arcade. Both use engaging illustrations."
+      "name": "Trips",
+      "layout": "Treat confirmed journeys as the centre of coordination: countdown, meeting point, travellers, group chat, route and safety. Trip Mode belongs here as persisted trip state."
+    },
+    {
+      "name": "PoolCreation",
+      "layout": "Single-column form with route first, date/time next, then preferences and context. Use progressive disclosure for optional details. Keep the submit action visible and show mutation progress."
+    },
+    {
+      "name": "Profile",
+      "layout": "Identity and trust first: university verification, academic context, rating/reliability and completed travel. Settings and secondary utilities should not compete with trust signals."
+    },
+    {
+      "name": "TimePass",
+      "layout": "Keep as a secondary destination for waiting time, not a primary navigation item. Games must support both themes."
     }
   ],
-  "images": {
-    "loading_bg_pattern": {
-      "url": "https://images.pexels.com/photos/9693916/pexels-photo-9693916.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
-      "alt": "Colorful mandala and rangoli pattern"
-    },
-    "train_travel_hero": {
-      "url": "https://images.unsplash.com/photo-1582217900003-2b19c0e3a7d0?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzN8MHwxfHNlYXJjaHwzfHxpbmRpYW4lMjB0cmFpbiUyMHRyYXZlbHxlbnwwfHx8fDE3ODY0MjIwMTh8MA&ixlib=rb-4.1.0&q=85",
-      "alt": "Indian train on a track during daytime"
-    },
-    "airplane_arcade_cover": {
-      "url": "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MTJ8MHwxfHNlYXJjaHwyfHxhaXJwbGFuZSUyMHNreXxlbnwwfHx8fDE3ODY0MjIwMTh8MA&ixlib=rb-4.1.0&q=85",
-      "alt": "Airplane flying in the sky"
-    }
-  },
-  "haptics": {
-    "tab_press": "light",
-    "button_primary": "medium",
-    "button_secondary": "light",
-    "form_toggle": "light",
-    "game_tap": "heavy",
-    "match_found": "success"
-  },
+  "interaction_rules": [
+    "Every async action must show a pending state and disable duplicate submission.",
+    "Use at least 44px touch targets for primary interactive controls.",
+    "Keep destructive actions visually separate from everyday actions.",
+    "Empty states must explain what the user can do next.",
+    "Do not hide critical safety or request status behind long-press interactions.",
+    "Use haptics lightly for selection, successful confirmation and important travel-state changes."
+  ],
   "instructions_to_main_agent": [
-    "Strictly follow the color palette. Note the explicit exception for Deep Indigo (#1A237E) as it was explicitly requested by the user and serves as the primary brand color.",
-    "Implement the 'Saffron/Marigold' (#FF9933) heavily as an accent color for tags, active tab indicators, and interactive highlights to reinforce the warm Indian touch.",
-    "For the Splash/Loading screen, use the 'loading_bg_pattern' with a heavy opacity/blur overlay so it forms a subtle rangoli/kolam texture, not a noisy image.",
-    "Ensure the CAB pool feed uses chunky, tactile cards with generously rounded corners (lg/pill) and shadow tier 2.",
-    "Implement a sticky 'Post Request' FAB at the bottom right of the HomeFeed, floating above the glass tab bar.",
-    "MiniGames screen should present two large feature cards using the train and airplane images fetched, properly applying a gradient scrim (top to bottom, transparent to ≥70% surfaceInverse) to ensure text on the cards is perfectly legible.",
-    "All form fields in the Post Request sheet must follow the single-column layout with labels above inputs.",
-    "Wire up haptic feedback to all CTAs, bottom tabs, and explicitly the 'Tap-the-Plane' game interactions based on the provided haptics mapping."
+    "Default to the semantic theme tokens in app/frontend/src/theme.ts rather than hard-coded colours.",
+    "Do not increase the number of primary navigation items beyond five without an explicit product decision.",
+    "Keep the signed-in application visually quieter than the landing page.",
+    "Preserve existing backend behaviour while refactoring UI surfaces.",
+    "Never display compatibility percentages that are not returned by active backend matching logic.",
+    "Do not represent Trip Mode as a local-only global switch."
   ]
 }
-
-
