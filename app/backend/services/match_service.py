@@ -1,84 +1,268 @@
-"""Real match scoring and smart feed ranking."""
-from datetime import timezone, timedelta
+"""Compatibility scoring, smart feed ranking and automatic match chat creation."""
+from datetime import datetime, timezone, timedelta
 from difflib import SequenceMatcher
-from typing import Any, Dict, List, Tuple
+import re
+from typing import Any, Dict, List
+
 from config.database import db
 
-def _aware(dt):
-    if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None: return dt.replace(tzinfo=timezone.utc)
+
+def _aware(dt: datetime) -> datetime:
+    if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+        return dt.replace(tzinfo=timezone.utc)
     return dt
 
-def _norm(v: Any) -> str: return " ".join(str(v or "").strip().lower().split())
-def _sim(a,b):
-    a,b=_norm(a),_norm(b)
-    if not a or not b: return 0.0
-    return 1.0 if a==b else SequenceMatcher(None,a,b).ratio()
-def _route(a,b): return (_sim(a.get("from_location"),b.get("from_location"))+_sim(a.get("to_location"),b.get("to_location")))/2
-def _time(a,b):
-    try: d=abs((_aware(a["travel_datetime"])-_aware(b["travel_datetime"])).total_seconds())/60
-    except Exception: return 0.0
-    if d<=15:return 1.0
-    if d<=30:return .9
-    if d<=60:return .78
-    if d<=120:return .55
-    if d<=180:return .3
+
+def _norm(value: Any) -> str:
+    text = str(value or "").casefold().strip()
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return " ".join(text.split())
+
+
+# Common campus/transit aliases. These are deliberately semantic aliases, not
+# decorative frontend guesses: they are applied to the backend route score.
+_LOCATION_ALIASES = {
+    "mu": "mahindra university",
+    "mahindra uni": "mahindra university",
+    "mahindra campus": "mahindra university",
+    "mahindra university campus": "mahindra university",
+    "rgia": "hyderabad airport",
+    "rgi airport": "hyderabad airport",
+    "rajiv gandhi airport": "hyderabad airport",
+    "rajiv gandhi international airport": "hyderabad airport",
+    "hyderabad international airport": "hyderabad airport",
+    "hyd airport": "hyderabad airport",
+}
+
+
+def _canonical_location(value: Any) -> str:
+    text = _norm(value)
+    if not text:
+        return ""
+    if text in _LOCATION_ALIASES:
+        return _LOCATION_ALIASES[text]
+
+    # Remove words that usually describe the facility rather than its actual
+    # place identity. We keep airport/railway so those modes remain distinct.
+    replacements = {
+        " intl ": " ", " international ": " ", " terminal ": " ",
+        " campus ": " ", " main gate ": " ", " pickup point ": " ",
+    }
+    padded = f" {text} "
+    for old, new in replacements.items():
+        padded = padded.replace(old, new)
+    text = " ".join(padded.split())
+    return _LOCATION_ALIASES.get(text, text)
+
+
+def _sim(a: Any, b: Any) -> float:
+    a_text, b_text = _canonical_location(a), _canonical_location(b)
+    if not a_text or not b_text:
+        return 0.0
+    if a_text == b_text:
+        return 1.0
+    if a_text in b_text or b_text in a_text:
+        return 0.94
+
+    seq = SequenceMatcher(None, a_text, b_text).ratio()
+    a_tokens, b_tokens = set(a_text.split()), set(b_text.split())
+    union = a_tokens | b_tokens
+    jaccard = len(a_tokens & b_tokens) / len(union) if union else 0.0
+    return max(seq, jaccard)
+
+
+def route_similarity(a: Dict[str, Any], b: Dict[str, Any]) -> float:
+    """Return 0..1 same-direction origin/destination compatibility."""
+    return (
+        _sim(a.get("from_location"), b.get("from_location"))
+        + _sim(a.get("to_location"), b.get("to_location"))
+    ) / 2
+
+
+def _time_similarity(a: Dict[str, Any], b: Dict[str, Any]) -> float:
+    try:
+        minutes = abs((_aware(a["travel_datetime"]) - _aware(b["travel_datetime"])).total_seconds()) / 60
+    except Exception:
+        return 0.0
+    if minutes <= 15: return 1.0
+    if minutes <= 30: return 0.92
+    if minutes <= 60: return 0.82
+    if minutes <= 120: return 0.58
+    if minutes <= 180: return 0.32
     return 0.0
-def _gender(a,b):
-    ga,gb=_norm(a.get("user_gender")),_norm(b.get("user_gender"))
-    for x,y in ((a,b),(b,a)):
-        if x.get("gender_preference")=="same":
-            if not ga or not gb:return .55
-            if ga!=gb:return 0.0
+
+
+def _gender_similarity(a: Dict[str, Any], b: Dict[str, Any]) -> float:
+    ga, gb = _norm(a.get("user_gender")), _norm(b.get("user_gender"))
+    for pref_source in (a, b):
+        if pref_source.get("gender_preference") == "same":
+            if not ga or not gb:
+                return 0.55
+            if ga != gb:
+                return 0.0
     return 1.0
-def _travel(a,b):
-    try:c=max(0,1-min(abs(int(a.get("companions") or 0)-int(b.get("companions") or 0)),3)/4)
-    except Exception:c=.6
-    la,lb=_norm(a.get("luggage")),_norm(b.get("luggage")); l=.6 if not la or not lb else (1.0 if la==lb else .7)
-    return .55*l+.45*c
-def _trust(c):
-    r=c.get("user_rating_avg"); n=int(c.get("user_rating_count") or 0); badges=len(c.get("user_badges") or [])
-    return (0 if r is None else min(float(r)/5,1))*.55+min(n/10,1)*.25+min(badges/3,1)*.20
-def _score(a,b):
-    parts={"route":round(_route(a,b)*35),"time":round(_time(a,b)*25),"preferences":round(_gender(a,b)*10),"travel_details":round(_travel(a,b)*10),"trip_mode":round((1 if bool(a.get("trip_mode"))==bool(b.get("trip_mode")) else .55)*5),"trust":round(_trust(b)*15)}
-    return max(0,min(99,sum(parts.values()))),parts
-def _label(s): return "Excellent fit" if s>=90 else "Strong fit" if s>=80 else "Good fit" if s>=70 else "Possible fit"
-async def _blocked(uid):
-    docs=await db.blocks.find({"$or":[{"blocker_id":uid},{"blocked_id":uid}]},{"_id":0}).to_list(2000)
-    return {d["blocked_id"] if d["blocker_id"]==uid else d["blocker_id"] for d in docs}
-async def _enrich(cands):
-    if not cands:return cands
-    ids=list({c["user_id"] for c in cands})
-    stats=await db.ratings.aggregate([{"$match":{"rated_user_id":{"$in":ids}}},{"$group":{"_id":"$rated_user_id","avg":{"$avg":"$stars"},"count":{"$sum":1}}}]).to_list(len(ids))
-    sm={s["_id"]:s for s in stats}
-    for c in cands:
-        s=sm.get(c["user_id"]); c["user_rating_avg"]=round(s["avg"],1) if s else None; c["user_rating_count"]=s["count"] if s else 0
-    return cands
-async def smart_matches(user_id:str)->List[Dict[str,Any]]:
-    mine=await db.pools.find({"user_id":user_id,"status":"open"},{"_id":0}).to_list(100)
-    if not mine:return []
-    blocked=await _blocked(user_id); lo=min(_aware(p["travel_datetime"]) for p in mine)-timedelta(hours=3); hi=max(_aware(p["travel_datetime"]) for p in mine)+timedelta(hours=3)
-    cands=await db.pools.find({"user_id":{"$ne":user_id,"$nin":list(blocked)},"status":"open","travel_datetime":{"$gte":lo,"$lte":hi}},{"_id":0}).to_list(500)
-    await _enrich(cands); out={}
-    for c in cands:
-        best=None
-        for own in mine:
-            s,b=_score(own,c)
-            if best is None or s>best[0]:best=(s,b,own)
-        if not best:continue
-        s,b,own=best
-        if b["route"]<18 or b["time"]<8 or s<52:continue
-        c["match_score"]=s;c["match_label"]=_label(s);c["match_breakdown"]=b;c["matched_pool_id"]=own.get("pool_id");c["match_time_delta_minutes"]=round(abs((_aware(c["travel_datetime"])-_aware(own["travel_datetime"])).total_seconds()/60)
-        out[c["pool_id"]]=c
-    return sorted(out.values(),key=lambda x:(x.get("match_score",0),-x.get("match_time_delta_minutes",999)),reverse=True)
-async def rank_pool_feed(user:Dict[str,Any],pools:List[Dict[str,Any]])->List[Dict[str,Any]]:
-    mine=await db.pools.find({"user_id":user["user_id"],"status":"open"},{"_id":0}).to_list(100)
+
+
+def _travel_similarity(a: Dict[str, Any], b: Dict[str, Any]) -> float:
+    try:
+        companion = max(0.0, 1.0 - min(abs(int(a.get("companions") or 0) - int(b.get("companions") or 0)), 3) / 4)
+    except Exception:
+        companion = 0.6
+    la, lb = _norm(a.get("luggage")), _norm(b.get("luggage"))
+    luggage = 0.65 if not la or not lb else (1.0 if la == lb else 0.72)
+    return 0.55 * luggage + 0.45 * companion
+
+
+def _trust(candidate: Dict[str, Any]) -> float:
+    rating = candidate.get("user_rating_avg")
+    count = int(candidate.get("user_rating_count") or 0)
+    badges = len(candidate.get("user_badges") or [])
+    verified = 1.0 if candidate.get("user_college_id") or any(
+        b.get("id") == "verified" for b in candidate.get("user_badges") or []
+    ) else 0.0
+    rating_part = 0.0 if rating is None else min(float(rating) / 5.0, 1.0)
+    return rating_part * 0.45 + min(count / 10, 1) * 0.20 + min(badges / 3, 1) * 0.15 + verified * 0.20
+
+
+def score_match(a: Dict[str, Any], b: Dict[str, Any]) -> tuple[int, Dict[str, int]]:
+    parts = {
+        "route": round(route_similarity(a, b) * 35),
+        "time": round(_time_similarity(a, b) * 25),
+        "preferences": round(_gender_similarity(a, b) * 10),
+        "travel_details": round(_travel_similarity(a, b) * 10),
+        "trip_mode": round((1.0 if bool(a.get("trip_mode")) == bool(b.get("trip_mode")) else 0.55) * 5),
+        "trust": round(_trust(b) * 15),
+    }
+    return max(0, min(99, sum(parts.values()))), parts
+
+
+def _label(score: int) -> str:
+    if score >= 90: return "Excellent fit"
+    if score >= 80: return "Strong fit"
+    if score >= 70: return "Good fit"
+    return "Possible fit"
+
+
+async def _blocked(user_id: str) -> set[str]:
+    docs = await db.blocks.find(
+        {"$or": [{"blocker_id": user_id}, {"blocked_id": user_id}]}, {"_id": 0}
+    ).to_list(2000)
+    return {
+        d["blocked_id"] if d["blocker_id"] == user_id else d["blocker_id"]
+        for d in docs
+    }
+
+
+async def _enrich(candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if not candidates:
+        return candidates
+    ids = list({c["user_id"] for c in candidates if c.get("user_id")})
+    stats = await db.ratings.aggregate([
+        {"$match": {"rated_user_id": {"$in": ids}}},
+        {"$group": {"_id": "$rated_user_id", "avg": {"$avg": "$stars"}, "count": {"$sum": 1}}},
+    ]).to_list(len(ids))
+    stat_map = {s["_id"]: s for s in stats}
+
+    users = await db.users.find(
+        {"user_id": {"$in": ids}},
+        {"_id": 0, "user_id": 1, "college_verified": 1, "roll_number": 1},
+    ).to_list(len(ids))
+    verified = {u["user_id"] for u in users if u.get("college_verified")}
+
+    for candidate in candidates:
+        stat = stat_map.get(candidate.get("user_id"))
+        candidate["user_rating_avg"] = round(stat["avg"], 1) if stat else None
+        candidate["user_rating_count"] = stat["count"] if stat else 0
+        candidate["user_college_id"] = {"verified": True} if candidate.get("user_id") in verified else None
+    return candidates
+
+
+async def _attach_automatic_chat(user_id: str, match: Dict[str, Any]) -> None:
+    """Create/reuse the route trip chat for a genuine backend match."""
+    try:
+        from services.messages_service import ensure_trip_conversation
+        conversation = await ensure_trip_conversation(match["pool_id"], [user_id])
+        match["conversation_id"] = conversation["conversation_id"]
+        match["conversation_name"] = conversation["name"]
+    except Exception:
+        # Matching remains useful if chat storage has a transient problem;
+        # /messages/trip/ensure can backfill it idempotently later.
+        pass
+
+
+async def smart_matches(user_id: str) -> List[Dict[str, Any]]:
+    mine = await db.pools.find({"user_id": user_id, "status": "open"}, {"_id": 0}).to_list(100)
     if not mine:
-        pools.sort(key=lambda x:_aware(x["travel_datetime"]));return pools
-    await _enrich(pools)
-    for p in pools:
-        best=(0,{})
+        return []
+
+    blocked = await _blocked(user_id)
+    lo = min(_aware(p["travel_datetime"]) for p in mine) - timedelta(hours=3)
+    hi = max(_aware(p["travel_datetime"]) for p in mine) + timedelta(hours=3)
+    candidates = await db.pools.find({
+        "user_id": {"$ne": user_id, "$nin": list(blocked)},
+        "status": "open",
+        "travel_datetime": {"$gte": lo, "$lte": hi},
+    }, {"_id": 0}).to_list(500)
+    await _enrich(candidates)
+
+    results: Dict[str, Dict[str, Any]] = {}
+    for candidate in candidates:
+        best = None
         for own in mine:
-            s,b=_score(own,p)
-            if s>best[0]:best=(s,b)
-        p["feed_score"]=best[0];p["match_score"]=best[0];p["match_label"]=_label(best[0]);p["match_breakdown"]=best[1]
-    return sorted(pools,key=lambda x:(x.get("feed_score",0),-_aware(x["travel_datetime"]).timestamp()),reverse=True)
+            score, breakdown = score_match(own, candidate)
+            if best is None or score > best[0]:
+                best = (score, breakdown, own)
+        if not best:
+            continue
+
+        score, breakdown, own = best
+        # Route and time are hard gates. The percentage is therefore always a
+        # real backend compatibility result, never a frontend decoration.
+        if breakdown["route"] < 18 or breakdown["time"] < 8 or score < 52:
+            continue
+
+        candidate["match_score"] = score
+        candidate["match_label"] = _label(score)
+        candidate["match_breakdown"] = breakdown
+        candidate["matched_pool_id"] = own.get("pool_id")
+        candidate["match_time_delta_minutes"] = round(abs(
+            (_aware(candidate["travel_datetime"]) - _aware(own["travel_datetime"])).total_seconds() / 60
+        ))
+        results[candidate["pool_id"]] = candidate
+
+    ordered = sorted(
+        results.values(),
+        key=lambda x: (x.get("match_score", 0), -x.get("match_time_delta_minutes", 999)),
+        reverse=True,
+    )
+
+    # The chat is a consequence of a real match. It is idempotent, so repeat
+    # loads do not create duplicate groups.
+    for match in ordered:
+        await _attach_automatic_chat(user_id, match)
+    return ordered
+
+
+async def rank_pool_feed(user: Dict[str, Any], pools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    mine = await db.pools.find({"user_id": user["user_id"], "status": "open"}, {"_id": 0}).to_list(100)
+    if not mine:
+        pools.sort(key=lambda x: _aware(x["travel_datetime"]))
+        return pools
+
+    await _enrich(pools)
+    for pool in pools:
+        best_score, best_breakdown = 0, {}
+        for own in mine:
+            score, breakdown = score_match(own, pool)
+            if score > best_score:
+                best_score, best_breakdown = score, breakdown
+        pool["feed_score"] = best_score
+        pool["match_score"] = best_score
+        pool["match_label"] = _label(best_score)
+        pool["match_breakdown"] = best_breakdown
+
+    return sorted(
+        pools,
+        key=lambda x: (x.get("feed_score", 0), -_aware(x["travel_datetime"]).timestamp()),
+        reverse=True,
+    )
