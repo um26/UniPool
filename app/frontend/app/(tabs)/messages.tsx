@@ -10,13 +10,16 @@ import { useTheme } from "@/src/theme_context/ThemeContext";
 import { api } from "@/src/api/client";
 
 type Convo = {
-  other_user_id: string;
+  kind: "direct" | "group";
+  other_user_id?: string;
+  conversation_id?: string;
   name: string;
   picture?: string | null;
   last_message: string;
   last_at: string;
   unread: number;
   online?: boolean;
+  members_count?: number;
 };
 
 function fmt(dt: string) {
@@ -52,9 +55,17 @@ export default function MessagesScreen() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  const openConversation = (item: Convo) => {
+    if (item.kind === "group" && item.conversation_id) {
+      router.push({ pathname: "/chat/group/[conversationId]", params: { conversationId: item.conversation_id } });
+    } else if (item.other_user_id) {
+      router.push({ pathname: "/chat/[userId]", params: { userId: item.other_user_id, name: item.name } });
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <LinearGradient colors={isDark ? [colors.surface2, colors.surface2] : [colors.indigo, "#3949AB"]} style={styles.header}>
+      <LinearGradient colors={isDark ? [colors.surface2, colors.surface3] : [colors.indigo, "#3949AB"]} style={styles.header}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.md }}>
           <View style={styles.headerIcon}><Ionicons name="chatbubbles" size={21} color={isDark ? colors.saffron : "#fff"} /></View>
           <View>
@@ -72,7 +83,7 @@ export default function MessagesScreen() {
           <View style={styles.stateIcon}><Ionicons name="cloud-offline-outline" size={28} color={colors.error} /></View>
           <Text style={styles.emptyTitle}>Couldn't load chats</Text>
           <Text style={styles.emptySub}>{error}</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="Retry loading chats" onPress={() => { setLoading(true); load(); }} style={styles.retry}>
+          <Pressable onPress={() => { setLoading(true); load(); }} style={styles.retry}>
             <Ionicons name="refresh" size={16} color="#fff" />
             <Text style={styles.retryText}>Try again</Text>
           </Pressable>
@@ -80,40 +91,39 @@ export default function MessagesScreen() {
       ) : (
         <FlatList
           data={items}
-          keyExtractor={(i) => i.other_user_id}
+          keyExtractor={(i) => i.kind === "group" ? `group-${i.conversation_id}` : `direct-${i.other_user_id}`}
           contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 140 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.indigo} />}
           ListEmptyComponent={
             <View style={styles.empty}>
               <View style={styles.emptyIcon}><Ionicons name="chatbubble-ellipses-outline" size={30} color={colors.indigo} /></View>
               <Text style={styles.emptyTitle}>No conversations yet</Text>
-              <Text style={styles.emptySub}>Once you match with someone, your conversation will appear here.</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Open matches" onPress={() => router.push("/matches")} style={styles.emptyCta}>
+              <Text style={styles.emptySub}>When you match or someone joins your ride, UniPool creates a shared trip chat automatically.</Text>
+              <Pressable onPress={() => router.push("/matches")} style={styles.emptyCta}>
                 <Ionicons name="sparkles" size={16} color="#fff" />
                 <Text style={styles.emptyCtaText}>Find a match</Text>
               </Pressable>
             </View>
           }
           renderItem={({ item }) => (
-            <Pressable
-              testID={`convo-${item.other_user_id}`}
-              onPress={() => router.push({ pathname: "/chat/[userId]", params: { userId: item.other_user_id, name: item.name } })}
-              style={styles.row}
-            >
+            <Pressable onPress={() => openConversation(item)} style={styles.row}>
               <View style={{ position: "relative" }}>
-                <View style={styles.avatar}><Text style={styles.avatarText}>{item.name?.[0]?.toUpperCase() || "U"}</Text></View>
+                <View style={[styles.avatar, item.kind === "group" && styles.groupAvatar]}>
+                  <Ionicons name={item.kind === "group" ? "people" : "person"} size={19} color={item.kind === "group" ? colors.saffron : colors.indigo} />
+                </View>
                 {item.online && <View style={styles.onlineDot} />}
               </View>
               <View style={{ flex: 1 }}>
                 <View style={styles.rowTop}>
-                  <Text style={styles.name}>{item.name}</Text>
+                  <View style={styles.nameWrap}>
+                    <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
+                    {item.kind === "group" && <Text style={styles.groupMeta}>{item.members_count || 0} travellers</Text>}
+                  </View>
                   <Text style={styles.time}>{fmt(item.last_at)}</Text>
                 </View>
                 <View style={styles.rowBottom}>
                   <Text style={styles.preview} numberOfLines={1}>{item.last_message}</Text>
-                  {item.unread > 0 && (
-                    <View style={styles.badge}><Text style={styles.badgeText}>{item.unread}</Text></View>
-                  )}
+                  {item.unread > 0 && <View style={styles.badge}><Text style={styles.badgeText}>{item.unread}</Text></View>}
                 </View>
               </View>
             </Pressable>
@@ -142,15 +152,17 @@ const makeStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   emptyCta: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: SPACING.lg, backgroundColor: colors.indigo, borderRadius: RADIUS.pill, paddingHorizontal: 18, paddingVertical: 11 },
   emptyCtaText: { color: "#fff", fontWeight: "800" },
   emptyTitle: { marginTop: SPACING.md, fontSize: FONT.xl, fontWeight: "700", color: colors.onSurface },
-  emptySub: { marginTop: 4, color: colors.muted, textAlign: "center" },
+  emptySub: { marginTop: 4, color: colors.muted, textAlign: "center", lineHeight: 20 },
   row: { flexDirection: "row", alignItems: "center", gap: SPACING.md, backgroundColor: colors.card, borderRadius: RADIUS.lg, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: colors.border },
-  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.cream, alignItems: "center", justifyContent: "center" },
-  avatarText: { color: colors.indigo, fontWeight: "800" },
+  avatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.cream, alignItems: "center", justifyContent: "center" },
+  groupAvatar: { backgroundColor: colors.surface2 },
   onlineDot: { position: "absolute", bottom: 0, right: 0, width: 12, height: 12, borderRadius: 6, backgroundColor: colors.success, borderWidth: 2, borderColor: colors.card },
-  rowTop: { flexDirection: "row", justifyContent: "space-between" },
-  name: { fontWeight: "700", color: colors.onSurface, fontSize: FONT.base },
+  nameWrap: { flex: 1, minWidth: 0 },
+  rowTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: SPACING.sm },
+  name: { fontWeight: "800", color: colors.onSurface, fontSize: FONT.base },
+  groupMeta: { color: colors.saffron, fontSize: 10, fontWeight: "700", marginTop: 1 },
   time: { color: colors.muted, fontSize: FONT.sm },
-  rowBottom: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 2 },
+  rowBottom: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 3 },
   preview: { color: colors.muted, flex: 1, marginRight: SPACING.sm },
   badge: { backgroundColor: colors.saffron, borderRadius: RADIUS.pill, minWidth: 20, height: 20, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
   badgeText: { color: "#fff", fontSize: 11, fontWeight: "800" },
