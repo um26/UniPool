@@ -16,21 +16,12 @@ import Confetti from "@/src/components/Confetti";
 import ReportBlockModal from "@/src/components/ReportBlockModal";
 import { PoolFeedSkeleton } from "@/src/components/Skeleton";
 
-type Pool = { pool_id: string; user_id: string; user_name: string; user_email: string; from_location: string; to_location: string; travel_datetime: string; gender_preference: string; companions: number; luggage?: string | null; notes?: string | null; user_rating_avg?: number | null; user_rating_count?: number; user_badges?: { id: string; label: string; icon: string }[]; conversation_id?: string; conversation_name?: string };
+type Pool = { pool_id: string; user_id: string; user_name: string; user_email: string; from_location: string; to_location: string; travel_datetime: string; gender_preference: string; companions: number; luggage?: string | null; notes?: string | null; trip_mode?: boolean; match_score?: number; match_label?: string; match_breakdown?: Record<string, number>; match_time_delta_minutes?: number; user_rating_avg?: number | null; user_rating_count?: number; user_badges?: { id: string; label: string; icon: string }[]; conversation_id?: string; conversation_name?: string };
 type ConfirmedRide = { pool_id: string; from_location: string; to_location: string; travel_datetime: string; pool_status: string; other_user_id: string; other_user_name: string; other_user_email: string; other_user_rating_avg?: number | null; other_user_rating_count?: number; my_role: "owner" | "traveler"; other_user_badges?: { id: string; label: string; icon: string }[]; conversation_id?: string; conversation_name?: string };
 
 function fmtWhen(iso: string) { return new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }); }
-function matchScore(item: Pool) {
-  let score = 72;
-  if (item.user_rating_avg && item.user_rating_avg >= 4.5) score += 10;
-  else if (item.user_rating_avg && item.user_rating_avg >= 4) score += 6;
-  if (item.user_rating_count && item.user_rating_count >= 5) score += 4;
-  if (item.user_badges?.length) score += Math.min(6, item.user_badges.length * 2);
-  if (item.notes?.trim()) score += 3;
-  if (item.luggage?.trim()) score += 2;
-  return Math.min(99, score);
-}
-function scoreLabel(score: number) { return score >= 90 ? "Excellent fit" : score >= 82 ? "Strong fit" : "Good fit"; }
+function matchScore(item: Pool) { return item.match_score ?? 0; }
+function scoreLabel(score: number, item?: Pool) { return item?.match_label || (score >= 90 ? "Excellent fit" : score >= 80 ? "Strong fit" : score >= 70 ? "Good fit" : "Possible fit"); }
 
 export default function MatchesScreen() {
   const router = useRouter(); const { user } = useAuth(); const { colors, isDark } = useTheme();
@@ -105,11 +96,11 @@ export default function MatchesScreen() {
             const score = matchScore(item);
             return <View style={styles.card} testID={`match-card-${item.pool_id}`}>
               <View style={styles.rowTop}><View style={styles.matchBadge}><Ionicons name="flash" size={12} color="#fff" /><Text style={styles.matchBadgeText}>MATCH</Text></View><View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.sm }}><Text style={styles.when}>{fmtWhen(item.travel_datetime)}</Text><Pressable testID={`more-match-${item.pool_id}`} onPress={() => setReportTarget({ user_id: item.user_id, user_name: item.user_name })} hitSlop={8}><Ionicons name="ellipsis-vertical" size={16} color={colors.muted} /></Pressable></View></View>
-              <View style={styles.nameRow}><Text style={styles.name}>{item.user_name}</Text><View style={[styles.fitPill, { backgroundColor: score >= 90 ? colors.success : colors.cream }]}><Ionicons name="sparkles" size={12} color={score >= 90 ? "#fff" : colors.onCream} /><Text style={[styles.fitText, { color: score >= 90 ? "#fff" : colors.onCream }]}>{score}% · {scoreLabel(score)}</Text></View></View>
+              <View style={styles.nameRow}><Text style={styles.name}>{item.user_name}</Text><View style={[styles.fitPill, { backgroundColor: score >= 90 ? colors.success : colors.cream }]}><Ionicons name="sparkles" size={12} color={score >= 90 ? "#fff" : colors.onCream} /><Text style={[styles.fitText, { color: score >= 90 ? "#fff" : colors.onCream }]}>{score}% · {scoreLabel(score, item)}</Text></View></View>
               <View style={{ marginBottom: SPACING.sm }}><RatingBadge avg={item.user_rating_avg} count={item.user_rating_count} /><UserBadges badges={item.user_badges} compact /></View>
               <View style={styles.routeRow}><Ionicons name="location" size={16} color={colors.saffron} /><Text style={styles.route} numberOfLines={1}>{item.from_location}</Text><Ionicons name="arrow-forward" size={14} color={colors.muted} /><Text style={styles.route} numberOfLines={1}>{item.to_location}</Text></View>
               {item.notes ? <Text style={styles.notes}>“{item.notes}”</Text> : null}
-              <View style={styles.signalRow}><Ionicons name="information-circle-outline" size={14} color={colors.muted} /><Text style={styles.signalText}>Score combines route/time fit with available trust and profile signals.</Text></View>
+              <View style={styles.signalRow}><Ionicons name="information-circle-outline" size={14} color={colors.muted} /><Text style={styles.signalText}>{item.match_time_delta_minutes != null ? `${item.match_time_delta_minutes} min time difference · ` : ""}Route/time + preferences + travel details + trust.</Text></View>
               <View style={styles.ctaRow}>
                 <Pressable testID={`message-${item.pool_id}`} onPress={() => openTripChat(item.pool_id, item.user_id, item.user_name)} style={[styles.cta, { flex: 1 }]}><Ionicons name="chatbubbles" size={16} color="#fff" /><Text style={styles.ctaText}>Open trip chat</Text></Pressable>
                 <Pressable testID={`connect-${item.pool_id}`} onPress={() => Linking.openURL(`mailto:${item.user_email}?subject=UniPool%20-%20Cab%20Share&body=Hi%20${encodeURIComponent(item.user_name)},%20saw%20your%20UniPool%20request.%20Want%20to%20share%20the%20cab%3F`)} style={[styles.cta, styles.ctaGhost]}><Ionicons name="mail" size={16} color={colors.indigo} /></Pressable>
