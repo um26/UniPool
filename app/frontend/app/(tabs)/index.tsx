@@ -1,10 +1,10 @@
-import React, { useCallback, useMemo, useState, useRef } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicator, ScrollView, TextInput, Alert } from "react-native";
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
-import { useRouter, useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
+
 import { SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
 import { useTheme } from "@/src/theme_context/ThemeContext";
 import { api } from "@/src/api/client";
@@ -22,119 +22,299 @@ type Pool = {
   pool_id: string; user_id: string; user_name: string; user_email: string;
   from_location: string; to_location: string; travel_datetime: string;
   gender_preference: string; companions: number; luggage?: string | null; notes?: string | null;
+  match_score?: number; match_label?: string;
   user_rating_avg?: number | null; user_rating_count?: number;
   user_badges?: { id: string; label: string; icon: string }[];
   confirmed_travelers?: ConfirmedTraveler[];
   my_request_status?: "pending" | "accepted" | "declined" | null;
 };
-const CHIPS = ["All", "Today", "Tomorrow", "This week", "Airport", "Railway"];
+
+const FILTERS = ["All", "Today", "Tomorrow", "This week", "Airport", "Railway"];
+
 function formatDT(iso: string) {
-  return new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
+  return new Date(iso).toLocaleString(undefined, {
+    day: "numeric", month: "short", hour: "numeric", minute: "2-digit",
+  });
 }
-function istDayKey(value: Date | string) {
+
+function dayKey(value: Date | string) {
   const d = typeof value === "string" ? new Date(value) : value;
-  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-}
-function isSameDay(iso: string, ref: Date) {
-  return istDayKey(iso) === istDayKey(ref);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export default function HomeFeed() {
-  const router = useRouter(); const { user } = useAuth(); const { colors, isDark } = useTheme();
-  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
-  const [pools, setPools] = useState<Pool[]>([]); const [loading, setLoading] = useState(true); const [refreshing, setRefreshing] = useState(false); const [error, setError] = useState<string | null>(null);
-  const [chip, setChip] = useState("All"); const [search, setSearch] = useState(""); const [showMap, setShowMap] = useState(false);
-  const [requesting, setRequesting] = useState<Set<string>>(new Set()); const [reportTarget, setReportTarget] = useState<{ user_id: string; user_name: string } | null>(null);
-  const [confettiKey, setConfettiKey] = useState(0); const knownAccepted = useRef<Set<string> | null>(null);
+  const router = useRouter();
+  const { user } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [pools, setPools] = useState<Pool[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState("All");
+  const [search, setSearch] = useState("");
+  const [showMap, setShowMap] = useState(false);
+  const [requesting, setRequesting] = useState<Set<string>>(new Set());
+  const [reportTarget, setReportTarget] = useState<{ user_id: string; user_name: string } | null>(null);
+  const [confettiKey, setConfettiKey] = useState(0);
+  const knownAccepted = useRef<Set<string> | null>(null);
+
   const load = useCallback(async () => {
     try {
-      const list = await api.listPools(); setPools(list);
-      const acceptedNow = new Set<string>(list.filter((p: Pool) => p.my_request_status === "accepted").map((p: Pool) => p.pool_id));
-      if (knownAccepted.current && [...acceptedNow].some((id) => !knownAccepted.current!.has(id))) setConfettiKey((k) => k + 1);
+      setError(null);
+      const list = await api.listPools();
+      setPools(list || []);
+      const acceptedNow = new Set<string>((list || []).filter((p: Pool) => p.my_request_status === "accepted").map((p: Pool) => p.pool_id));
+      if (knownAccepted.current && [...acceptedNow].some((id) => !knownAccepted.current!.has(id))) {
+        setConfettiKey((key) => key + 1);
+      }
       knownAccepted.current = acceptedNow;
-    } catch (e: any) { console.warn(e); setError(e?.message || "We couldn’t load the pool feed."); } finally { setLoading(false); setRefreshing(false); }
+    } catch (e: any) {
+      console.warn("Pool feed failed", e);
+      setError(e?.message || "We couldn't load rides right now.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
-  const sendRequest = useCallback(async (pool: Pool) => {
-    setRequesting((s) => new Set(s).add(pool.pool_id)); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    try { await api.requestToJoin(pool.pool_id); setPools((prev) => prev.map((p) => p.pool_id === pool.pool_id ? { ...p, my_request_status: "pending" } : p)); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }
-    catch (e: any) { Alert.alert("Couldn't send request", e.message || "Please try again."); }
-    finally { setRequesting((s) => { const n = new Set(s); n.delete(pool.pool_id); return n; }); }
-  }, []);
+
   useFocusEffect(useCallback(() => { setLoading(true); load(); }, [load]));
-  const filtered = useMemo(() => pools.filter((p) => {
-    if (chip === "Today" && !isSameDay(p.travel_datetime, new Date())) return false;
-    if (chip === "Tomorrow") { const t = new Date(); t.setDate(t.getDate() + 1); if (!isSameDay(p.travel_datetime, t)) return false; }
-    if (chip === "This week") { const now = Date.now(); const weekOut = now + 7 * 86400000; const d = new Date(p.travel_datetime).getTime(); if (d < now || d > weekOut) return false; }
-    if (chip === "Airport" && !/airport|blr|del|bom|maa|hyd/i.test(`${p.from_location} ${p.to_location}`)) return false;
-    if (chip === "Railway" && !/station|railway|junction|jn/i.test(`${p.from_location} ${p.to_location}`)) return false;
-    if (search.trim()) { const q = search.trim().toLowerCase(); const haystack = `${p.from_location} ${p.to_location} ${p.user_name}`.toLowerCase(); if (!haystack.includes(q)) return false; }
-    return true;
-  }).sort((a, b) => new Date(a.travel_datetime).getTime() - new Date(b.travel_datetime).getTime()), [pools, chip, search]);
-  return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <Confetti burstKey={confettiKey} />
-      <LinearGradient colors={isDark ? [colors.surface2, colors.surface2] : [colors.indigo, "#283593"]} style={styles.header}>
-        <View style={styles.headerTop}><View><Text style={styles.hello}>Namaste, {user?.name?.split(" ")[0] || "traveller"}</Text><Text style={styles.subhello}>Where's your next journey?</Text></View>
-          <View style={{ flexDirection: "row" }}>
-            <Pressable testID="toggle-map-view" onPress={() => { Haptics.selectionAsync(); setShowMap((m) => !m); }} style={styles.avatar}><Ionicons name={showMap ? "list" : "map"} size={18} color={colors.indigo} /></Pressable>
-            <Pressable testID="open-heatmap" onPress={() => { Haptics.selectionAsync(); router.push("/heatmap"); }} style={[styles.avatar, { marginLeft: 8 }]}><Ionicons name="flame" size={18} color={colors.saffron} /></Pressable>
-          </View>
+
+  const sendRequest = useCallback(async (pool: Pool) => {
+    setRequesting((current) => new Set(current).add(pool.pool_id));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      await api.requestToJoin(pool.pool_id);
+      setPools((current) => current.map((item) => item.pool_id === pool.pool_id ? { ...item, my_request_status: "pending" } : item));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e: any) {
+      Alert.alert("Couldn't send request", e?.message || "Please try again.");
+    } finally {
+      setRequesting((current) => {
+        const next = new Set(current);
+        next.delete(pool.pool_id);
+        return next;
+      });
+    }
+  }, []);
+
+  const filtered = useMemo(() => {
+    const now = new Date();
+    const tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate() + 1);
+    const weekOut = Date.now() + 7 * 86400000;
+    const query = search.trim().toLowerCase();
+
+    return pools.filter((pool) => {
+      const tripTime = new Date(pool.travel_datetime);
+      if (filter === "Today" && dayKey(tripTime) !== dayKey(now)) return false;
+      if (filter === "Tomorrow" && dayKey(tripTime) !== dayKey(tomorrow)) return false;
+      if (filter === "This week" && (tripTime.getTime() < Date.now() || tripTime.getTime() > weekOut)) return false;
+      if (filter === "Airport" && !/airport|rgia|rgi|hyd|blr|del|bom|maa/i.test(`${pool.from_location} ${pool.to_location}`)) return false;
+      if (filter === "Railway" && !/railway|station|junction|jn\b/i.test(`${pool.from_location} ${pool.to_location}`)) return false;
+      if (query && !`${pool.from_location} ${pool.to_location} ${pool.user_name}`.toLowerCase().includes(query)) return false;
+      return true;
+    });
+  }, [pools, filter, search]);
+
+  const top = (
+    <View style={styles.top}>
+      <View style={styles.greetingRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.eyebrow}>UNIPOOL</Text>
+          <Text style={styles.greeting}>Hi, {user?.name?.split(" ")[0] || "traveller"}</Text>
+          <Text style={styles.subtitle}>Find a better fit for your next journey.</Text>
         </View>
-        <View style={styles.searchRow}><Ionicons name="search" size={16} color={isDark ? "#B9C7DF" : "rgba(255,255,255,0.82)"} />
-          <TextInput testID="pool-search" value={search} onChangeText={setSearch} placeholder="Search route or name..." placeholderTextColor={isDark ? "#94A3B8" : "rgba(255,255,255,0.68)"} style={styles.searchInput} />
-          {search.length > 0 && <Pressable testID="clear-search" onPress={() => setSearch("")} hitSlop={8}><Ionicons name="close-circle" size={16} color={isDark ? "#B9C7DF" : "rgba(255,255,255,0.8)"} /></Pressable>}
+        <View style={styles.headerActions}>
+          <Pressable accessibilityLabel={showMap ? "Show ride list" : "Show rides on map"} onPress={() => { Haptics.selectionAsync(); setShowMap((value) => !value); }} style={[styles.iconButton, showMap && styles.iconButtonActive]}>
+            <Ionicons name={showMap ? "list-outline" : "map-outline"} size={19} color={showMap ? "#fff" : colors.indigo} />
+          </Pressable>
+          <Pressable accessibilityLabel="Open route demand" onPress={() => router.push("/heatmap")} style={styles.iconButton}>
+            <Ionicons name="flame-outline" size={19} color={colors.saffron} />
+          </Pressable>
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>{CHIPS.map((c) => <Pressable key={c} testID={`chip-${c.toLowerCase().replace(" ", "-")}`} onPress={() => { Haptics.selectionAsync(); setChip(c); }} style={[styles.chip, chip === c && styles.chipActive]}><Text style={[styles.chipText, chip === c && styles.chipTextActive]}>{c}</Text></Pressable>)}</ScrollView>
-      </LinearGradient>
-      {!loading && !error && <View style={styles.resultBar}><Text style={styles.resultText}>{filtered.length} {filtered.length === 1 ? "ride" : "rides"} · {chip === "All" ? "all dates" : chip.toLowerCase()}</Text>{(search.trim() || chip !== "All") && <Pressable onPress={() => { setSearch(""); setChip("All"); }}><Text style={styles.clearFilters}>Clear filters</Text></Pressable>}</View>}
-      {loading ? <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 140 }}><PoolFeedSkeleton /></ScrollView> : error ? <View style={styles.errorState}><View style={styles.errorIcon}><Ionicons name="cloud-offline-outline" size={28} color={colors.error} /></View><Text style={styles.emptyTitle}>Couldn’t load rides</Text><Text style={styles.emptySub}>{error}</Text><Pressable accessibilityLabel="Retry loading rides" onPress={() => { setLoading(true); load(); }} style={styles.retry}><Ionicons name="refresh" size={16} color="#fff" /><Text style={styles.retryText}>Try again</Text></Pressable></View> : showMap ? <PoolMapView pools={filtered} /> : <FlatList data={filtered} keyExtractor={(i) => i.pool_id} contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 140 }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.indigo} />} ListEmptyComponent={<View style={styles.empty}><Ionicons name={search.trim() || chip !== "All" ? "search-outline" : "map-outline"} size={56} color={colors.borderStrong} /><Text style={styles.emptyTitle}>{search.trim() || chip !== "All" ? "No matching rides" : "No pools yet"}</Text><Text style={styles.emptySub}>{search.trim() || chip !== "All" ? "Try another route or clear your filters." : "Be the first to post a cab-pool for this route."}</Text></View>} renderItem={({ item }) => <PoolCard pool={item} mine={item.user_id === user?.user_id} busy={requesting.has(item.pool_id)} onRequest={() => sendRequest(item)} onOpenReport={() => setReportTarget({ user_id: item.user_id, user_name: item.user_name })} colors={colors} styles={styles} />} />}
-      <PressableScale testID="create-pool-fab" onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); router.push("/post-request"); }} style={styles.fab} scaleTo={0.92}><LinearGradient colors={[colors.saffron, "#F57F17"]} style={styles.fabBg}><Ionicons name="add" size={26} color="#fff" /><Text style={styles.fabText}>Post Pool</Text></LinearGradient></PressableScale>
-      {reportTarget && <ReportBlockModal visible={!!reportTarget} onClose={() => setReportTarget(null)} userId={reportTarget.user_id} userName={reportTarget.user_name} onBlocked={load} />}
-    </SafeAreaView>
+      </View>
+
+      <View style={styles.searchBox}>
+        <Ionicons name="search-outline" size={18} color={colors.muted} />
+        <TextInput
+          testID="pool-search"
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search a route or traveller"
+          placeholderTextColor={colors.muted}
+          style={styles.searchInput}
+        />
+        {search ? <Pressable onPress={() => setSearch("")} hitSlop={8}><Ionicons name="close-circle" size={18} color={colors.muted} /></Pressable> : null}
+      </View>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+        {FILTERS.map((item) => {
+          const active = item === filter;
+          return <Pressable key={item} testID={`chip-${item.toLowerCase().replace(" ", "-")}`} onPress={() => { setFilter(item); Haptics.selectionAsync(); }} style={[styles.filterChip, active && styles.filterChipActive]}>
+            <Text style={[styles.filterText, active && styles.filterTextActive]}>{item}</Text>
+          </Pressable>;
+        })}
+      </ScrollView>
+
+      {!loading && !error ? <View style={styles.resultsRow}>
+        <Text style={styles.resultsText}>{filtered.length} {filtered.length === 1 ? "ride" : "rides"}</Text>
+        {(search || filter !== "All") ? <Pressable onPress={() => { setSearch(""); setFilter("All"); }}><Text style={styles.clearText}>Reset</Text></Pressable> : null}
+      </View> : null}
+    </View>
   );
+
+  return <SafeAreaView style={styles.safe} edges={["top"]}>
+    <Confetti burstKey={confettiKey} />
+
+    {loading ? <ScrollView contentContainerStyle={styles.page}>
+      {top}
+      <PoolFeedSkeleton count={3} />
+    </ScrollView> : error ? <ScrollView contentContainerStyle={styles.page}>
+      {top}
+      <View style={styles.stateCard}>
+        <View style={styles.stateIcon}><Ionicons name="cloud-offline-outline" size={25} color={colors.error} /></View>
+        <Text style={styles.stateTitle}>Rides couldn't load</Text>
+        <Text style={styles.stateText}>{error}</Text>
+        <Pressable onPress={() => { setLoading(true); load(); }} style={styles.retryButton}><Ionicons name="refresh" size={16} color="#fff" /><Text style={styles.retryText}>Try again</Text></Pressable>
+      </View>
+    </ScrollView> : showMap ? <View style={styles.mapPage}>
+      {top}
+      <View style={styles.mapWrap}><PoolMapView pools={filtered} /></View>
+    </View> : <FlatList
+      data={filtered}
+      keyExtractor={(item) => item.pool_id}
+      contentContainerStyle={styles.listPage}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.indigo} />}
+      ListHeaderComponent={top}
+      ListEmptyComponent={<View style={styles.stateCard}>
+        <View style={styles.stateIcon}><Ionicons name="route-outline" size={25} color={colors.indigo} /></View>
+        <Text style={styles.stateTitle}>{search || filter !== "All" ? "No rides match that filter" : "No open rides yet"}</Text>
+        <Text style={styles.stateText}>{search || filter !== "All" ? "Try another route or reset the filters." : "Post your journey and UniPool will start looking for compatible travellers."}</Text>
+        {!search && filter === "All" ? <Pressable onPress={() => router.push("/post-request")} style={styles.retryButton}><Ionicons name="add" size={16} color="#fff" /><Text style={styles.retryText}>Post a trip</Text></Pressable> : null}
+      </View>}
+      renderItem={({ item }) => <PoolCard
+        pool={item}
+        mine={item.user_id === user?.user_id}
+        busy={requesting.has(item.pool_id)}
+        onRequest={() => sendRequest(item)}
+        onReport={() => setReportTarget({ user_id: item.user_id, user_name: item.user_name })}
+        colors={colors}
+        styles={styles}
+      />}
+    />}
+
+    <PressableScale testID="create-pool-fab" onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); router.push("/post-request"); }} style={styles.fab} scaleTo={0.96}>
+      <Ionicons name="add" size={20} color="#fff" /><Text style={styles.fabText}>Post trip</Text>
+    </PressableScale>
+
+    {reportTarget ? <ReportBlockModal visible onClose={() => setReportTarget(null)} userId={reportTarget.user_id} userName={reportTarget.user_name} onBlocked={load} /> : null}
+  </SafeAreaView>;
 }
 
-function PoolCard({ pool, mine, busy, onRequest, onOpenReport, colors, styles }: { pool: Pool; mine: boolean; busy: boolean; onRequest: () => void; onOpenReport: () => void; colors: any; styles: any }) {
-  const travelers = pool.confirmed_travelers || []; const router = useRouter();
-  return <Pressable testID={`pool-card-${pool.pool_id}`} onPress={() => router.push({ pathname: "/pool/[poolId]", params: { poolId: pool.pool_id } })} style={styles.card}>
-    <View style={styles.cardHeader}><View style={styles.cardAvatar}><Text style={{ color: colors.indigo, fontWeight: "700" }}>{pool.user_name?.[0]?.toUpperCase() || "U"}</Text></View><View style={{ flex: 1 }}><Text style={styles.cardName}>{pool.user_name}{mine && <Text style={{ color: colors.saffron }}>  (you)</Text>}</Text><Text style={styles.cardWhen}>{formatDT(pool.travel_datetime)}</Text><View style={{ marginTop: 3 }}><RatingBadge avg={pool.user_rating_avg} count={pool.user_rating_count} /></View><UserBadges badges={pool.user_badges} compact /></View>{pool.gender_preference === "same" && <View style={styles.badge}><Text style={styles.badgeText}>Same-gender</Text></View>}{!mine && <Pressable testID={`more-${pool.pool_id}`} onPress={(e) => { e.stopPropagation(); onOpenReport(); }} hitSlop={10} style={{ marginLeft: 6 }}><Ionicons name="ellipsis-vertical" size={18} color={colors.muted} /></Pressable>}</View>
-    <View style={styles.routeBlock}><View style={styles.dotRow}><View style={[styles.dot, { backgroundColor: colors.saffron }]} /><Text style={styles.routeText}>{pool.from_location}</Text></View><View style={styles.connector} /><View style={styles.dotRow}><View style={[styles.dot, { backgroundColor: colors.indigo }]} /><Text style={styles.routeText}>{pool.to_location}</Text></View></View>
-    <View style={styles.metaRow}><View style={styles.metaPill}><Ionicons name="people" size={14} color={colors.onCream} /><Text style={styles.metaText}>+{pool.companions} with</Text></View>{pool.luggage ? <View style={styles.metaPill}><Ionicons name="briefcase" size={14} color={colors.onCream} /><Text style={styles.metaText}>{pool.luggage}</Text></View> : null}</View>
-    {pool.notes ? <Text style={styles.notes}>“{pool.notes}”</Text> : null}
-    {travelers.length > 0 && <View style={styles.travelingRow} testID={`traveling-together-${pool.pool_id}`}><Ionicons name="car-sport" size={14} color={colors.success} /><Text style={styles.travelingText} numberOfLines={1}>Traveling together: {travelers.map((t) => t.name.split(" ")[0]).join(", ")}{mine ? "" : ` +${travelers.length}`}</Text></View>}
-    {!mine && <RequestCta pool={pool} busy={busy} onRequest={onRequest} colors={colors} styles={styles} />}
+function PoolCard({ pool, mine, busy, onRequest, onReport, colors, styles }: any) {
+  const router = useRouter();
+  const travelers = pool.confirmed_travelers || [];
+  const score = Number(pool.match_score || 0);
+
+  return <Pressable testID={`pool-card-${pool.pool_id}`} onPress={() => router.push({ pathname: "/pool/[poolId]", params: { poolId: pool.pool_id } })} style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}>
+    <View style={styles.cardHeader}>
+      <View style={styles.person}>
+        <View style={styles.avatar}><Text style={styles.avatarText}>{pool.user_name?.[0]?.toUpperCase() || "U"}</Text></View>
+        <View style={{ flex: 1 }}>
+          <View style={styles.nameRow}><Text style={styles.name}>{pool.user_name}{mine ? " · You" : ""}</Text>{!mine && score > 0 ? <View style={styles.matchPill}><Text style={styles.matchPillText}>{score}% match</Text></View> : null}</View>
+          <View style={styles.identityRow}><RatingBadge avg={pool.user_rating_avg} count={pool.user_rating_count} /><UserBadges badges={pool.user_badges} compact /></View>
+        </View>
+      </View>
+      {!mine ? <Pressable onPress={(event: any) => { event.stopPropagation?.(); onReport(); }} hitSlop={10}><Ionicons name="ellipsis-horizontal" size={19} color={colors.muted} /></Pressable> : null}
+    </View>
+
+    <View style={styles.routeBox}>
+      <View style={styles.routeRow}><View style={[styles.routeDot, { backgroundColor: colors.saffron }]} /><Text style={styles.routeText} numberOfLines={1}>{pool.from_location}</Text></View>
+      <View style={styles.routeStem} />
+      <View style={styles.routeRow}><View style={[styles.routeDot, { backgroundColor: colors.indigo }]} /><Text style={styles.routeText} numberOfLines={1}>{pool.to_location}</Text></View>
+    </View>
+
+    <View style={styles.detailRow}>
+      <View style={styles.detail}><Ionicons name="time-outline" size={14} color={colors.muted} /><Text style={styles.detailText}>{formatDT(pool.travel_datetime)}</Text></View>
+      {pool.companions > 0 ? <View style={styles.detail}><Ionicons name="people-outline" size={14} color={colors.muted} /><Text style={styles.detailText}>+{pool.companions}</Text></View> : null}
+      {pool.luggage ? <View style={styles.detail}><Ionicons name="bag-handle-outline" size={14} color={colors.muted} /><Text style={styles.detailText}>{pool.luggage}</Text></View> : null}
+    </View>
+
+    {pool.notes ? <Text style={styles.notes} numberOfLines={2}>{pool.notes}</Text> : null}
+    {travelers.length > 0 ? <View style={styles.travelTogether}><Ionicons name="people-circle-outline" size={16} color={colors.success} /><Text style={styles.travelTogetherText} numberOfLines={1}>{travelers.map((traveller: ConfirmedTraveler) => traveller.name.split(" ")[0]).join(", ")} confirmed</Text></View> : null}
+
+    {!mine ? <RequestButton pool={pool} busy={busy} onRequest={onRequest} colors={colors} styles={styles} /> : <View style={styles.ownTrip}><Text style={styles.ownTripText}>Your trip</Text><Ionicons name="chevron-forward" size={16} color={colors.muted} /></View>}
   </Pressable>;
 }
 
-function RequestCta({ pool, busy, onRequest, colors, styles }: { pool: Pool; busy: boolean; onRequest: () => void; colors: any; styles: any }) {
-  const status = pool.my_request_status;
-  if (status === "accepted") return <View style={[styles.reqPill, styles.reqPillAccepted]}><Ionicons name="checkmark-circle" size={16} color="#fff" /><Text style={styles.reqPillTextLight}>You're confirmed for this ride 🚗</Text></View>;
-  if (status === "pending") return <View style={[styles.reqPill, styles.reqPillPending]}><Ionicons name="time-outline" size={16} color={colors.indigo} /><Text style={styles.reqPillText}>Request sent — waiting for response</Text></View>;
-  return <Pressable testID={`request-${pool.pool_id}`} onPress={(e) => { e.stopPropagation(); onRequest(); }} disabled={busy} style={[styles.reqPill, styles.reqPillIdle, busy && { opacity: 0.6 }]}>{busy ? <ActivityIndicator size="small" color="#fff" /> : <><Ionicons name="hand-left-outline" size={16} color="#fff" /><Text style={styles.reqPillTextLight}>{status === "declined" ? "Request again" : "Request to join"}</Text></>}</Pressable>;
+function RequestButton({ pool, busy, onRequest, colors, styles }: any) {
+  if (pool.my_request_status === "accepted") return <View style={styles.accepted}><Ionicons name="checkmark-circle" size={17} color={colors.success} /><Text style={styles.acceptedText}>You're travelling together</Text></View>;
+  if (pool.my_request_status === "pending") return <View style={styles.pending}><Ionicons name="time-outline" size={16} color={colors.indigo} /><Text style={styles.pendingText}>Request sent</Text></View>;
+  return <Pressable onPress={(event: any) => { event.stopPropagation?.(); onRequest(); }} disabled={busy} style={[styles.requestButton, busy && { opacity: .6 }]}>
+    {busy ? <ActivityIndicator size="small" color="#fff" /> : <><Ionicons name="person-add-outline" size={16} color="#fff" /><Text style={styles.requestText}>{pool.my_request_status === "declined" ? "Request again" : "Request to join"}</Text></>}
+  </Pressable>;
 }
 
-const makeStyles = (colors: any, isDark: boolean) => StyleSheet.create({
+const makeStyles = (colors: any) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
-  header: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.md, paddingBottom: SPACING.lg, borderBottomLeftRadius: 22, borderBottomRightRadius: 22, borderBottomWidth: 1, borderBottomColor: isDark ? colors.border : "rgba(255,255,255,0.18)" },
-  headerTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  hello: { color: isDark ? colors.onSurface : "#FFFFFF", fontSize: FONT.xl, fontWeight: "800", fontFamily: FONT_DISPLAY },
-  subhello: { color: isDark ? colors.onSurface2 : "rgba(255,255,255,0.78)", marginTop: 2 },
-  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.card, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border },
-  chipRow: { paddingTop: SPACING.md, paddingRight: SPACING.lg, gap: SPACING.sm },
-  searchRow: { flexDirection: "row", alignItems: "center", gap: SPACING.sm, backgroundColor: isDark ? colors.card : "rgba(255,255,255,0.10)", borderRadius: RADIUS.pill, paddingHorizontal: 14, paddingVertical: 10, marginTop: SPACING.lg, borderWidth: 1, borderColor: isDark ? colors.border : "rgba(255,255,255,0.20)" },
-  searchInput: { flex: 1, color: isDark ? colors.onSurface : "#FFFFFF", fontSize: FONT.base },
-  chip: { flexShrink: 0, height: 36, paddingHorizontal: 14, borderRadius: RADIUS.pill, backgroundColor: isDark ? colors.card : "rgba(255,255,255,0.10)", borderWidth: 1, borderColor: isDark ? colors.border : "rgba(255,255,255,0.20)", alignItems: "center", justifyContent: "center" },
-  chipActive: { backgroundColor: colors.saffron, borderColor: colors.saffron }, chipText: { color: isDark ? colors.onSurface2 : "#FFFFFF", fontSize: 13, fontWeight: "600" }, chipTextActive: { color: "#fff" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  resultBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm }, resultText: { color: colors.muted, fontSize: FONT.sm, fontWeight: "600" }, clearFilters: { color: colors.indigo, fontSize: FONT.sm, fontWeight: "800" },
-  errorState: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: SPACING.xxl }, errorIcon: { width: 58, height: 58, borderRadius: 29, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center", marginBottom: SPACING.md }, retry: { marginTop: SPACING.lg, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.indigo, borderRadius: RADIUS.pill, paddingHorizontal: 18, paddingVertical: 11 }, retryText: { color: "#fff", fontWeight: "800" },
-  empty: { alignItems: "center", justifyContent: "center", paddingVertical: 80 }, emptyTitle: { marginTop: SPACING.md, fontSize: FONT.xl, fontWeight: "700", color: colors.onSurface }, emptySub: { marginTop: 4, color: colors.muted },
-  card: { backgroundColor: colors.card, borderRadius: RADIUS.lg, padding: SPACING.lg, marginBottom: SPACING.md, borderWidth: 1, borderColor: colors.border, shadowColor: "#000", shadowOpacity: 0.10, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 3 },
-  cardHeader: { flexDirection: "row", alignItems: "center", gap: SPACING.md, marginBottom: SPACING.md }, cardAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.cream, alignItems: "center", justifyContent: "center" }, cardName: { fontSize: FONT.lg, fontWeight: "700", color: colors.onSurface }, cardWhen: { color: colors.muted, fontSize: FONT.sm, marginTop: 2 },
-  badge: { backgroundColor: colors.cream, paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.pill }, badgeText: { color: colors.onCream, fontSize: 11, fontWeight: "700" },
-  routeBlock: { backgroundColor: colors.surface2, borderRadius: RADIUS.md, padding: SPACING.md, gap: SPACING.xs, borderWidth: 1, borderColor: colors.border }, dotRow: { flexDirection: "row", alignItems: "center", gap: SPACING.md }, dot: { width: 10, height: 10, borderRadius: 5 }, connector: { width: 2, height: 14, backgroundColor: colors.borderStrong, marginLeft: 4 }, routeText: { color: colors.onSurface, fontSize: FONT.base, fontWeight: "600", flex: 1 },
-  metaRow: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.sm, marginTop: SPACING.md }, metaPill: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.cream, borderRadius: RADIUS.pill, paddingHorizontal: 10, paddingVertical: 6 }, metaText: { fontSize: 12, color: colors.onCream, fontWeight: "600" }, notes: { marginTop: SPACING.md, color: colors.muted, fontStyle: "italic" },
-  travelingRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: SPACING.md, backgroundColor: colors.surface3, borderRadius: RADIUS.pill, paddingHorizontal: 12, paddingVertical: 8 }, travelingText: { color: colors.success, fontSize: 12, fontWeight: "700", flex: 1 },
-  reqPill: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: SPACING.md, borderRadius: RADIUS.pill, paddingVertical: 12 }, reqPillIdle: { backgroundColor: colors.indigo }, reqPillPending: { backgroundColor: colors.cream }, reqPillAccepted: { backgroundColor: colors.success }, reqPillText: { color: colors.onCream, fontWeight: "700", fontSize: 13 }, reqPillTextLight: { color: "#fff", fontWeight: "700", fontSize: 13 },
-  fab: { position: "absolute", right: SPACING.lg, bottom: 90, borderRadius: RADIUS.pill, overflow: "hidden", shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 8 }, fabBg: { flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingVertical: 14, gap: 6 }, fabText: { color: "#fff", fontSize: FONT.lg, fontWeight: "800" },
+  page: { width: "100%", maxWidth: 900, alignSelf: "center", padding: SPACING.lg, paddingBottom: 130 },
+  listPage: { width: "100%", maxWidth: 900, alignSelf: "center", padding: SPACING.lg, paddingBottom: 130 },
+  mapPage: { flex: 1, width: "100%", maxWidth: 1100, alignSelf: "center", padding: SPACING.lg, paddingBottom: 100 },
+  mapWrap: { flex: 1, minHeight: 360, borderRadius: RADIUS.lg, overflow: "hidden", borderWidth: 1, borderColor: colors.border },
+  top: { width: "100%", marginBottom: 18 },
+  greetingRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
+  eyebrow: { color: colors.saffron, fontSize: 10, letterSpacing: 1.3, fontWeight: "900" },
+  greeting: { color: colors.onSurface, fontFamily: FONT_DISPLAY, fontSize: FONT["2xl"], fontWeight: "900", marginTop: 2 },
+  subtitle: { color: colors.muted, fontSize: 13, marginTop: 3 },
+  headerActions: { flexDirection: "row", gap: 8 },
+  iconButton: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+  iconButtonActive: { backgroundColor: colors.indigo, borderColor: colors.indigo },
+  searchBox: { height: 48, flexDirection: "row", alignItems: "center", gap: 9, backgroundColor: colors.card, borderRadius: RADIUS.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14 },
+  searchInput: { flex: 1, color: colors.onSurface, fontSize: 14, outlineStyle: "none" } as any,
+  filterRow: { gap: 8, paddingTop: 12, paddingBottom: 3 },
+  filterChip: { minHeight: 34, justifyContent: "center", paddingHorizontal: 13, borderRadius: RADIUS.pill, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+  filterChipActive: { backgroundColor: colors.cream, borderColor: colors.saffron },
+  filterText: { color: colors.muted, fontSize: 12, fontWeight: "700" },
+  filterTextActive: { color: colors.onCream, fontWeight: "900" },
+  resultsRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 12 },
+  resultsText: { color: colors.muted, fontSize: 12, fontWeight: "700" },
+  clearText: { color: colors.indigo, fontSize: 12, fontWeight: "800" },
+  card: { width: "100%", maxWidth: 780, alignSelf: "center", backgroundColor: colors.card, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: colors.border, padding: SPACING.lg, marginBottom: 12 },
+  cardPressed: { transform: [{ scale: .995 }], borderColor: colors.borderStrong },
+  cardHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  person: { flex: 1, flexDirection: "row", alignItems: "center", gap: 11 },
+  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border },
+  avatarText: { color: colors.indigo, fontWeight: "900", fontSize: 15 },
+  nameRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 7 },
+  name: { color: colors.onSurface, fontWeight: "900", fontSize: 14 },
+  identityRow: { marginTop: 3 },
+  matchPill: { backgroundColor: colors.cream, paddingHorizontal: 8, paddingVertical: 4, borderRadius: RADIUS.pill },
+  matchPillText: { color: colors.onCream, fontSize: 10, fontWeight: "900" },
+  routeBox: { backgroundColor: colors.surface2, borderRadius: RADIUS.md, padding: 13, marginTop: 14 },
+  routeRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  routeDot: { width: 9, height: 9, borderRadius: 5 },
+  routeStem: { width: 2, height: 15, backgroundColor: colors.borderStrong, marginLeft: 3.5, marginVertical: 2 },
+  routeText: { flex: 1, color: colors.onSurface, fontSize: 13, fontWeight: "750" } as any,
+  detailRow: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 11 },
+  detail: { flexDirection: "row", alignItems: "center", gap: 5 },
+  detailText: { color: colors.muted, fontSize: 12 },
+  notes: { color: colors.onSurface2, fontSize: 12, lineHeight: 18, marginTop: 10 },
+  travelTogether: { flexDirection: "row", gap: 6, alignItems: "center", marginTop: 10 },
+  travelTogetherText: { color: colors.success, fontSize: 11, fontWeight: "750", flex: 1 } as any,
+  requestButton: { minHeight: 42, marginTop: 14, backgroundColor: colors.indigo, borderRadius: RADIUS.pill, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, paddingHorizontal: 15 },
+  requestText: { color: "#fff", fontSize: 13, fontWeight: "900" },
+  accepted: { marginTop: 14, minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: RADIUS.pill, backgroundColor: colors.surface2 },
+  acceptedText: { color: colors.success, fontSize: 12, fontWeight: "850" } as any,
+  pending: { marginTop: 14, minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: RADIUS.pill, backgroundColor: colors.surface2 },
+  pendingText: { color: colors.indigo, fontSize: 12, fontWeight: "850" } as any,
+  ownTrip: { marginTop: 14, minHeight: 38, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 12 },
+  ownTripText: { color: colors.muted, fontSize: 12, fontWeight: "800" },
+  stateCard: { width: "100%", maxWidth: 520, alignSelf: "center", alignItems: "center", padding: 28, marginTop: 24, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: RADIUS.lg },
+  stateIcon: { width: 52, height: 52, borderRadius: 17, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center" },
+  stateTitle: { color: colors.onSurface, fontFamily: FONT_DISPLAY, fontSize: FONT.xl, fontWeight: "900", marginTop: 13, textAlign: "center" },
+  stateText: { color: colors.muted, fontSize: 13, lineHeight: 20, textAlign: "center", marginTop: 5 },
+  retryButton: { marginTop: 15, minHeight: 40, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, backgroundColor: colors.indigo, borderRadius: RADIUS.pill, paddingHorizontal: 16 },
+  retryText: { color: "#fff", fontWeight: "900", fontSize: 12 },
+  fab: { position: "absolute", right: 20, bottom: 92, minHeight: 46, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, paddingHorizontal: 17, borderRadius: 23, backgroundColor: colors.saffron, shadowColor: "#000", shadowOpacity: .13, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 5 },
+  fabText: { color: "#fff", fontWeight: "900", fontSize: 13 },
 });
