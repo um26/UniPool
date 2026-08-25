@@ -1,314 +1,433 @@
 # 🚗 UniPool
 
-> **A campus-focused carpooling platform that helps students discover, request, coordinate, and travel together.**
+<p align="center">
+  <img src="assets/banner.png" width="850" alt="UniPool — campus mobility network">
+</p>
 
-UniPool turns the usual **"anyone going to the airport?"** message buried in a university WhatsApp group into a structured travel network.
+<h3 align="center">Find your route. Find your people. Share the journey.</h3>
 
-🌐 **[Open UniPool](https://uni-pool-ruddy.vercel.app)**
+<p align="center">
+  <strong>A university-first mobility platform for students who travel together.</strong>
+</p>
 
----
-
-## 📱 What is UniPool?
-
-UniPool is designed around a simple problem: students frequently travel between universities, railway stations, airports, hostels, homes, and other common destinations, but finding someone on the same route is usually fragmented across chats and personal contacts.
-
-The app gives students one place to:
-
-- create a travel plan
-- discover other students travelling similar routes
-- search and filter available pools
-- request to join someone else's ride
-- accept or decline incoming requests
-- see confirmed travellers
-- communicate with other travellers
-- manage their profile and preferences
-- rate people after travelling together
-- report or block users when necessary
-
-The goal is not just to **find a ride**, but to make the whole coordination process structured and easier to manage.
+<p align="center">
+  <a href="https://uni-pool-ruddy.vercel.app">🌐 Live Product</a> ·
+  <a href="https://github.com/um26/UniPool">📦 Project</a>
+</p>
 
 ---
 
-## ✨ Core Experience
+## ✈️ What is UniPool?
+
+UniPool is built around a simple observation:
+
+> **Students are already travelling the same routes. They just don't know about each other.**
+
+Airport runs. Railway stations. Weekend trips. Home visits. Inter-city travel. Hostel-to-city journeys.
+
+Today, these plans are often scattered across WhatsApp groups, DMs and word-of-mouth.
+
+**UniPool turns that fragmented coordination into a structured campus travel network.**
+
+It brings together:
+
+**Discover → Match → Request → Confirm → Chat → Travel → Rate**
+
+all inside one experience.
+
+---
+
+## 🌍 The Experience
+
+<p align="center">
+  <img src="assets/home.jpeg" width="260" alt="UniPool home experience">
+  <img src="assets/post-pool.jpeg" width="260" alt="UniPool trip creation">
+  <img src="assets/matches.jpeg" width="260" alt="UniPool matches">
+</p>
+
+### 🏠 A smarter campus home
+
+The home experience is designed around **where students actually want to go**, rather than making them browse an endless social feed.
+
+Students can discover relevant journeys, search routes, explore travel opportunities and move from discovery to a potential match quickly.
+
+### 🚗 Create a journey
+
+A student can turn a simple travel plan into a pool:
+
+- where they're leaving from
+- where they're going
+- when they're travelling
+- companions
+- luggage
+- preferences
+- notes and pickup context
+
+The journey can then be managed throughout its lifecycle.
+
+### 🤝 Find compatible travellers
+
+UniPool isn't simply a list of rides.
+
+It evaluates **travel compatibility** so students can discover people whose journeys actually make sense together.
+
+Compatibility can consider factors such as:
+
+- route
+- time
+- preferences
+- travel context
+- luggage / companions
+- trust signals
+- university identity
+- trip preferences
+
+The result is a more useful question than *"Who posted recently?"*:
+
+> **"Who is actually a good match for my journey?"**
+
+---
+
+# 🧠 A University-Aware Network
+
+UniPool is designed specifically around the fact that a university is not just a location — it is a **community**.
+
+Verified students can have richer identity information associated with their university profile, such as:
+
+- university
+- school
+- academic batch
+- level of study
+- programme / branch
+- verified student status
+
+That creates possibilities for more meaningful discovery:
+
+> **Same university**
+>
+> **Same school**
+>
+> **Same batch**
+>
+> **Same programme**
+>
+> **Verified traveller**
+
+without turning the product into another social network.
+
+---
+
+# 💬 Trips Become Conversations
+
+A confirmed journey doesn't end when someone accepts a request.
+
+That's when the **trip group** comes alive.
+
+For a shared journey, travellers can automatically be brought into the same trip conversation.
+
+The conversation is identified by the journey itself:
+
+> **Mahindra University → Hyderabad Airport**
+
+Rather than forcing users to create another WhatsApp group manually.
+
+As additional travellers join the same trip, the shared conversation can grow with them.
+
+This creates a natural journey lifecycle:
 
 ```text
-Create a travel plan
-        ↓
-Discover compatible pools
-        ↓
-Review route, time & traveller details
-        ↓
-Request to join
-        ↓
-Pool owner accepts / declines
-        ↓
-Confirmed travellers connect
-        ↓
-Coordinate the journey
-        ↓
-Rate each other after the trip
+Potential match
+      ↓
+Request
+      ↓
+Accepted
+      ↓
+Shared trip group
+      ↓
+Coordinate pickup
+      ↓
+Travel
+      ↓
+Complete trip
+      ↓
+Rate & build reputation
 ```
 
 ---
 
-## 🧭 Main Features
+# 🛡️ Trust is a Product Feature
 
-### 🗺️ Discover & Search
+Sharing a journey with strangers requires more than a matching button.
 
-The home feed acts as the central marketplace for travel plans.
+UniPool includes a trust layer around the travel experience:
 
-- Browse active travel pools
-- Search by route or traveller name
-- Filter by **Today, Tomorrow, This week, Airport, Railway** and more
-- Switch between list and map views
-- Pull to refresh the latest pools
-- Open a pool to view its complete details
+### 🎓 University verification
 
-### 🚗 Create a Pool
+College identity can be verified through the university email flow.
 
-Students can publish their own journey with information such as:
+### ⭐ Reputation
 
-- starting location
-- destination
-- travel date and time
-- number of companions
-- luggage requirements
-- gender preference
-- additional notes
+Users can build reputation through completed journeys and ratings.
 
-Pools can subsequently be updated, closed, reopened, or deleted by their owner.
+### 🏷️ Identity signals
 
-### 🤝 Request-to-Join System
+Profiles can communicate relevant verification and community signals without turning the profile into an overloaded résumé.
 
-Instead of immediately exposing everyone to everyone, UniPool uses a request workflow:
+### 🚨 Safety controls
 
-1. A traveller finds a suitable pool.
-2. They send a **Request to join**.
-3. The pool owner receives the request.
-4. The owner can **accept or decline** it.
-5. Accepted travellers become confirmed members of the journey.
+Users have controls to:
 
-This gives the person organising the ride control over who joins.
+- report users
+- block users
+- manage blocked accounts
+- flag problematic interactions
 
-### ⚡ Route & Time Matching
+The goal is simple:
 
-UniPool can identify compatible travel plans using:
-
-- matching origin
-- matching destination
-- travel times within a **±1-hour window**
-- different users
-- compatible gender preferences
-
-This makes it possible to surface potential travel companions without requiring students to manually search through multiple groups.
-
-### 💬 Messaging & Presence
-
-Once travellers are connected, the app supports direct communication through:
-
-- one-to-one conversations
-- conversation history
-- typing indicators
-- online/presence information
-- pool-specific context when starting a conversation
-
-### ⭐ Trust & Reputation
-
-UniPool includes lightweight reputation features to make repeat interactions more trustworthy:
-
-- user ratings
-- rating counts and averages
-- profile badges
-- post-trip ratings
-- eligibility checks before rating another user
-
-### 🛡️ Safety & Moderation
-
-The platform includes user-level safety controls:
-
-- report a user
-- block/unblock users
-- manage blocked users
-- report a specific pool interaction
-
-### 🎓 College Identity Verification
-
-Users can verify their college identity using a college email verification flow, helping establish a more trusted university community.
-
-### 🔔 Notifications
-
-UniPool supports notification infrastructure for important activity such as requests and confirmed travel interactions, including web push subscription support.
-
-### 👤 Account & Profile
-
-Users can authenticate through:
-
-- email and password
-- Google sign-in
-
-They can then manage their profile, preferences, and account session from within the app.
+> **Make meeting another student feel safer than meeting a completely unknown stranger online.**
 
 ---
 
-## 📸 Screenshots
+# 🔔 Stay Connected Without Living in the App
 
-### Home — Discover Travel Pools
+UniPool is designed around events that matter to a traveller.
+
+Notifications can surface things such as:
+
+- new requests
+- accepted requests
+- new matches
+- trip activity
+- messages
+- traveller changes
+- important journey reminders
+
+The objective isn't notification spam.
+
+It's making sure a user doesn't miss the one update that matters when a trip is being coordinated.
+
+---
+
+# 🧳 Trip Mode
+
+Once a journey becomes real, the experience can shift from **discovering rides** to **managing a trip**.
+
+Trip Mode is designed around that transition.
+
+A journey can become the centre of the experience:
+
+```text
+✈️ Mahindra University → Hyderabad Airport
+
+3 travellers
+Departure approaching
+
+📍 Meeting point
+💬 Trip chat
+🗺️ Route
+👥 Travellers
+🎮 Time-pass
+🛡️ Safety
+```
+
+Instead of making users jump between unrelated parts of the application, Trip Mode brings the relevant journey tools together.
+
+---
+
+# 🎮 Time-Pass, Because Waiting is Part of Travelling
+
+Waiting for a cab, waiting at the airport, sitting at a railway station — these are part of the journey too.
+
+UniPool includes a lightweight **Time-Pass** experience with travel-themed games such as:
+
+- 🛺 Rickshaw Rush
+- 🧠 Trivia
+- ✈️ Tap-the-Plane
+- 🃏 Memory Match
+- 🔤 Word Scramble
+
+The experience is designed to stay lightweight and playful rather than turning UniPool into a generic gaming platform.
+
+Trivia and word content can be expanded independently, allowing the library to grow over time.
+
+---
+
+# ✨ Designed to Feel Like a Product, Not a Form
+
+UniPool's interface is intentionally built around **clarity, motion and hierarchy**.
+
+The visual language focuses on:
+
+- clean light-first surfaces
+- optional dark mode
+- purposeful micro-interactions
+- responsive cards
+- meaningful empty states
+- smooth transitions
+- contextual actions
+- map / route-oriented visualisation
+- minimal decorative 3D clutter
+
+The landing experience has its own campus/airport-inspired visual identity, while the actual application stays focused on usability.
+
+---
+
+# 🗺️ The Core Product Loop
+
+```text
+                         ┌───────────────┐
+                         │   DISCOVER    │
+                         │ routes & trips│
+                         └───────┬───────┘
+                                 ↓
+                         ┌───────────────┐
+                         │    MATCH      │
+                         │ compatibility │
+                         └───────┬───────┘
+                                 ↓
+                         ┌───────────────┐
+                         │    REQUEST    │
+                         │  join a trip  │
+                         └───────┬───────┘
+                                 ↓
+                         ┌───────────────┐
+                         │   CONFIRM     │
+                         │ travellers    │
+                         └───────┬───────┘
+                                 ↓
+                         ┌───────────────┐
+                         │  TRIP CHAT    │
+                         │ coordinate    │
+                         └───────┬───────┘
+                                 ↓
+                         ┌───────────────┐
+                         │    TRAVEL     │
+                         │   Trip Mode   │
+                         └───────┬───────┘
+                                 ↓
+                         ┌───────────────┐
+                         │    REPUTATION │
+                         │ rate & trust  │
+                         └───────────────┘
+```
+
+---
+
+# 🧩 What UniPool Brings Together
+
+| Experience | What it enables |
+|---|---|
+| 🏠 **Discover** | Find relevant student travel plans |
+| 🗺️ **Search** | Explore routes, dates and destinations |
+| 🚗 **Pool Creation** | Turn a journey into a shareable travel plan |
+| 🧠 **Matching** | Surface compatible travellers |
+| 🤝 **Requests** | Give pool owners control over participation |
+| 💬 **Trip Chat** | Coordinate confirmed travellers together |
+| 🎓 **Verification** | Establish university identity |
+| ⭐ **Reputation** | Build trust through travel history |
+| 🛡️ **Safety** | Report, block and moderation controls |
+| 🔔 **Notifications** | Keep travellers updated |
+| 🧳 **Trip Mode** | Focus the experience around an active journey |
+| 🎮 **Time-Pass** | Make waiting part of the experience |
+| 👤 **Profiles** | Show useful identity and preference context |
+
+---
+
+# 📸 Product Screens
+
+### Discover
 
 <p align="center">
-  <img src="assets/home.jpeg" width="280" alt="UniPool home screen">
+  <img src="assets/home.jpeg" width="300" alt="UniPool discover screen">
 </p>
 
-### Create a Pool
+### Create a Journey
 
 <p align="center">
-  <img src="assets/post-pool.jpeg" width="280" alt="UniPool create pool screen">
+  <img src="assets/post-pool.jpeg" width="300" alt="UniPool journey creation screen">
 </p>
 
 ### Matches
 
 <p align="center">
-  <img src="assets/matches.jpeg" width="280" alt="UniPool matches screen">
+  <img src="assets/matches.jpeg" width="300" alt="UniPool matching screen">
 </p>
 
-### Profile
+### Profile & Identity
 
 <p align="center">
-  <img src="assets/profile.jpeg" width="280" alt="UniPool profile screen">
+  <img src="assets/profile.jpeg" width="300" alt="UniPool profile screen">
 </p>
 
 ---
 
-## 🖼️ Product Overview
+# 🏗️ Product Architecture
 
-<p align="center">
-  <img src="assets/banner.png" width="700" alt="UniPool banner">
-</p>
-
----
-
-## 🧠 Matching Model
-
-The matching system is built around practical travel compatibility rather than generic social discovery.
-
-For a new travel request, UniPool considers:
-
-| Signal | Purpose |
-|---|---|
-| Origin | Find travellers leaving from the same area |
-| Destination | Find travellers heading to the same destination |
-| Travel time | Allow a practical ±1-hour matching window |
-| Gender preference | Respect the traveler's selected preference |
-| User identity | Prevent matching a user with their own request |
-
-The resulting matches can then be surfaced to users and used to trigger relevant notifications.
-
----
-
-## 🏗️ How It Works
+At a high level, UniPool is a cross-platform product with a client application, API layer and persistent data services.
 
 ```text
-┌───────────────────────────────┐
-│       UniPool Client          │
-│   Expo / React Native / Web   │
-│          TypeScript           │
-└───────────────┬───────────────┘
-                │
-             REST / JSON
-                │
-                ▼
-┌───────────────────────────────┐
-│          FastAPI API          │
-│             Python            │
-├───────────────────────────────┤
-│ Auth · Pools · Requests       │
-│ Matches · Messages · Ratings  │
-│ Profiles · Reports · Push     │
-└───────────┬─────────┬─────────┘
-            │         │
-            ▼         ▼
-      ┌──────────┐  ┌──────────────┐
-      │ MongoDB  │  │ Notification │
-      │          │  │ / Email APIs │
-      └──────────┘  └──────────────┘
+                    ┌──────────────────────┐
+                    │       UniPool        │
+                    │     Client Apps      │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+                    ┌──────────────────────┐
+                    │     Product API      │
+                    │ Authentication       │
+                    │ Pools & Matching     │
+                    │ Requests & Trips     │
+                    │ Messaging            │
+                    │ Profiles & Safety    │
+                    └──────────┬───────────┘
+                               │
+                 ┌─────────────┼─────────────┐
+                 ▼             ▼             ▼
+            ┌─────────┐  ┌────────────┐  ┌──────────┐
+            │  Data   │  │ Identity   │  │ Events   │
+            │ Storage │  │ & Verify   │  │ & Push   │
+            └─────────┘  └────────────┘  └──────────┘
 ```
 
-The frontend is built with Expo/React Native and TypeScript, while the backend exposes a FastAPI REST API backed by MongoDB. The deployed web experience is hosted through Vercel.
+The implementation uses a modern cross-platform frontend, API backend and cloud deployment infrastructure. **This README intentionally focuses on the product and its capabilities rather than providing setup instructions or source-code walkthroughs.**
 
 ---
 
-## 🧩 Application Areas
+# 🌐 Live Experience
 
-| Area | Functionality |
-|---|---|
-| **Authentication** | Email/password and Google sign-in |
-| **Home Feed** | Browse, search and filter travel pools |
-| **Pool Creation** | Publish and manage journeys |
-| **Matching** | Route + time based compatibility |
-| **Requests** | Request, accept, decline and cancel |
-| **Confirmed Trips** | Track travellers who are joining |
-| **Messaging** | Direct conversations and typing/presence |
-| **Profiles** | User information, preferences and badges |
-| **Ratings** | Post-trip reputation system |
-| **Safety** | Reports and blocking |
-| **Verification** | College email verification |
-| **Notifications** | Push notification subscription support |
-| **Admin** | Platform statistics and pool moderation |
+<p align="center">
+  <a href="https://uni-pool-ruddy.vercel.app">
+    <strong>🚀 Open UniPool</strong>
+  </a>
+</p>
+
+UniPool is being developed as a live product experience rather than a static demo.
 
 ---
 
-## 🛠️ Technology
+# 🎯 The Bigger Idea
 
-**Frontend**
+UniPool starts with carpooling, but the underlying idea is broader:
 
-`React Native` · `Expo` · `TypeScript` · `Expo Router`
+> **Build a trusted mobility network around university communities.**
 
-**Backend**
+A university already gives you something most mobility platforms don't naturally have:
 
-`Python` · `FastAPI` · `Pydantic`
+**identity + community + repeated routes + repeated people.**
 
-**Data & Services**
+That creates the possibility of a system where students can repeatedly discover people travelling in the same direction, build reputation over time, coordinate trips together, and eventually form a trusted campus mobility network.
 
-`MongoDB` · `REST API` · `Google Authentication` · `Web Push` · `Email`
+The long-term product vision is not simply:
 
-**Deployment**
+> *"Find someone going to the airport."*
 
-`Vercel`
+It is:
 
----
-
-## 📂 Project Structure
-
-```text
-UniPool/
-├── app/
-│   ├── frontend/          # Expo / React Native application
-│   │   ├── app/            # Application routes and screens
-│   │   └── src/            # API, auth, components and UI logic
-│   │
-│   └── backend/            # FastAPI application
-│
-├── assets/                 # README screenshots and project artwork
-└── README.md
-```
-
----
-
-## 🌐 Deployment
-
-UniPool is deployed as a live web application and connected to the GitHub repository for the project.
-
-**Live application:** https://uni-pool-ruddy.vercel.app
-
----
-
-## 🎯 Project Goal
-
-UniPool is built as a practical campus mobility product: a focused system for turning fragmented student travel coordination into a searchable, request-based, and reputation-aware network.
-
-Rather than treating carpooling as just a ride listing, the product covers the complete interaction loop — **discovery → matching → requests → confirmation → communication → travel → reputation**.
+> **"UniPool knows the people, routes and journeys around your campus — and helps you move through them together."**
 
 ---
 
 <p align="center">
-  <strong>UniPool — Find your route. Find your people. Share the journey. 🚗</strong>
+  <strong>🚗 UniPool</strong><br>
+  <sub>Find your route. Find your people. Share the journey.</sub>
 </p>
