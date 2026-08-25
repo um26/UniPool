@@ -13,6 +13,7 @@ export async function setToken(token: string | null) {
 }
 
 async function req(path: string, opts: RequestInit = {}) {
+  if (!BASE) throw new Error("UniPool API is not configured");
   const token = await getToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -32,7 +33,25 @@ async function req(path: string, opts: RequestInit = {}) {
   return data;
 }
 
+async function wakeBackend() {
+  if (!BASE) return;
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), 12000) : null;
+  try {
+    // Render's free instances can sleep. Hit the cheap root health endpoint as
+    // soon as UniPool opens so login is not the request that pays the cold start.
+    await fetch(BASE, {
+      method: "GET",
+      cache: "no-store",
+      signal: controller?.signal,
+    });
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export const api = {
+  wakeBackend,
   googleSignIn: (id_token: string) => req("/auth/google", { method: "POST", body: JSON.stringify({ id_token }) }),
   emailSignup: (email: string, password: string, name: string, username?: string, turnstileToken?: string | null) =>
     req("/auth/signup", { method: "POST", body: JSON.stringify({ email, password, name, username, turnstile_token: turnstileToken }) }),
