@@ -205,6 +205,7 @@ class PoolRequestCreate(BaseModel):
     companions: int = 0
     luggage: Optional[str] = None
     notes: Optional[str] = None
+    trip_mode: bool = False
 
 
 class PoolRequestUpdate(BaseModel):
@@ -215,6 +216,7 @@ class PoolRequestUpdate(BaseModel):
     companions: Optional[int] = None
     luggage: Optional[str] = None
     notes: Optional[str] = None
+    trip_mode: Optional[bool] = None
 
 
 class MessageCreate(BaseModel):
@@ -257,6 +259,7 @@ class PoolRequestOut(BaseModel):
     companions: int
     luggage: Optional[str] = None
     notes: Optional[str] = None
+    trip_mode: bool = False
     status: str = "open"
     created_at: datetime
     user_rating_avg: Optional[float] = None
@@ -987,6 +990,7 @@ async def create_pool(body: PoolRequestCreate, authorization: Optional[str] = He
         "companions": body.companions,
         "luggage": body.luggage,
         "notes": body.notes,
+        "trip_mode": body.trip_mode,
         "status": "open",
         "created_at": _now_utc(),
         "confirmed_travelers": [],
@@ -1007,6 +1011,8 @@ async def list_pools(authorization: Optional[str] = Header(None)):
         query["user_id"] = {"$nin": list(blocked_ids)}
     cursor = db.pools.find(query, {"_id": 0}).sort("travel_datetime", 1)
     results = await cursor.to_list(200)
+    from services.match_service import rank_pool_feed
+    results = await rank_pool_feed(user, results)
     results = await _enrich_with_ratings(results)
     return await _enrich_with_my_request_status(results, user["user_id"])
 
@@ -1128,6 +1134,8 @@ async def update_pool(pool_id: str, body: PoolRequestUpdate, authorization: Opti
 async def my_matches(authorization: Optional[str] = Header(None)):
     """All pools that overlap +-1h with any of my own pools on the same route."""
     user = await get_current_user(authorization)
+    from services.match_service import smart_matches
+    return await smart_matches(user["user_id"])
     my = await db.pools.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(100)
     if not my:
         return []
