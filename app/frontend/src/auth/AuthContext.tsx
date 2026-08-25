@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { Platform } from "react-native";
 import { api, getToken, setToken } from "@/src/api/client";
+import { storage } from "@/src/utils/storage";
 
 export type UniUser = {
   user_id: string;
@@ -24,18 +25,12 @@ export type UniUser = {
 type AuthCtx = {
   user: UniUser | null;
   loading: boolean;
-  // True while we're mid-way exchanging a Google credential with our backend.
   signingIn: boolean;
-  // Set (with a message) if the last sign-in attempt failed. Cleared on next attempt.
   signInError: string | null;
-  // On web this opens the Google Sign-In popup itself, so no args needed.
-  // Exposed so screens can trigger it from a custom button if desired.
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
-  // Web-only: mount a Google button into a DOM node.
   renderGoogleButton: (containerId: string) => void;
-  // Email/username + password auth.
   signInWithPassword: (identifier: string, password: string, turnstileToken?: string | null) => Promise<void>;
   signUpWithPassword: (email: string, password: string, name: string, username?: string, turnstileToken?: string | null) => Promise<void>;
 };
@@ -44,6 +39,7 @@ const Ctx = createContext<AuthCtx>({} as any);
 export const useAuth = () => useContext(Ctx);
 
 const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || "";
+const USER_CACHE_KEY = "unipool.cached_user.v1";
 
 declare global {
   interface Window {
@@ -57,6 +53,12 @@ function loadGoogleScript(): Promise<void> {
   if (window.google?.accounts?.id) return Promise.resolve();
   if (gsiScriptPromise) return gsiScriptPromise;
   gsiScriptPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[src="https://accounts.google.com/gsi/client"]') as HTMLScriptElement | null;
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error("Failed to load Google Sign-In script")), { once: true });
+      return;
+    }
     const script = document.createElement("script");
     script.src = "https://accounts.google.com/gsi/client";
     script.async = true;
@@ -68,32 +70,53 @@ function loadGoogleScript(): Promise<void> {
   return gsiScriptPromise;
 }
 
+async function cacheUser(next: UniUser | null) {
+  if (next) await storage.secureSet(USER_CACHE_KEY, JSON.stringify(next));
+  else await storage.secureRemove(USER_CACHE_KEY);
+}
+
+async function readCachedUser(): Promise<UniUser | null> {
+  const raw = await storage.secureGet(USER_CACHE_KEY, null);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed?.user_id && parsed?.email ? parsed as UniUser : null;
+  } catch {
+    await storage.secureRemove(USER_CACHE_KEY);
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UniUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [signingIn, setSigningIn] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
 
+  const applySession = useCallback(async (sessionToken: string, nextUser: UniUser) => {
+    // Persist both pieces before routing. Returning users can then restore the
+    // signed-in shell immediately even when the API host is waking up.
+    await Promise.all([setToken(sessionToken), cacheUser(nextUser)]);
+    setUser(nextUser);
+  }, []);
+
   const handleCredential = useCallback(async (response: { credential: string }) => {
     setSigningIn(true);
     setSignInError(null);
     try {
-      // Render's free tier can take 30-50s to wake from a cold start —
-      // give this real room instead of failing silently and fast.
       const res = await api.googleSignIn(response.credential);
-      await setToken(res.session_token);
-      setUser(res.user);
+      await applySession(res.session_token, res.user);
     } catch (e: any) {
       console.warn("Google sign-in failed", e);
       setSignInError(
         e?.message === "Failed to fetch" || e?.name === "TypeError"
-          ? "Couldn't reach the server. It may be waking up from sleep — please try again in a few seconds."
+          ? "The UniPool server is still waking up. Please try once more in a few seconds."
           : e?.message || "Sign-in failed. Please try again."
       );
     } finally {
       setSigningIn(false);
     }
-  }, []);
+  }, [applySession]);
 
   const initGoogle = useCallback(async () => {
     if (Platform.OS !== "web" || !GOOGLE_CLIENT_ID) return;
@@ -119,29 +142,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const u = await api.me();
       setUser(u);
-    } catch {
-      setUser(null);
-      await setToken(null);
+      await cacheUser(u);
+    } catch (e: any) {
+      // Network/cold-start failures must NOT log a remembered user out. Only
+      // an explicit auth rejection means the local session is no longer valid.
+      if (e?.status === 401 || e?.status === 403) {
+        setUser(null);
+        await Promise.all([setToken(null), cacheUser(null)]);
+      } else {
+        console.warn("Session validation deferred; keeping cached session", e);
+      }
     }
   }, []);
 
   useEffect(() => {
+    let active = true;
     (async () => {
-      // Don't let a slow/cold backend block the whole app behind a spinner.
-      // Kick off Google's script load (fast, client-side) and unblock
-      // rendering immediately — if a saved session exists, validate it in
-      // the background and let `user` update whenever it resolves. The
-      // login screen already auto-redirects once `user` becomes truthy.
-      try {
-        await initGoogle();
-      } catch (e) {
-        console.warn("Google script failed to load (ad-blocker?)", e);
-      } finally {
-        setLoading(false);
-      }
-      const token = await getToken();
+      // Restore local auth first. This is intentionally independent of Google
+      // script loading and backend latency.
+      const [token, cached] = await Promise.all([getToken(), readCachedUser()]);
+      if (!active) return;
+      if (token && cached) setUser(cached);
+      setLoading(false);
+
+      // Start waking the API and loading GSI immediately, in parallel. A user
+      // who clicks Google after reading the landing screen should not be the
+      // request that wakes a sleeping backend.
+      api.wakeBackend().catch(() => {});
+      initGoogle().catch((e) => console.warn("Google script failed to load", e));
+
       if (token) refresh();
     })();
+    return () => { active = false; };
   }, [initGoogle, refresh]);
 
   const signIn = useCallback(async () => {
@@ -150,38 +182,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     await initGoogle();
-    if (window.google?.accounts?.id) {
-      window.google.accounts.id.prompt();
-    }
+    if (window.google?.accounts?.id) window.google.accounts.id.prompt();
   }, [initGoogle]);
 
-  const renderGoogleButton = useCallback(
-    (containerId: string) => {
-      if (Platform.OS !== "web") return;
-      initGoogle().then(() => {
-        const el = document.getElementById(containerId);
-        if (el && window.google?.accounts?.id) {
-          // Clear any stale button from a previous mount before re-rendering,
-          // otherwise repeated calls can stack duplicate/broken iframes.
-          el.innerHTML = "";
-          window.google.accounts.id.renderButton(el, {
-            theme: "outline",
-            size: "large",
-            width: 280,
-          });
-        }
-      });
-    },
-    [initGoogle]
-  );
+  const renderGoogleButton = useCallback((containerId: string) => {
+    if (Platform.OS !== "web") return;
+    initGoogle().then(() => {
+      const el = document.getElementById(containerId);
+      if (el && window.google?.accounts?.id) {
+        el.innerHTML = "";
+        window.google.accounts.id.renderButton(el, {
+          theme: "outline",
+          size: "large",
+          width: 280,
+        });
+      }
+    }).catch(() => {});
+  }, [initGoogle]);
 
   const signOut = useCallback(async () => {
     try { await api.logout(); } catch {}
-    await setToken(null);
+    await Promise.all([setToken(null), cacheUser(null)]);
     setUser(null);
-    // Without this, Google Identity Services silently suppresses the next
-    // sign-in attempt (button click / prompt does nothing) because it still
-    // thinks there's an active selected session from before.
     if (Platform.OS === "web" && window.google?.accounts?.id) {
       try {
         window.google.accounts.id.disableAutoSelect();
@@ -195,30 +217,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSignInError(null);
     try {
       const res = await api.emailLogin(identifier, password, turnstileToken);
-      await setToken(res.session_token);
-      setUser(res.user);
+      await applySession(res.session_token, res.user);
     } catch (e: any) {
       setSignInError(e?.message || "Sign-in failed. Please check your details and try again.");
       throw e;
     } finally {
       setSigningIn(false);
     }
-  }, []);
+  }, [applySession]);
 
   const signUpWithPassword = useCallback(async (email: string, password: string, name: string, username?: string, turnstileToken?: string | null) => {
     setSigningIn(true);
     setSignInError(null);
     try {
       const res = await api.emailSignup(email, password, name, username, turnstileToken);
-      await setToken(res.session_token);
-      setUser(res.user);
+      await applySession(res.session_token, res.user);
     } catch (e: any) {
       setSignInError(e?.message || "Couldn't create your account. Please try again.");
       throw e;
     } finally {
       setSigningIn(false);
     }
-  }, []);
+  }, [applySession]);
 
   return (
     <Ctx.Provider value={{ user, loading, signingIn, signInError, signIn, signOut, refresh, renderGoogleButton, signInWithPassword, signUpWithPassword }}>
