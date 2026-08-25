@@ -51,7 +51,7 @@ export default function PostRequestScreen() {
         setFrom(pool.from_location); setTo(pool.to_location);
         const ist = toISTParts(new Date(pool.travel_datetime));
         setDate(ist.date); setTime(ist.time);
-        setGenderPref(pool.gender_preference || "any"); setCompanions(pool.companions || 0); setLuggage(pool.luggage || ""); setNotes(pool.notes || "");
+        setGenderPref(pool.gender_preference || "any"); setCompanions(pool.companions || 0); setLuggage(pool.luggage || ""); setNotes(pool.notes || ""); setTripMode(!!pool.trip_mode);
       } catch (e: any) { Alert.alert("Error", e.message); router.back(); }
       finally { setLoadingExisting(false); }
     })();
@@ -82,7 +82,7 @@ export default function PostRequestScreen() {
     const iso = istPartsToUTCISO(date, time);
     setSubmitting(true);
     try {
-      const payload = { from_location: from.trim(), to_location: to.trim(), travel_datetime: iso, gender_preference: genderPref, companions, luggage: luggage.trim() || null, notes: notes.trim() || null };
+      const payload = { from_location: from.trim(), to_location: to.trim(), travel_datetime: iso, gender_preference: genderPref, companions, luggage: luggage.trim() || null, notes: notes.trim() || null, trip_mode: tripMode };
       if (isEditing) await api.updatePool(edit as string, payload); else await api.createPool(payload);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); router.back();
     } catch (e: any) { Alert.alert("Could not post", e.message || "Try again"); }
