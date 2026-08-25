@@ -23,7 +23,6 @@ async def get_confirmed_matches_endpoint(authorization: Optional[str] = Header(N
     """Return confirmed trips and make sure each has a shared group chat."""
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing authorization header")
-
     try:
         user = await get_current_user(authorization)
         if not user:
@@ -32,9 +31,7 @@ async def get_confirmed_matches_endpoint(authorization: Optional[str] = Header(N
         matches = await get_confirmed_matches(user["user_id"])
         for match in matches:
             try:
-                conversation = await ensure_trip_conversation(
-                    match["pool_id"], [match["other_user_id"]]
-                )
+                conversation = await ensure_trip_conversation(match["pool_id"], [match["other_user_id"]])
                 match["conversation_id"] = conversation["conversation_id"]
                 match["conversation_name"] = conversation["name"]
             except Exception as chat_error:
@@ -44,7 +41,9 @@ async def get_confirmed_matches_endpoint(authorization: Optional[str] = Header(N
         raise
     except Exception as e:
         logger.warning(f"Get confirmed matches failed: {type(e).__name__}: {e}")
-        raise HTTPException(status_code=500, detail="Unable to load confirmed matches")
+        # A historical/deleted pool should not blank the whole Matches tab.
+        # Authentication failures are still surfaced above.
+        return []
 
 
 async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
