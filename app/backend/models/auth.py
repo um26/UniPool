@@ -1,10 +1,9 @@
-"""
-Authentication-related Pydantic models.
-"""
+"""Authentication-related Pydantic models."""
 
-from pydantic import BaseModel, Field, EmailStr
-from typing import Optional
 from datetime import datetime
+from typing import Optional
+
+from pydantic import BaseModel, EmailStr, Field
 
 
 class GoogleSignIn(BaseModel):
@@ -18,14 +17,14 @@ class SessionExchange(BaseModel):
 class RatingCreate(BaseModel):
     rated_user_id: str
     stars: int = Field(..., ge=1, le=10)
-    comment: Optional[str] = None
-    pool_id: Optional[str] = None
+    comment: Optional[str] = Field(default=None, max_length=500)
+    pool_id: str = Field(..., min_length=1)
 
 
 class MessageCreate(BaseModel):
     to_user_id: str
     pool_id: Optional[str] = None
-    text: str
+    text: str = Field(..., min_length=1, max_length=2000)
 
 
 class PushSubscribe(BaseModel):
@@ -36,7 +35,7 @@ class PushSubscribe(BaseModel):
 class ReportCreate(BaseModel):
     reported_user_id: str
     reason: str
-    details: Optional[str] = None
+    details: Optional[str] = Field(default=None, max_length=1000)
     pool_id: Optional[str] = None
 
 
