@@ -14,6 +14,7 @@ from services.pool_service import (
     create_pool, get_pool, list_pools, my_pools,
     close_pool, reopen_pool, delete_pool, get_my_matches, get_confirmed_matches
 )
+from services.match_service import smart_matches
 from models.pool import PoolRequestCreate, PoolRequestUpdate, PoolResponse
 from models.response import BaseResponse
 import logging
@@ -75,7 +76,7 @@ async def get_matches_endpoint(authorization: Optional[str] = Header(None)):
         user = await get_current_user(authorization)
         if not user:
             raise HTTPException(status_code=401, detail="Invalid or expired session")
-        matches = await get_my_matches(user["user_id"])
+        matches = await smart_matches(user["user_id"])
         logger.info(f"[GET_MATCHES] Retrieved {len(matches)} matches for user {user['user_id']}")
         return matches
     except Exception as e:
