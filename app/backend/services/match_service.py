@@ -1,7 +1,8 @@
-"""Compatibility scoring, smart feed ranking and automatic match chat creation."""
-from datetime import datetime, timezone, timedelta
-from difflib import SequenceMatcher
+"""Compatibility scoring, smart feed ranking and automatic match materialization."""
+
 import re
+from datetime import datetime, timedelta, timezone
+from difflib import SequenceMatcher
 from typing import Any, Dict, List
 
 from config.database import db
@@ -19,8 +20,6 @@ def _norm(value: Any) -> str:
     return " ".join(text.split())
 
 
-# Common campus/transit aliases. These are deliberately semantic aliases, not
-# decorative frontend guesses: they are applied to the backend route score.
 _LOCATION_ALIASES = {
     "mu": "mahindra university",
     "mahindra uni": "mahindra university",
@@ -41,12 +40,13 @@ def _canonical_location(value: Any) -> str:
         return ""
     if text in _LOCATION_ALIASES:
         return _LOCATION_ALIASES[text]
-
-    # Remove words that usually describe the facility rather than its actual
-    # place identity. We keep airport/railway so those modes remain distinct.
     replacements = {
-        " intl ": " ", " international ": " ", " terminal ": " ",
-        " campus ": " ", " main gate ": " ", " pickup point ": " ",
+        " intl ": " ",
+        " international ": " ",
+        " terminal ": " ",
+        " campus ": " ",
+        " main gate ": " ",
+        " pickup point ": " ",
     }
     padded = f" {text} "
     for old, new in replacements.items():
@@ -63,7 +63,6 @@ def _sim(a: Any, b: Any) -> float:
         return 1.0
     if a_text in b_text or b_text in a_text:
         return 0.94
-
     seq = SequenceMatcher(None, a_text, b_text).ratio()
     a_tokens, b_tokens = set(a_text.split()), set(b_text.split())
     union = a_tokens | b_tokens
@@ -72,7 +71,6 @@ def _sim(a: Any, b: Any) -> float:
 
 
 def route_similarity(a: Dict[str, Any], b: Dict[str, Any]) -> float:
-    """Return 0..1 same-direction origin/destination compatibility."""
     return (
         _sim(a.get("from_location"), b.get("from_location"))
         + _sim(a.get("to_location"), b.get("to_location"))
@@ -84,11 +82,16 @@ def _time_similarity(a: Dict[str, Any], b: Dict[str, Any]) -> float:
         minutes = abs((_aware(a["travel_datetime"]) - _aware(b["travel_datetime"])).total_seconds()) / 60
     except Exception:
         return 0.0
-    if minutes <= 15: return 1.0
-    if minutes <= 30: return 0.92
-    if minutes <= 60: return 0.82
-    if minutes <= 120: return 0.58
-    if minutes <= 180: return 0.32
+    if minutes <= 15:
+        return 1.0
+    if minutes <= 30:
+        return 0.92
+    if minutes <= 60:
+        return 0.82
+    if minutes <= 120:
+        return 0.58
+    if minutes <= 180:
+        return 0.32
     return 0.0
 
 
@@ -120,7 +123,7 @@ def _trust(candidate: Dict[str, Any]) -> float:
     verified = 1.0 if candidate.get("user_college_id") or any(
         b.get("id") == "verified" for b in candidate.get("user_badges") or []
     ) else 0.0
-    rating_part = 0.0 if rating is None else min(float(rating) / 5.0, 1.0)
+    rating_part = 0.0 if rating is None else min(float(rating) / 10.0, 1.0)
     return rating_part * 0.45 + min(count / 10, 1) * 0.20 + min(badges / 3, 1) * 0.15 + verified * 0.20
 
 
@@ -137,20 +140,40 @@ def score_match(a: Dict[str, Any], b: Dict[str, Any]) -> tuple[int, Dict[str, in
 
 
 def _label(score: int) -> str:
-    if score >= 90: return "Excellent fit"
-    if score >= 80: return "Strong fit"
-    if score >= 70: return "Good fit"
+    if score >= 90:
+        return "Excellent fit"
+    if score >= 80:
+        return "Strong fit"
+    if score >= 70:
+        return "Good fit"
     return "Possible fit"
 
 
+def _reasons(own: Dict[str, Any], candidate: Dict[str, Any], breakdown: Dict[str, int], delta_minutes: int) -> List[str]:
+    reasons: List[str] = []
+    if breakdown.get("route", 0) >= 31:
+        reasons.append("Same route")
+    elif breakdown.get("route", 0) >= 25:
+        reasons.append("Very similar route")
+    if delta_minutes <= 15:
+        reasons.append("Leaving within 15 min")
+    elif delta_minutes <= 30:
+        reasons.append("Leaving within 30 min")
+    elif delta_minutes <= 60:
+        reasons.append("Leaving within an hour")
+    if candidate.get("user_college_id"):
+        reasons.append("Verified student")
+    if candidate.get("user_rating_avg") is not None and candidate.get("user_rating_avg", 0) >= 8.5:
+        reasons.append("Highly rated")
+    if own.get("gender_preference") == "same" or candidate.get("gender_preference") == "same":
+        if breakdown.get("preferences", 0) == 10:
+            reasons.append("Preference match")
+    return reasons[:4]
+
+
 async def _blocked(user_id: str) -> set[str]:
-    docs = await db.blocks.find(
-        {"$or": [{"blocker_id": user_id}, {"blocked_id": user_id}]}, {"_id": 0}
-    ).to_list(2000)
-    return {
-        d["blocked_id"] if d["blocker_id"] == user_id else d["blocker_id"]
-        for d in docs
-    }
+    docs = await db.blocks.find({"$or": [{"blocker_id": user_id}, {"blocked_id": user_id}]}, {"_id": 0}).to_list(2000)
+    return {d["blocked_id"] if d["blocker_id"] == user_id else d["blocker_id"] for d in docs}
 
 
 async def _enrich(candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -162,39 +185,25 @@ async def _enrich(candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         {"$group": {"_id": "$rated_user_id", "avg": {"$avg": "$stars"}, "count": {"$sum": 1}}},
     ]).to_list(len(ids))
     stat_map = {s["_id"]: s for s in stats}
-
     users = await db.users.find(
         {"user_id": {"$in": ids}},
-        {"_id": 0, "user_id": 1, "college_verified": 1, "roll_number": 1},
+        {"_id": 0, "user_id": 1, "college_verified": 1, "roll_number": 1, "college_email": 1},
     ).to_list(len(ids))
-    verified = {u["user_id"] for u in users if u.get("college_verified")}
-
+    verified = {u["user_id"]: u for u in users if u.get("college_verified")}
     for candidate in candidates:
         stat = stat_map.get(candidate.get("user_id"))
         candidate["user_rating_avg"] = round(stat["avg"], 1) if stat else None
         candidate["user_rating_count"] = stat["count"] if stat else 0
-        candidate["user_college_id"] = {"verified": True} if candidate.get("user_id") in verified else None
+        verified_user = verified.get(candidate.get("user_id"))
+        candidate["user_college_id"] = ({"verified": True, "roll_number": verified_user.get("roll_number")} if verified_user else None)
     return candidates
 
 
-async def _attach_automatic_chat(user_id: str, match: Dict[str, Any]) -> None:
-    """Create/reuse the route trip chat for a genuine backend match."""
-    try:
-        from services.messages_service import ensure_trip_conversation
-        conversation = await ensure_trip_conversation(match["pool_id"], [user_id])
-        match["conversation_id"] = conversation["conversation_id"]
-        match["conversation_name"] = conversation["name"]
-    except Exception:
-        # Matching remains useful if chat storage has a transient problem;
-        # /messages/trip/ensure can backfill it idempotently later.
-        pass
-
-
 async def smart_matches(user_id: str) -> List[Dict[str, Any]]:
+    """Pure read: calculate matches without creating chats or notifications."""
     mine = await db.pools.find({"user_id": user_id, "status": "open"}, {"_id": 0}).to_list(100)
     if not mine:
         return []
-
     blocked = await _blocked(user_id)
     lo = min(_aware(p["travel_datetime"]) for p in mine) - timedelta(hours=3)
     hi = max(_aware(p["travel_datetime"]) for p in mine) + timedelta(hours=3)
@@ -204,7 +213,6 @@ async def smart_matches(user_id: str) -> List[Dict[str, Any]]:
         "travel_datetime": {"$gte": lo, "$lte": hi},
     }, {"_id": 0}).to_list(500)
     await _enrich(candidates)
-
     results: Dict[str, Dict[str, Any]] = {}
     for candidate in candidates:
         best = None
@@ -214,33 +222,44 @@ async def smart_matches(user_id: str) -> List[Dict[str, Any]]:
                 best = (score, breakdown, own)
         if not best:
             continue
-
         score, breakdown, own = best
-        # Route and time are hard gates. The percentage is therefore always a
-        # real backend compatibility result, never a frontend decoration.
         if breakdown["route"] < 18 or breakdown["time"] < 8 or score < 52:
             continue
-
+        delta = round(abs((_aware(candidate["travel_datetime"]) - _aware(own["travel_datetime"])).total_seconds() / 60))
         candidate["match_score"] = score
         candidate["match_label"] = _label(score)
         candidate["match_breakdown"] = breakdown
         candidate["matched_pool_id"] = own.get("pool_id")
-        candidate["match_time_delta_minutes"] = round(abs(
-            (_aware(candidate["travel_datetime"]) - _aware(own["travel_datetime"])).total_seconds() / 60
-        ))
+        candidate["match_time_delta_minutes"] = delta
+        candidate["match_reasons"] = _reasons(own, candidate, breakdown, delta)
         results[candidate["pool_id"]] = candidate
+    return sorted(results.values(), key=lambda x: (x.get("match_score", 0), -x.get("match_time_delta_minutes", 999)), reverse=True)
 
-    ordered = sorted(
-        results.values(),
-        key=lambda x: (x.get("match_score", 0), -x.get("match_time_delta_minutes", 999)),
-        reverse=True,
-    )
 
-    # The chat is a consequence of a real match. It is idempotent, so repeat
-    # loads do not create duplicate groups.
-    for match in ordered:
-        await _attach_automatic_chat(user_id, match)
-    return ordered
+async def materialize_matches_for_pool(pool: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Create shared chats + notifications for matches caused by one pool."""
+    if not pool or not pool.get("pool_id") or not pool.get("user_id"):
+        return []
+    try:
+        matches = await smart_matches(pool["user_id"])
+        relevant = [m for m in matches if m.get("matched_pool_id") == pool["pool_id"]]
+        if not relevant:
+            return []
+        from services.messages_service import ensure_trip_conversation
+        for match in relevant:
+            try:
+                conversation = await ensure_trip_conversation(match["pool_id"], [pool["user_id"]])
+                match["conversation_id"] = conversation["conversation_id"]
+                match["conversation_name"] = conversation["name"]
+            except Exception:
+                pass
+        from services.notification_service import send_match_notifications
+        await send_match_notifications(pool, relevant)
+        return relevant
+    except Exception:
+        import logging
+        logging.getLogger("unipool.match").exception("Could not materialize matches for pool %s", pool.get("pool_id"))
+        return []
 
 
 async def rank_pool_feed(user: Dict[str, Any], pools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -248,21 +267,19 @@ async def rank_pool_feed(user: Dict[str, Any], pools: List[Dict[str, Any]]) -> L
     if not mine:
         pools.sort(key=lambda x: _aware(x["travel_datetime"]))
         return pools
-
     await _enrich(pools)
     for pool in pools:
-        best_score, best_breakdown = 0, {}
+        best_score, best_breakdown, best_own = 0, {}, None
         for own in mine:
             score, breakdown = score_match(own, pool)
             if score > best_score:
-                best_score, best_breakdown = score, breakdown
+                best_score, best_breakdown, best_own = score, breakdown, own
         pool["feed_score"] = best_score
         pool["match_score"] = best_score
         pool["match_label"] = _label(best_score)
         pool["match_breakdown"] = best_breakdown
-
-    return sorted(
-        pools,
-        key=lambda x: (x.get("feed_score", 0), -_aware(x["travel_datetime"]).timestamp()),
-        reverse=True,
-    )
+        if best_own:
+            delta = round(abs((_aware(pool["travel_datetime"]) - _aware(best_own["travel_datetime"])).total_seconds() / 60))
+            pool["match_time_delta_minutes"] = delta
+            pool["match_reasons"] = _reasons(best_own, pool, best_breakdown, delta)
+    return sorted(pools, key=lambda x: (x.get("feed_score", 0), -_aware(x["travel_datetime"]).timestamp()), reverse=True)
