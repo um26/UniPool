@@ -1,8 +1,7 @@
-import React, { useCallback, useState, useRef, useMemo } from "react";
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, Pressable, Linking, Alert, ScrollView } from "react-native";
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
@@ -12,119 +11,255 @@ import { useAuth } from "@/src/auth/AuthContext";
 import RatingBadge from "@/src/components/RatingBadge";
 import UserBadges from "@/src/components/UserBadges";
 import RatingModal from "@/src/components/RatingModal";
-import Confetti from "@/src/components/Confetti";
 import ReportBlockModal from "@/src/components/ReportBlockModal";
+import Confetti from "@/src/components/Confetti";
 import { PoolFeedSkeleton } from "@/src/components/Skeleton";
 
-type Pool = { pool_id: string; user_id: string; user_name: string; user_email: string; from_location: string; to_location: string; travel_datetime: string; gender_preference: string; companions: number; luggage?: string | null; notes?: string | null; trip_mode?: boolean; match_score?: number; match_label?: string; match_breakdown?: Record<string, number>; match_time_delta_minutes?: number; user_rating_avg?: number | null; user_rating_count?: number; user_badges?: { id: string; label: string; icon: string }[]; conversation_id?: string; conversation_name?: string };
-type ConfirmedRide = { pool_id: string; from_location: string; to_location: string; travel_datetime: string; pool_status: string; other_user_id: string; other_user_name: string; other_user_email: string; other_user_rating_avg?: number | null; other_user_rating_count?: number; my_role: "owner" | "traveler"; other_user_badges?: { id: string; label: string; icon: string }[]; conversation_id?: string; conversation_name?: string };
+type Pool = {
+  pool_id: string; user_id: string; user_name: string; user_email: string;
+  from_location: string; to_location: string; travel_datetime: string;
+  companions: number; notes?: string | null; match_score?: number; match_label?: string;
+  match_time_delta_minutes?: number; user_rating_avg?: number | null; user_rating_count?: number;
+  user_badges?: { id: string; label: string; icon: string }[];
+  conversation_id?: string; conversation_name?: string;
+};
 
-function fmtWhen(iso: string) { return new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }); }
-function matchScore(item: Pool) { return item.match_score ?? 0; }
-function scoreLabel(score: number, item?: Pool) { return item?.match_label || (score >= 90 ? "Excellent fit" : score >= 80 ? "Strong fit" : score >= 70 ? "Good fit" : "Possible fit"); }
+type ConfirmedRide = {
+  pool_id: string; from_location: string; to_location: string; travel_datetime: string;
+  other_user_id: string; other_user_name: string; other_user_email: string;
+  other_user_rating_avg?: number | null; other_user_rating_count?: number;
+  other_user_badges?: { id: string; label: string; icon: string }[];
+  my_role: "owner" | "traveler"; conversation_id?: string; conversation_name?: string;
+};
+
+function fmtWhen(iso: string) {
+  return new Date(iso).toLocaleString(undefined, {
+    day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata",
+  });
+}
 
 export default function MatchesScreen() {
-  const router = useRouter(); const { user } = useAuth(); const { colors, isDark } = useTheme();
-  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
-  const [items, setItems] = useState<Pool[]>([]); const [confirmed, setConfirmed] = useState<ConfirmedRide[]>([]); const [loading, setLoading] = useState(true); const [refreshing, setRefreshing] = useState(false);
-  const [ratingTarget, setRatingTarget] = useState<{ user_id: string; user_name: string; pool_id: string } | null>(null); const [removingKey, setRemovingKey] = useState<string | null>(null); const [reportTarget, setReportTarget] = useState<{ user_id: string; user_name: string } | null>(null); const [confettiKey, setConfettiKey] = useState(0); const [error, setError] = useState<string | null>(null); const knownConfirmedKeys = useRef<Set<string> | null>(null);
+  const router = useRouter();
+  const { user } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [items, setItems] = useState<Pool[]>([]);
+  const [confirmed, setConfirmed] = useState<ConfirmedRide[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [partialWarning, setPartialWarning] = useState<string | null>(null);
+  const [fatalError, setFatalError] = useState<string | null>(null);
+  const [ratingTarget, setRatingTarget] = useState<{ user_id: string; user_name: string; pool_id: string } | null>(null);
+  const [reportTarget, setReportTarget] = useState<{ user_id: string; user_name: string } | null>(null);
+  const [removingKey, setRemovingKey] = useState<string | null>(null);
+  const [confettiKey, setConfettiKey] = useState(0);
+  const knownConfirmedKeys = useRef<Set<string> | null>(null);
 
   const load = useCallback(async () => {
-    try {
-      setError(null);
-      const [matches, rides] = await Promise.all([api.myMatches(), api.confirmedMatches()]);
-      setItems(matches || []); setConfirmed(rides || []);
-      const keysNow = new Set<string>((rides || []).map((r: ConfirmedRide) => `${r.pool_id}:${r.other_user_id}`));
-      if (knownConfirmedKeys.current && [...keysNow].some((k) => !knownConfirmedKeys.current!.has(k))) setConfettiKey((k) => k + 1);
+    setFatalError(null);
+    setPartialWarning(null);
+    const [matchResult, confirmedResult] = await Promise.allSettled([
+      api.myMatches(), api.confirmedMatches(),
+    ]);
+
+    if (matchResult.status === "fulfilled") setItems(matchResult.value || []);
+    else {
+      console.warn("Match discovery failed", matchResult.reason);
+      setItems([]);
+    }
+
+    if (confirmedResult.status === "fulfilled") {
+      const rides = confirmedResult.value || [];
+      setConfirmed(rides);
+      const keysNow = new Set<string>(rides.map((r: ConfirmedRide) => `${r.pool_id}:${r.other_user_id}`));
+      if (knownConfirmedKeys.current && [...keysNow].some((k) => !knownConfirmedKeys.current!.has(k))) {
+        setConfettiKey((k) => k + 1);
+      }
       knownConfirmedKeys.current = keysNow;
-    } catch (e: any) { console.warn(e); setError(e?.message || "Unable to load your matches."); }
-    finally { setLoading(false); setRefreshing(false); }
+    } else {
+      console.warn("Confirmed trips failed", confirmedResult.reason);
+      setConfirmed([]);
+    }
+
+    if (matchResult.status === "rejected" && confirmedResult.status === "rejected") {
+      setFatalError("We couldn't reach your trips right now. Please try again.");
+    } else if (matchResult.status === "rejected") {
+      setPartialWarning("New match suggestions are temporarily unavailable. Your confirmed trips are still here.");
+    } else if (confirmedResult.status === "rejected") {
+      setPartialWarning("Confirmed trips are temporarily unavailable. Match discovery is still working.");
+    }
+    setLoading(false);
+    setRefreshing(false);
   }, []);
+
   useFocusEffect(useCallback(() => { setLoading(true); load(); }, [load]));
 
-  const openTripChat = async (poolId: string, fallbackUserId: string, fallbackName: string) => {
+  const openTripChat = useCallback(async (pool: { pool_id: string; conversation_id?: string }, fallbackUserId?: string, fallbackName?: string) => {
     try {
-      const chat = await api.ensureTripChat(poolId);
+      const chat = pool.conversation_id
+        ? { conversation_id: pool.conversation_id }
+        : await api.ensureTripChat(pool.pool_id);
       router.push({ pathname: "/chat/group/[conversationId]", params: { conversationId: chat.conversation_id } });
-    } catch {
-      router.push({ pathname: "/chat/[userId]", params: { userId: fallbackUserId, name: fallbackName } });
+    } catch (e) {
+      console.warn("Trip chat unavailable", e);
+      if (fallbackUserId) {
+        router.push({ pathname: "/chat/[userId]", params: { userId: fallbackUserId, name: fallbackName || "Traveller" } });
+      } else {
+        Alert.alert("Trip chat is still syncing", "Pull to refresh in a moment. Your match has not been lost.");
+      }
     }
-  };
+  }, [router]);
 
   const removeTraveler = (ride: ConfirmedRide) => {
-    Alert.alert("Remove this ride?", `You'll no longer be traveling together with ${ride.other_user_name.split(" ")[0]} on this pool.`, [
+    Alert.alert("Leave this shared trip?", `You and ${ride.other_user_name.split(" ")[0]} will no longer be marked as travelling together.`, [
       { text: "Cancel", style: "cancel" },
-      { text: "Remove", style: "destructive", onPress: async () => {
-        const key = `${ride.pool_id}:${ride.other_user_id}`; setRemovingKey(key);
-        try { const removeId = ride.my_role === "owner" ? ride.other_user_id : (user?.user_id as string); await api.removeTraveler(ride.pool_id, removeId); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); await load(); }
-        catch (e: any) { Alert.alert("Couldn't remove", e.message || "Try again"); }
-        finally { setRemovingKey(null); }
+      { text: "Leave trip", style: "destructive", onPress: async () => {
+        const key = `${ride.pool_id}:${ride.other_user_id}`;
+        setRemovingKey(key);
+        try {
+          const removeId = ride.my_role === "owner" ? ride.other_user_id : (user?.user_id as string);
+          await api.removeTraveler(ride.pool_id, removeId);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          await load();
+        } catch (e: any) {
+          Alert.alert("Couldn't update trip", e?.message || "Please try again.");
+        } finally { setRemovingKey(null); }
       } },
     ]);
   };
 
-  return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <Confetti burstKey={confettiKey} />
-      <LinearGradient colors={isDark ? [colors.surface2, colors.surface2] : [colors.saffron, "#F57F17"]} style={styles.header}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.md }}><Ionicons name="sparkles" size={26} color={isDark ? colors.saffron : "#fff"} /><View><Text style={styles.title}>Your Matches</Text><Text style={styles.sub}>Fellow travellers within a ±1 hour window</Text></View></View>
-      </LinearGradient>
+  const header = (
+    <View style={styles.headerWrap}>
+      <View style={styles.headingRow}>
+        <View style={styles.headingIcon}><Ionicons name="sparkles-outline" size={20} color={colors.indigo} /></View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>Matches</Text>
+          <Text style={styles.sub}>Ranked by route, time, preferences and trust.</Text>
+        </View>
+      </View>
+      {partialWarning ? <View style={styles.warning}><Ionicons name="information-circle-outline" size={16} color={colors.warning} /><Text style={styles.warningText}>{partialWarning}</Text></View> : null}
 
-      {loading ? <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 140 }}><PoolFeedSkeleton count={3} /></ScrollView> : error ? <View style={styles.errorState}><View style={styles.errorIcon}><Ionicons name="cloud-offline-outline" size={28} color={colors.error} /></View><Text style={styles.emptyTitle}>Couldn't load matches</Text><Text style={styles.emptySub}>{error}</Text><Pressable accessibilityRole="button" accessibilityLabel="Retry loading matches" onPress={() => { setLoading(true); load(); }} style={styles.retry}><Ionicons name="refresh" size={16} color="#fff" /><Text style={styles.ctaText}>Try again</Text></Pressable></View> : (
-        <FlatList data={items} keyExtractor={(i) => i.pool_id} contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 140 }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.indigo} />}
-          ListHeaderComponent={confirmed.length > 0 ? <>
-            <Text style={styles.sectionLabel}>Traveling Together</Text>
-            {confirmed.map((ride) => {
-              const key = `${ride.pool_id}:${ride.other_user_id}`;
-              return <View key={key} style={styles.rideCard} testID={`confirmed-${key}`}>
-                <View style={styles.rowTop}><View style={styles.confirmedBadge}><Ionicons name="car-sport" size={12} color="#fff" /><Text style={styles.confirmedBadgeText}>CONFIRMED</Text></View><View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.sm }}><Text style={styles.when}>{fmtWhen(ride.travel_datetime)}</Text><Pressable testID={`more-confirmed-${key}`} onPress={() => setReportTarget({ user_id: ride.other_user_id, user_name: ride.other_user_name })} hitSlop={8}><Ionicons name="ellipsis-vertical" size={16} color={colors.muted} /></Pressable></View></View>
-                <Text style={styles.name}>{ride.other_user_name}</Text>
-                <View style={{ marginBottom: SPACING.sm }}><RatingBadge avg={ride.other_user_rating_avg} count={ride.other_user_rating_count} /><UserBadges badges={ride.other_user_badges} compact /></View>
-                <View style={styles.routeRow}><Ionicons name="location" size={16} color={colors.saffron} /><Text style={styles.route} numberOfLines={1}>{ride.from_location}</Text><Ionicons name="arrow-forward" size={14} color={colors.muted} /><Text style={styles.route} numberOfLines={1}>{ride.to_location}</Text></View>
-                <View style={styles.groupHint}><Ionicons name="people" size={14} color={colors.indigo} /><Text style={styles.groupHintText}>{ride.conversation_name || `${ride.from_location} → ${ride.to_location}`} · shared trip chat</Text></View>
-                <View style={styles.ctaRow}>
-                  <Pressable testID={`chat-${key}`} onPress={() => ride.conversation_id ? router.push({ pathname: "/chat/group/[conversationId]", params: { conversationId: ride.conversation_id } }) : openTripChat(ride.pool_id, ride.other_user_id, ride.other_user_name)} style={[styles.cta, { flex: 1 }]}><Ionicons name="chatbubbles" size={16} color="#fff" /><Text style={styles.ctaText}>Trip chat</Text></Pressable>
-                  <Pressable testID={`rate-confirmed-${key}`} onPress={() => setRatingTarget({ user_id: ride.other_user_id, user_name: ride.other_user_name, pool_id: ride.pool_id })} style={[styles.cta, styles.ctaGhost]}><Ionicons name="star" size={16} color={colors.saffron} /></Pressable>
-                  <Pressable testID={`remove-${key}`} onPress={() => removeTraveler(ride)} disabled={removingKey === key} style={[styles.cta, styles.ctaDanger]}>{removingKey === key ? <ActivityIndicator size="small" color={colors.error} /> : <Ionicons name="close-circle-outline" size={16} color={colors.error} />}</Pressable>
-                </View>
-              </View>;
-            })}
-            <Text style={[styles.sectionLabel, { marginTop: SPACING.lg }]}>Route Matches</Text>
-          </> : null}
-          ListEmptyComponent={<View style={styles.empty}><Ionicons name="calendar-clear-outline" size={64} color={colors.borderStrong} /><Text style={styles.emptyTitle}>No matches yet</Text><Text style={styles.emptySub}>Post a request from the Pool tab — we'll email you when someone matches.</Text></View>}
-          renderItem={({ item }) => {
-            const score = matchScore(item);
-            return <View style={styles.card} testID={`match-card-${item.pool_id}`}>
-              <View style={styles.rowTop}><View style={styles.matchBadge}><Ionicons name="flash" size={12} color="#fff" /><Text style={styles.matchBadgeText}>MATCH</Text></View><View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.sm }}><Text style={styles.when}>{fmtWhen(item.travel_datetime)}</Text><Pressable testID={`more-match-${item.pool_id}`} onPress={() => setReportTarget({ user_id: item.user_id, user_name: item.user_name })} hitSlop={8}><Ionicons name="ellipsis-vertical" size={16} color={colors.muted} /></Pressable></View></View>
-              <View style={styles.nameRow}><Text style={styles.name}>{item.user_name}</Text><View style={[styles.fitPill, { backgroundColor: score >= 90 ? colors.success : colors.cream }]}><Ionicons name="sparkles" size={12} color={score >= 90 ? "#fff" : colors.onCream} /><Text style={[styles.fitText, { color: score >= 90 ? "#fff" : colors.onCream }]}>{score}% · {scoreLabel(score, item)}</Text></View></View>
-              <View style={{ marginBottom: SPACING.sm }}><RatingBadge avg={item.user_rating_avg} count={item.user_rating_count} /><UserBadges badges={item.user_badges} compact /></View>
-              <View style={styles.routeRow}><Ionicons name="location" size={16} color={colors.saffron} /><Text style={styles.route} numberOfLines={1}>{item.from_location}</Text><Ionicons name="arrow-forward" size={14} color={colors.muted} /><Text style={styles.route} numberOfLines={1}>{item.to_location}</Text></View>
-              {item.notes ? <Text style={styles.notes}>“{item.notes}”</Text> : null}
-              <View style={styles.signalRow}><Ionicons name="information-circle-outline" size={14} color={colors.muted} /><Text style={styles.signalText}>{item.match_time_delta_minutes != null ? `${item.match_time_delta_minutes} min time difference · ` : ""}Route/time + preferences + travel details + trust.</Text></View>
-              <View style={styles.ctaRow}>
-                <Pressable testID={`message-${item.pool_id}`} onPress={() => openTripChat(item.pool_id, item.user_id, item.user_name)} style={[styles.cta, { flex: 1 }]}><Ionicons name="chatbubbles" size={16} color="#fff" /><Text style={styles.ctaText}>Open trip chat</Text></Pressable>
-                <Pressable testID={`connect-${item.pool_id}`} onPress={() => Linking.openURL(`mailto:${item.user_email}?subject=UniPool%20-%20Cab%20Share&body=Hi%20${encodeURIComponent(item.user_name)},%20saw%20your%20UniPool%20request.%20Want%20to%20share%20the%20cab%3F`)} style={[styles.cta, styles.ctaGhost]}><Ionicons name="mail" size={16} color={colors.indigo} /></Pressable>
-                <Pressable testID={`rate-${item.pool_id}`} onPress={() => setRatingTarget({ user_id: item.user_id, user_name: item.user_name, pool_id: item.pool_id })} style={[styles.cta, styles.ctaGhost]}><Ionicons name="star" size={16} color={colors.saffron} /></Pressable>
-              </View>
-            </View>;
-          }}
-        />
-      )}
+      {confirmed.length > 0 ? <View style={styles.section}>
+        <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>Your trips</Text><Text style={styles.sectionCount}>{confirmed.length}</Text></View>
+        {confirmed.map((ride) => {
+          const key = `${ride.pool_id}:${ride.other_user_id}`;
+          return <View key={key} style={styles.tripCard}>
+            <View style={styles.cardTop}>
+              <View style={styles.confirmedPill}><View style={styles.liveDot} /><Text style={styles.confirmedText}>CONFIRMED</Text></View>
+              <Pressable onPress={() => setReportTarget({ user_id: ride.other_user_id, user_name: ride.other_user_name })} hitSlop={10}><Ionicons name="ellipsis-horizontal" size={19} color={colors.muted} /></Pressable>
+            </View>
+            <Text style={styles.personName}>{ride.other_user_name}</Text>
+            <View style={styles.badges}><RatingBadge avg={ride.other_user_rating_avg} count={ride.other_user_rating_count} /><UserBadges badges={ride.other_user_badges} compact /></View>
+            <Route from={ride.from_location} to={ride.to_location} colors={colors} styles={styles} />
+            <View style={styles.timeRow}><Ionicons name="time-outline" size={15} color={colors.muted} /><Text style={styles.timeText}>{fmtWhen(ride.travel_datetime)}</Text></View>
+            <View style={styles.actions}>
+              <Pressable onPress={() => openTripChat(ride, ride.other_user_id, ride.other_user_name)} style={styles.primaryAction}><Ionicons name="chatbubbles-outline" size={17} color="#fff" /><Text style={styles.primaryActionText}>Trip chat</Text></Pressable>
+              <Pressable onPress={() => setRatingTarget({ user_id: ride.other_user_id, user_name: ride.other_user_name, pool_id: ride.pool_id })} style={styles.iconAction}><Ionicons name="star-outline" size={18} color={colors.saffron} /></Pressable>
+              <Pressable onPress={() => removeTraveler(ride)} disabled={removingKey === key} style={styles.iconAction}>{removingKey === key ? <ActivityIndicator size="small" color={colors.error} /> : <Ionicons name="exit-outline" size={18} color={colors.error} />}</Pressable>
+            </View>
+          </View>;
+        })}
+      </View> : null}
 
-      {ratingTarget && <RatingModal visible={!!ratingTarget} onClose={() => setRatingTarget(null)} userId={ratingTarget.user_id} userName={ratingTarget.user_name} poolId={ratingTarget.pool_id} onSubmitted={load} />}
-      {reportTarget && <ReportBlockModal visible={!!reportTarget} onClose={() => setReportTarget(null)} userId={reportTarget.user_id} userName={reportTarget.user_name} onBlocked={load} />}
-    </SafeAreaView>
+      <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>Recommended for you</Text>{items.length > 0 ? <Text style={styles.sectionCount}>{items.length}</Text> : null}</View>
+    </View>
   );
+
+  if (loading) {
+    return <SafeAreaView style={styles.safe} edges={["top"]}><ScrollView contentContainerStyle={styles.loadingContent}><View style={styles.loadingHead}><View style={styles.headingIcon}><Ionicons name="sparkles-outline" size={20} color={colors.indigo} /></View><View><Text style={styles.title}>Finding your best rides</Text><Text style={styles.sub}>Comparing route, timing and trust signals…</Text></View></View><PoolFeedSkeleton count={3} /></ScrollView></SafeAreaView>;
+  }
+
+  if (fatalError) {
+    return <SafeAreaView style={styles.safe} edges={["top"]}><View style={styles.errorState}><View style={styles.errorIcon}><Ionicons name="cloud-offline-outline" size={25} color={colors.error} /></View><Text style={styles.emptyTitle}>Matches are unavailable</Text><Text style={styles.emptySub}>{fatalError}</Text><Pressable onPress={() => { setLoading(true); load(); }} style={styles.primaryAction}><Ionicons name="refresh" size={16} color="#fff" /><Text style={styles.primaryActionText}>Try again</Text></Pressable></View></SafeAreaView>;
+  }
+
+  return <SafeAreaView style={styles.safe} edges={["top"]}>
+    <Confetti burstKey={confettiKey} />
+    <FlatList
+      data={items}
+      keyExtractor={(item) => item.pool_id}
+      contentContainerStyle={styles.listContent}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.indigo} />}
+      ListHeaderComponent={header}
+      ListEmptyComponent={<View style={styles.empty}><View style={styles.emptyIcon}><Ionicons name="git-compare-outline" size={26} color={colors.indigo} /></View><Text style={styles.emptyTitle}>No compatible rides yet</Text><Text style={styles.emptySub}>Post your route and travel time. UniPool will rank genuine matches as other students post compatible journeys.</Text><Pressable onPress={() => router.push("/post-request")} style={styles.primaryAction}><Ionicons name="add" size={17} color="#fff" /><Text style={styles.primaryActionText}>Post a trip</Text></Pressable></View>}
+      renderItem={({ item }) => {
+        const score = item.match_score ?? 0;
+        return <View style={styles.matchCard} testID={`match-card-${item.pool_id}`}>
+          <View style={styles.cardTop}>
+            <View style={styles.scorePill}><Text style={styles.score}>{score}%</Text><Text style={styles.scoreLabel}>{item.match_label || "compatible"}</Text></View>
+            <Pressable onPress={() => setReportTarget({ user_id: item.user_id, user_name: item.user_name })} hitSlop={10}><Ionicons name="ellipsis-horizontal" size={19} color={colors.muted} /></Pressable>
+          </View>
+          <Text style={styles.personName}>{item.user_name}</Text>
+          <View style={styles.badges}><RatingBadge avg={item.user_rating_avg} count={item.user_rating_count} /><UserBadges badges={item.user_badges} compact /></View>
+          <Route from={item.from_location} to={item.to_location} colors={colors} styles={styles} />
+          <View style={styles.matchMeta}>
+            <View style={styles.metaItem}><Ionicons name="time-outline" size={14} color={colors.muted} /><Text style={styles.metaText}>{fmtWhen(item.travel_datetime)}</Text></View>
+            {item.match_time_delta_minutes != null ? <View style={styles.metaItem}><Ionicons name="swap-horizontal-outline" size={14} color={colors.muted} /><Text style={styles.metaText}>{item.match_time_delta_minutes} min apart</Text></View> : null}
+          </View>
+          {item.notes ? <Text style={styles.notes} numberOfLines={2}>{item.notes}</Text> : null}
+          <Pressable onPress={() => openTripChat(item, item.user_id, item.user_name)} style={styles.primaryAction}><Ionicons name="chatbubbles-outline" size={17} color="#fff" /><Text style={styles.primaryActionText}>{item.conversation_id ? "Open trip chat" : "Start trip chat"}</Text></Pressable>
+        </View>;
+      }}
+    />
+    {ratingTarget ? <RatingModal visible onClose={() => setRatingTarget(null)} userId={ratingTarget.user_id} userName={ratingTarget.user_name} poolId={ratingTarget.pool_id} onSubmitted={load} /> : null}
+    {reportTarget ? <ReportBlockModal visible onClose={() => setReportTarget(null)} userId={reportTarget.user_id} userName={reportTarget.user_name} onBlocked={load} /> : null}
+  </SafeAreaView>;
 }
 
-const makeStyles = (colors: any, isDark: boolean) => StyleSheet.create({
+function Route({ from, to, colors, styles }: any) {
+  return <View style={styles.routeBox}>
+    <View style={styles.routeLine}><View style={[styles.routeDot, { backgroundColor: colors.saffron }]} /><Text style={styles.routeText} numberOfLines={1}>{from}</Text></View>
+    <View style={styles.routeStem} />
+    <View style={styles.routeLine}><View style={[styles.routeDot, { backgroundColor: colors.indigo }]} /><Text style={styles.routeText} numberOfLines={1}>{to}</Text></View>
+  </View>;
+}
+
+const makeStyles = (colors: any) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
-  header: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.md, paddingBottom: SPACING.lg, borderBottomLeftRadius: 22, borderBottomRightRadius: 22, borderBottomWidth: 1, borderBottomColor: isDark ? colors.border : "rgba(255,255,255,0.18)" },
-  title: { color: isDark ? colors.onSurface : "#fff", fontSize: FONT["2xl"], fontWeight: "800", fontFamily: FONT_DISPLAY }, sub: { color: isDark ? colors.onSurface2 : "rgba(255,255,255,0.9)", marginTop: 2 },
-  errorState: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: SPACING.xl }, errorIcon: { width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface2, marginBottom: SPACING.md }, retry: { flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: colors.indigo, borderRadius: RADIUS.pill, paddingHorizontal: 18, paddingVertical: 11, marginTop: SPACING.lg },
-  empty: { alignItems: "center", paddingVertical: 80, paddingHorizontal: SPACING.xl }, emptyTitle: { marginTop: SPACING.md, fontSize: FONT.xl, fontWeight: "700", color: colors.onSurface }, emptySub: { marginTop: 4, color: colors.muted, textAlign: "center" }, sectionLabel: { fontSize: FONT.sm, fontWeight: "700", color: colors.muted, marginBottom: SPACING.sm, letterSpacing: 0.8, textTransform: "uppercase" },
-  card: { backgroundColor: colors.card, borderRadius: RADIUS.lg, padding: SPACING.lg, marginBottom: SPACING.md, borderWidth: 1, borderColor: colors.border, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2 }, rideCard: { backgroundColor: colors.card, borderRadius: RADIUS.lg, padding: SPACING.lg, marginBottom: SPACING.md, borderWidth: 1, borderColor: colors.success, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
-  rowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: SPACING.sm }, nameRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }, matchBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.success, paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.pill }, matchBadgeText: { color: "#fff", fontSize: 11, fontWeight: "800", letterSpacing: 0.5 }, confirmedBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.indigo, paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.pill }, confirmedBadgeText: { color: "#fff", fontSize: 11, fontWeight: "800", letterSpacing: 0.5 }, when: { color: colors.muted, fontWeight: "600" }, name: { fontSize: FONT.lg, fontWeight: "700", color: colors.onSurface, marginBottom: 6, flexShrink: 1 },
-  fitPill: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: RADIUS.pill, paddingHorizontal: 8, paddingVertical: 5 }, fitText: { fontSize: 10, fontWeight: "900" }, routeRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: SPACING.sm }, route: { fontSize: FONT.base, color: colors.onSurface, fontWeight: "600", flexShrink: 1 }, notes: { color: colors.muted, fontStyle: "italic", marginBottom: SPACING.md }, signalRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 2 }, signalText: { color: colors.muted, fontSize: 10, flex: 1 }, groupHint: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.surface2, borderRadius: RADIUS.pill, paddingHorizontal: 10, paddingVertical: 7, marginBottom: 2 }, groupHintText: { color: colors.indigo, fontSize: 11, fontWeight: "700", flex: 1 },
-  cta: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.indigo, paddingVertical: 12, paddingHorizontal: 16, borderRadius: RADIUS.pill }, ctaRow: { flexDirection: "row", gap: SPACING.sm, marginTop: SPACING.md }, ctaGhost: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.indigo, flex: 0 }, ctaDanger: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.error, flex: 0 }, ctaText: { color: "#fff", fontWeight: "700" },
+  listContent: { width: "100%", maxWidth: 820, alignSelf: "center", padding: SPACING.lg, paddingBottom: 130 },
+  loadingContent: { width: "100%", maxWidth: 820, alignSelf: "center", padding: SPACING.lg, paddingBottom: 130 },
+  loadingHead: { flexDirection: "row", gap: 12, alignItems: "center", marginBottom: SPACING.xl },
+  headerWrap: { width: "100%" },
+  headingRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: SPACING.xl },
+  headingIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border },
+  title: { color: colors.onSurface, fontSize: FONT["2xl"], fontWeight: "850", fontFamily: FONT_DISPLAY },
+  sub: { color: colors.muted, marginTop: 3, fontSize: FONT.base },
+  warning: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, borderRadius: RADIUS.md, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border, marginBottom: SPACING.lg },
+  warningText: { color: colors.onSurface2, fontSize: 12, lineHeight: 17, flex: 1 },
+  section: { marginBottom: SPACING.xl },
+  sectionHeading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+  sectionTitle: { color: colors.onSurface, fontSize: FONT.lg, fontWeight: "800" },
+  sectionCount: { minWidth: 26, height: 26, paddingHorizontal: 8, borderRadius: 13, backgroundColor: colors.surface2, color: colors.muted, textAlign: "center", lineHeight: 26, fontSize: 12, fontWeight: "800" },
+  tripCard: { backgroundColor: colors.card, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: colors.border, padding: SPACING.lg, marginBottom: 10 },
+  matchCard: { width: "100%", backgroundColor: colors.card, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: colors.border, padding: SPACING.lg, marginBottom: 12 },
+  cardTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
+  confirmedPill: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 9, paddingVertical: 5, borderRadius: RADIUS.pill, backgroundColor: colors.surface2 },
+  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.success },
+  confirmedText: { color: colors.success, fontSize: 10, fontWeight: "900", letterSpacing: .5 },
+  scorePill: { flexDirection: "row", alignItems: "baseline", gap: 6, backgroundColor: colors.cream, borderRadius: RADIUS.pill, paddingHorizontal: 10, paddingVertical: 6 },
+  score: { color: colors.onCream, fontSize: 14, fontWeight: "900" },
+  scoreLabel: { color: colors.onCream, fontSize: 11, fontWeight: "700" },
+  personName: { color: colors.onSurface, fontSize: FONT.xl, fontWeight: "850", fontFamily: FONT_DISPLAY },
+  badges: { marginTop: 5, marginBottom: 12 },
+  routeBox: { backgroundColor: colors.surface2, borderRadius: RADIUS.md, padding: 13, marginTop: 2 },
+  routeLine: { flexDirection: "row", alignItems: "center", gap: 10 },
+  routeDot: { width: 9, height: 9, borderRadius: 5 },
+  routeStem: { height: 15, width: 2, backgroundColor: colors.borderStrong, marginLeft: 3.5, marginVertical: 2 },
+  routeText: { flex: 1, color: colors.onSurface, fontSize: 13, fontWeight: "700" },
+  timeRow: { flexDirection: "row", gap: 6, alignItems: "center", marginTop: 10 },
+  timeText: { color: colors.muted, fontSize: 12 },
+  matchMeta: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 10 },
+  metaItem: { flexDirection: "row", alignItems: "center", gap: 5 },
+  metaText: { color: colors.muted, fontSize: 12 },
+  notes: { color: colors.onSurface2, lineHeight: 18, fontSize: 12, marginTop: 10 },
+  actions: { flexDirection: "row", gap: 8, marginTop: 13 },
+  primaryAction: { minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, backgroundColor: colors.indigo, borderRadius: RADIUS.pill, paddingHorizontal: 16, paddingVertical: 10, marginTop: 13 },
+  primaryActionText: { color: "#fff", fontWeight: "850", fontSize: 13 },
+  iconAction: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 21, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, marginTop: 13 },
+  empty: { alignItems: "center", paddingHorizontal: SPACING.xl, paddingVertical: 60, maxWidth: 520, alignSelf: "center" },
+  emptyIcon: { width: 54, height: 54, borderRadius: 18, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border },
+  emptyTitle: { color: colors.onSurface, fontSize: FONT.xl, fontWeight: "850", marginTop: 14, textAlign: "center" },
+  emptySub: { color: colors.muted, fontSize: 13, lineHeight: 20, textAlign: "center", marginTop: 6 },
+  errorState: { flex: 1, maxWidth: 520, alignSelf: "center", alignItems: "center", justifyContent: "center", padding: SPACING.xl },
+  errorIcon: { width: 54, height: 54, borderRadius: 18, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border },
 });
