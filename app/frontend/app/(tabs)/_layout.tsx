@@ -1,41 +1,107 @@
 import React from "react";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { View, StyleSheet, Platform } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { BlurView } from "expo-blur";
-import { RADIUS } from "@/src/theme";
 import { useTheme } from "@/src/theme_context/ThemeContext";
-import ExperienceDock from "@/src/components/ExperienceDock";
+
+const ICONS: Record<string, { active: any; inactive: any }> = {
+  index: { active: "home", inactive: "home-outline" },
+  matches: { active: "people", inactive: "people-outline" },
+  plan: { active: "navigate", inactive: "navigate-outline" },
+  messages: { active: "chatbubble", inactive: "chatbubble-outline" },
+  profile: { active: "person", inactive: "person-outline" },
+};
 
 export default function TabsLayout() {
   const { colors, isDark } = useTheme();
-  const barBg = isDark ? "rgba(11,18,32,0.96)" : "rgba(255,255,255,0.96)";
+  const barBackground = isDark ? "rgba(23,26,29,0.96)" : "rgba(255,255,255,0.97)";
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <Tabs screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarShowLabel: true,
-        tabBarActiveTintColor: colors.saffron,
-        tabBarInactiveTintColor: colors.muted,
-        tabBarLabelStyle: { fontSize: 10, fontWeight: "700", marginBottom: 4 },
-        tabBarStyle: { position: "absolute", borderTopWidth: 1, borderTopColor: colors.border, elevation: 0, height: 74, paddingTop: 8, backgroundColor: Platform.OS === "android" ? barBg : "transparent" },
-        tabBarBackground: () => <BlurView intensity={isDark ? 18 : 24} tint={isDark ? "dark" : "light"} style={[StyleSheet.absoluteFill, { backgroundColor: barBg }]} />,
-        tabBarAccessibilityLabel: route.name === "index" ? "Pool" : route.name === "matches" ? "Matches" : route.name === "messages" ? "Chats" : route.name === "games" ? "Play games" : route.name === "plan" ? "Plan" : "Profile",
-        tabBarIcon: ({ color, focused }) => {
-          const map: Record<string, any> = { index: focused ? "car-sport" : "car-sport-outline", matches: focused ? "sparkles" : "sparkles-outline", messages: focused ? "chatbubble" : "chatbubble-outline", games: focused ? "game-controller" : "game-controller-outline", plan: focused ? "compass" : "compass-outline", profile: focused ? "person-circle" : "person-circle-outline" };
-          return <View style={[styles.iconWrap, focused && { backgroundColor: isDark ? "rgba(255,184,77,0.14)" : "rgba(244,166,42,0.12)" }]}><Ionicons name={map[route.name] || "ellipse"} size={21} color={color} /></View>;
-        },
-      })}>
-        <Tabs.Screen name="index" options={{ title: "Pool" }} />
+      <Tabs
+        screenOptions={({ route }) => ({
+          headerShown: false,
+          tabBarShowLabel: true,
+          tabBarHideOnKeyboard: true,
+          tabBarActiveTintColor: colors.indigo,
+          tabBarInactiveTintColor: colors.muted,
+          tabBarLabelStyle: styles.label,
+          tabBarItemStyle: styles.item,
+          tabBarStyle: [
+            styles.bar,
+            {
+              borderTopColor: colors.border,
+              backgroundColor: Platform.OS === "android" ? barBackground : "transparent",
+            },
+          ],
+          tabBarBackground: () => (
+            <BlurView
+              intensity={isDark ? 16 : 20}
+              tint={isDark ? "dark" : "light"}
+              style={[StyleSheet.absoluteFill, { backgroundColor: barBackground }]}
+            />
+          ),
+          tabBarIcon: ({ color, focused }) => {
+            const icon = ICONS[route.name] || { active: "ellipse", inactive: "ellipse-outline" };
+            return (
+              <View style={styles.iconArea}>
+                <Ionicons name={focused ? icon.active : icon.inactive} size={21} color={color} />
+                <View
+                  style={[
+                    styles.activeDot,
+                    {
+                      backgroundColor: focused ? colors.saffron : "transparent",
+                    },
+                  ]}
+                />
+              </View>
+            );
+          },
+        })}
+      >
+        <Tabs.Screen name="index" options={{ title: "Home" }} />
         <Tabs.Screen name="matches" options={{ title: "Matches" }} />
+        <Tabs.Screen name="plan" options={{ title: "Trips" }} />
         <Tabs.Screen name="messages" options={{ title: "Chats" }} />
-        <Tabs.Screen name="plan" options={{ title: "Plan" }} />
-        <Tabs.Screen name="games" options={{ title: "Play" }} />
         <Tabs.Screen name="profile" options={{ title: "Profile" }} />
+
+        {/* Time-pass stays available as a destination, but it is not important
+            enough to compete with the core travel loop in primary navigation. */}
+        <Tabs.Screen name="games" options={{ href: null }} />
       </Tabs>
-      <ExperienceDock />
     </View>
   );
 }
 
-const styles = StyleSheet.create({ iconWrap: { padding: 6, borderRadius: RADIUS.pill } });
+const styles = StyleSheet.create({
+  bar: {
+    position: "absolute",
+    height: 72,
+    paddingTop: 7,
+    paddingBottom: Platform.OS === "ios" ? 8 : 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  item: {
+    paddingVertical: 2,
+  },
+  label: {
+    fontSize: 10,
+    fontWeight: "700",
+    marginTop: 0,
+  },
+  iconArea: {
+    minWidth: 34,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  activeDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    marginTop: 3,
+  },
+});
