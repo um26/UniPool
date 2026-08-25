@@ -14,25 +14,27 @@ from starlette.middleware.cors import CORSMiddleware
 
 from config.database import db
 from routes import (
+    admin_router,
     auth_router,
+    compat_router,
+    games_router,
+    matches_router,
+    messages_router,
     pools_router,
     profile_router,
     requests_router,
-    messages_router,
-    admin_router,
-    games_router,
-    matches_router,
     users_router,
-    compat_router,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("unipool")
 
+API_VERSION = "1.2.0"
+
 app = FastAPI(
     title="UniPool API",
     description="Backend API for UniPool - University Carpooling Platform",
-    version="1.1.0",
+    version=API_VERSION,
 )
 
 app.add_middleware(
@@ -63,14 +65,39 @@ async def root():
     return {
         "app": "UniPool",
         "status": "ok",
-        "version": "1.1.0",
+        "version": API_VERSION,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
+@app.get("/health")
+async def health():
+    database = "ok"
+    try:
+        await db.command("ping")
+    except Exception:
+        database = "degraded"
+    return {
+        "app": "UniPool",
+        "status": "ok" if database == "ok" else "degraded",
+        "database": database,
+        "version": API_VERSION,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _explicit_seed_admin(email: str, username: str, password: str) -> bool:
+    if not (email and username and password):
+        return False
+    return (email, username, password) != (
+        "admin@unipool.app",
+        "admin",
+        "securepassword123",
+    )
+
+
 @app.on_event("startup")
 async def startup_event():
-    """Create the indexes required by active UniPool product flows."""
     logger.info("Starting UniPool application...")
     try:
         await db.users.create_index("email", unique=True)
@@ -101,22 +128,29 @@ async def startup_event():
         from config.settings import SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD, SEED_ADMIN_USERNAME
         from helpers.auth_helper import _hash_password
 
-        existing_admin = await db.users.find_one({"username": SEED_ADMIN_USERNAME}, {"_id": 0})
-        if not existing_admin:
-            admin_user_id = f"user_{__import__('uuid').uuid4().hex[:12]}"
-            await db.users.insert_one({
-                "user_id": admin_user_id,
-                "email": SEED_ADMIN_EMAIL,
-                "username": SEED_ADMIN_USERNAME,
-                "name": "BB Admin",
-                "picture": None,
-                "password_hash": _hash_password(SEED_ADMIN_PASSWORD),
-                "gender": None,
-                "phone": None,
-                "is_admin_override": True,
-                "created_at": datetime.now(timezone.utc),
-                "last_login": None,
-            })
+        if _explicit_seed_admin(SEED_ADMIN_EMAIL, SEED_ADMIN_USERNAME, SEED_ADMIN_PASSWORD):
+            existing_admin = await db.users.find_one(
+                {"$or": [{"username": SEED_ADMIN_USERNAME}, {"email": SEED_ADMIN_EMAIL.lower()}]},
+                {"_id": 0},
+            )
+            if not existing_admin:
+                admin_user_id = f"user_{__import__('uuid').uuid4().hex[:12]}"
+                await db.users.insert_one({
+                    "user_id": admin_user_id,
+                    "email": SEED_ADMIN_EMAIL.lower(),
+                    "username": SEED_ADMIN_USERNAME,
+                    "name": "UniPool Admin",
+                    "picture": None,
+                    "password_hash": _hash_password(SEED_ADMIN_PASSWORD),
+                    "gender": None,
+                    "phone": None,
+                    "is_admin_override": True,
+                    "created_at": datetime.now(timezone.utc),
+                    "last_login": None,
+                })
+        else:
+            logger.warning("Admin seed skipped: configure explicit credentials instead of the historical demo defaults.")
+
         logger.info("UniPool database indexes ready")
     except Exception as exc:
         logger.exception("UniPool startup initialization failed: %s", exc)
