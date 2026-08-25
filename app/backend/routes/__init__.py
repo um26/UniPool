@@ -1,9 +1,5 @@
-"""
-Routes package for UniPool backend.
-Exports all API route routers.
-"""
+"""Routes package for the UniPool backend."""
 
-# Import from submodules to make them available at package level
 from .auth import router as auth_router
 from .pools import router as pools_router
 from .profile import router as profile_router
@@ -13,6 +9,7 @@ from .admin import router as admin_router
 from .games import router as games_router
 from .matches import router as matches_router
 from .users import router as users_router
+from .compat import router as compat_router
 
 __all__ = [
     "auth_router",
@@ -23,5 +20,6 @@ __all__ = [
     "admin_router",
     "games_router",
     "matches_router",
-    "users_router"
+    "users_router",
+    "compat_router",
 ]
