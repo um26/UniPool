@@ -187,7 +187,7 @@ export default function HomeFeed() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.indigo} />}
       ListHeaderComponent={top}
       ListEmptyComponent={<View style={styles.stateCard}>
-        <View style={styles.stateIcon}><Ionicons name="route-outline" size={25} color={colors.indigo} /></View>
+        <View style={styles.stateIcon}><Ionicons name="navigate-outline" size={25} color={colors.indigo} /></View>
         <Text style={styles.stateTitle}>{search || filter !== "All" ? "No rides match that filter" : "No open rides yet"}</Text>
         <Text style={styles.stateText}>{search || filter !== "All" ? "Try another route or reset the filters." : "Post your journey and UniPool will start looking for compatible travellers."}</Text>
         {!search && filter === "All" ? <Pressable onPress={() => router.push("/post-request")} style={styles.retryButton}><Ionicons name="add" size={16} color="#fff" /><Text style={styles.retryText}>Post a trip</Text></Pressable> : null}
