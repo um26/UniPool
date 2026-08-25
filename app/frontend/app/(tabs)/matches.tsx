@@ -19,7 +19,8 @@ type Pool = {
   pool_id: string; user_id: string; user_name: string; user_email: string;
   from_location: string; to_location: string; travel_datetime: string;
   companions: number; notes?: string | null; match_score?: number; match_label?: string;
-  match_time_delta_minutes?: number; user_rating_avg?: number | null; user_rating_count?: number;
+  match_time_delta_minutes?: number; match_reasons?: string[];
+  user_rating_avg?: number | null; user_rating_count?: number;
   user_badges?: { id: string; label: string; icon: string }[];
   conversation_id?: string; conversation_name?: string;
 };
@@ -196,6 +197,7 @@ export default function MatchesScreen() {
             <View style={styles.metaItem}><Ionicons name="time-outline" size={14} color={colors.muted} /><Text style={styles.metaText}>{fmtWhen(item.travel_datetime)}</Text></View>
             {item.match_time_delta_minutes != null ? <View style={styles.metaItem}><Ionicons name="swap-horizontal-outline" size={14} color={colors.muted} /><Text style={styles.metaText}>{item.match_time_delta_minutes} min apart</Text></View> : null}
           </View>
+          {item.match_reasons?.length ? <View style={styles.reasons}>{item.match_reasons.map((reason) => <View key={reason} style={styles.reasonChip}><Ionicons name="checkmark-circle-outline" size={13} color={colors.indigo} /><Text style={styles.reasonText}>{reason}</Text></View>)}</View> : null}
           {item.notes ? <Text style={styles.notes} numberOfLines={2}>{item.notes}</Text> : null}
           <Pressable onPress={() => openTripChat(item, item.user_id, item.user_name)} style={styles.primaryAction}><Ionicons name="chatbubbles-outline" size={17} color="#fff" /><Text style={styles.primaryActionText}>{item.conversation_id ? "Open trip chat" : "Start trip chat"}</Text></Pressable>
         </View>;
@@ -222,7 +224,7 @@ const makeStyles = (colors: any) => StyleSheet.create({
   headerWrap: { width: "100%" },
   headingRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: SPACING.xl },
   headingIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border },
-  title: { color: colors.onSurface, fontSize: FONT["2xl"], fontWeight: "850", fontFamily: FONT_DISPLAY },
+  title: { color: colors.onSurface, fontSize: FONT["2xl"], fontWeight: "800", fontFamily: FONT_DISPLAY },
   sub: { color: colors.muted, marginTop: 3, fontSize: FONT.base },
   warning: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, borderRadius: RADIUS.md, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border, marginBottom: SPACING.lg },
   warningText: { color: colors.onSurface2, fontSize: 12, lineHeight: 17, flex: 1 },
@@ -239,7 +241,7 @@ const makeStyles = (colors: any) => StyleSheet.create({
   scorePill: { flexDirection: "row", alignItems: "baseline", gap: 6, backgroundColor: colors.cream, borderRadius: RADIUS.pill, paddingHorizontal: 10, paddingVertical: 6 },
   score: { color: colors.onCream, fontSize: 14, fontWeight: "900" },
   scoreLabel: { color: colors.onCream, fontSize: 11, fontWeight: "700" },
-  personName: { color: colors.onSurface, fontSize: FONT.xl, fontWeight: "850", fontFamily: FONT_DISPLAY },
+  personName: { color: colors.onSurface, fontSize: FONT.xl, fontWeight: "800", fontFamily: FONT_DISPLAY },
   badges: { marginTop: 5, marginBottom: 12 },
   routeBox: { backgroundColor: colors.surface2, borderRadius: RADIUS.md, padding: 13, marginTop: 2 },
   routeLine: { flexDirection: "row", alignItems: "center", gap: 10 },
@@ -251,14 +253,17 @@ const makeStyles = (colors: any) => StyleSheet.create({
   matchMeta: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 10 },
   metaItem: { flexDirection: "row", alignItems: "center", gap: 5 },
   metaText: { color: colors.muted, fontSize: 12 },
+  reasons: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginTop: 11 },
+  reasonChip: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.surface2, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 8, paddingVertical: 5 },
+  reasonText: { color: colors.onSurface2, fontSize: 10, fontWeight: "700" },
   notes: { color: colors.onSurface2, lineHeight: 18, fontSize: 12, marginTop: 10 },
   actions: { flexDirection: "row", gap: 8, marginTop: 13 },
   primaryAction: { minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, backgroundColor: colors.indigo, borderRadius: RADIUS.pill, paddingHorizontal: 16, paddingVertical: 10, marginTop: 13 },
-  primaryActionText: { color: "#fff", fontWeight: "850", fontSize: 13 },
+  primaryActionText: { color: "#fff", fontWeight: "800", fontSize: 13 },
   iconAction: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 21, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, marginTop: 13 },
   empty: { alignItems: "center", paddingHorizontal: SPACING.xl, paddingVertical: 60, maxWidth: 520, alignSelf: "center" },
   emptyIcon: { width: 54, height: 54, borderRadius: 18, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border },
-  emptyTitle: { color: colors.onSurface, fontSize: FONT.xl, fontWeight: "850", marginTop: 14, textAlign: "center" },
+  emptyTitle: { color: colors.onSurface, fontSize: FONT.xl, fontWeight: "800", marginTop: 14, textAlign: "center" },
   emptySub: { color: colors.muted, fontSize: 13, lineHeight: 20, textAlign: "center", marginTop: 6 },
   errorState: { flex: 1, maxWidth: 520, alignSelf: "center", alignItems: "center", justifyContent: "center", padding: SPACING.xl },
   errorIcon: { width: 54, height: 54, borderRadius: 18, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border },
