@@ -56,7 +56,7 @@ export const api = {
   adminDeletePool: (id: string) => req(`/admin/pools/${id}`, { method: "DELETE" }),
   sendMessage: (to_user_id: string, text: string, pool_id?: string) =>
     req("/messages", { method: "POST", body: JSON.stringify({ to_user_id, text, pool_id }) }),
-  getThread: (otherUserId: string) => req(`/messages/thread/${otherUserId}`),
+  getThread: (otherUserId: string) => req(`/messages/${otherUserId}`),
   listConversations: () => req("/messages/conversations"),
   sendTyping: (to_user_id: string) => req("/messages/typing", { method: "POST", body: JSON.stringify({ to_user_id }) }),
   getTyping: (otherUserId: string) => req(`/messages/typing/${otherUserId}`),
@@ -86,8 +86,8 @@ export const api = {
   submitReport: (reportedUserId: string, reason: string, details?: string, poolId?: string) =>
     req("/reports", { method: "POST", body: JSON.stringify({ reported_user_id: reportedUserId, reason, details, pool_id: poolId }) }),
   verifyCollegeIdStart: (collegeEmail: string) => req("/profile/verify-college-id/start", { method: "POST", body: JSON.stringify({ college_email: collegeEmail }) }),
-  verifyCollegeIdConfirm: (code: string) => req("/profile/verify-college-id/confirm", { method: "POST", body: JSON.stringify({ code }) }),
+  verifyCollegeIdConfirm: (code: string) => req("/profile/verify-college-id/confirm", { method: "POST", body: JSON.stringify({ code })),
   getGroupThread: (conversationId: string) => req(`/messages/group/${conversationId}`),
   sendGroupMessage: (conversationId: string, text: string) =>
-    req(`/messages/group/${conversationId}`, { method: "POST", body: JSON.stringify({ text }) }),
+    req(`/messages/group/${conversationId}`, { method: "POST", body: JSON.stringify({ text })),
 };
