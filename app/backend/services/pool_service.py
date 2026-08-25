@@ -97,6 +97,7 @@ async def create_pool(user: Dict[str, Any], body: PoolRequestCreate) -> Dict[str
         "companions": body.companions,
         "luggage": body.luggage,
         "notes": body.notes,
+        "trip_mode": body.trip_mode,
         "status": "open",
         "created_at": _now_utc(),
         "confirmed_travelers": [],
@@ -162,9 +163,11 @@ async def list_pools(user: Dict[str, Any]) -> List[Dict[str, Any]]:
     if blocked_ids:
         query["user_id"] = {"$nin": list(blocked_ids)}
 
-    # Fetch and sort pools
-    cursor = db.pools.find(query, {"_id": 0}).sort("travel_datetime", 1)
+    # Fetch candidates, then rank them by route/time/preferences/trust.
+    cursor = db.pools.find(query, {"_id": 0})
     results = await cursor.to_list(200)
+    from services.match_service import rank_pool_feed
+    results = await rank_pool_feed(user, results)
 
     # Enrich with ratings and badges
     results = await _enrich_with_ratings(results)
