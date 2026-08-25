@@ -16,6 +16,7 @@ class PoolRequestCreate(BaseModel):
     companions: int = 0
     luggage: Optional[str] = None
     notes: Optional[str] = None
+    trip_mode: bool = False
 
 class PoolRequestUpdate(BaseModel):
     """Request to update an existing pool"""
@@ -26,6 +27,7 @@ class PoolRequestUpdate(BaseModel):
     companions: Optional[int] = None
     luggage: Optional[str] = None
     notes: Optional[str] = None
+    trip_mode: Optional[bool] = None
 
 # MongoDB document representation (for internal use)
 class PoolDocument:
@@ -59,6 +61,7 @@ class PoolResponse(BaseModel):
     companions: int
     luggage: Optional[str] = None
     notes: Optional[str] = None
+    trip_mode: bool = False
     status: str = "open"  # "open" | "closed"
     created_at: datetime
     user_rating_avg: Optional[float] = None
