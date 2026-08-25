@@ -1,7 +1,5 @@
 """College ID verification helper functions."""
 
-import secrets
-from datetime import datetime, timezone
 from typing import Optional
 from config.settings import DEFAULT_VERIFIED_SUFFIXES, VERIFIED_EMAIL_DOMAINS
 from config.database import db
@@ -22,17 +20,62 @@ def _decode_roll_number(local_part: str) -> Optional[dict]:
     return decode_roll_number(local_part)
 
 
+async def sync_user_college_profile(user: dict) -> dict:
+    """Re-decode verified academic identity from the authoritative mapping.
+
+    Older UniPool builds persisted incorrect branch labels. A verified user's
+    roll number is the source of truth, so normal auth/session reads repair the
+    stored fields automatically instead of requiring the student to re-verify.
+    Unknown branch codes are never silently accepted.
+    """
+    if not user or not user.get("college_verified"):
+        return user
+
+    roll = (user.get("roll_number") or "").strip()
+    if not roll:
+        college_email = (user.get("college_email") or "").strip()
+        if "@" in college_email:
+            roll = college_email.split("@", 1)[0]
+    if not roll:
+        return user
+
+    decoded = decode_roll_number(roll)
+    if not decoded:
+        return user
+
+    fields = {
+        "roll_number": decoded["roll_number"],
+        "school_code": decoded.get("school_code"),
+        "school_name": decoded.get("school_name"),
+        "batch_year": decoded.get("batch_year"),
+        "degree_level_code": decoded.get("degree_level_code"),
+        "degree_level_name": decoded.get("degree_level_name"),
+        "branch_code": decoded.get("branch_code"),
+        "branch_name": decoded.get("branch_name"),
+        "program_name": decoded.get("program_name"),
+        "serial": decoded.get("serial"),
+    }
+    changed = any(user.get(key) != value for key, value in fields.items())
+    if changed and user.get("user_id"):
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": fields})
+    return {**user, **fields}
+
+
 async def _college_info_map(user_ids: list) -> dict:
     if not user_ids:
         return {}
-    cursor = db.users.find(
+    users = await db.users.find(
         {"user_id": {"$in": user_ids}, "college_verified": True},
         {"_id": 0, "user_id": 1, "roll_number": 1, "school_code": 1,
          "school_name": 1, "degree_level_code": 1, "degree_level_name": 1,
          "branch_code": 1, "branch_name": 1, "program_name": 1,
          "batch_year": 1, "serial": 1}
-    )
-    return {u["user_id"]: u async for u in cursor}
+    ).to_list(len(user_ids))
+    result = {}
+    for user in users:
+        synced = await sync_user_college_profile({**user, "college_verified": True})
+        result[user["user_id"]] = synced
+    return result
 
 
 def _compute_badges(college_verified: bool, rating_avg: Optional[float],
@@ -40,7 +83,7 @@ def _compute_badges(college_verified: bool, rating_avg: Optional[float],
     badges = []
     if college_verified:
         badges.append({"id": "verified", "label": "Verified Student", "icon": "shield-checkmark"})
-    if rating_avg is not None and rating_avg >= 8.5 and rating_count >= 3:
+    if rating_avg is not None and rating_avg >= 4.25 and rating_count >= 3:
         badges.append({"id": "top_rated", "label": "Top Rated", "icon": "trophy"})
     if rides_completed >= 5:
         badges.append({"id": "frequent", "label": "Frequent Traveller", "icon": "flame"})
@@ -70,23 +113,18 @@ async def _attach_badges(items: list, id_field: str, email_field: str,
                          roll_field: Optional[str] = None) -> list:
     if not items:
         return items
-    user_ids = [item[id_field] for item in items]
-    emails = [item[email_field] for item in items]
+    user_ids = [item[id_field] for item in items if item.get(id_field)]
     college_map = await _college_info_map(user_ids)
     rides_map = await _rides_completed_map(user_ids)
-    for item, email in zip(items, emails):
-        college_verified = (
-            item.get("college_verified", False)
-            or _is_verified_domain(email)
-            or (roll_field and item.get(roll_field) and
-                _decode_roll_number(item[roll_field].split("@")[0].lower()) is not None)
-        )
+    for item in items:
+        uid = item.get(id_field)
+        email = item.get(email_field, "")
+        college_info = college_map.get(uid)
+        college_verified = bool(college_info) or item.get("college_verified", False) or _is_verified_domain(email)
         item[out_field] = _compute_badges(
             college_verified, item.get(avg_field), item.get(count_field, 0),
-            rides_map.get(item[id_field], 0)
+            rides_map.get(uid, 0)
         )
-        if college_verified and roll_field and item.get(roll_field):
-            decoded = _decode_roll_number(item[roll_field].split("@")[0].lower())
-            if decoded:
-                item.update({k: v for k, v in decoded.items() if k != "roll_number"})
+        if roll_field and college_info:
+            item[roll_field] = college_info
     return items
