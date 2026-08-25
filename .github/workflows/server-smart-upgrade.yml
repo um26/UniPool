@@ -1,0 +1,48 @@
+name: Patch active UniPool API
+on:
+  push:
+    branches: [main]
+
+jobs:
+  patch-server:
+    if: ${{ !startsWith(github.event.head_commit.message, '[server-smart]') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Patch active server
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          python - <<'PY'
+          import os,json,base64,urllib.request
+          repo=os.environ['REPO']; token=os.environ['GH_TOKEN']; api=f'https://api.github.com/repos/{repo}/contents/'
+          headers={'Authorization':f'Bearer {token}','Accept':'application/vnd.github+json','User-Agent':'unipool-server-smart'}
+          def get(path):
+              req=urllib.request.Request(api+path,headers=headers)
+              with urllib.request.urlopen(req) as r:o=json.load(r)
+              return base64.b64decode(o['content']).decode(),o['sha']
+          def put(path,text,sha,msg):
+              body=json.dumps({'message':msg,'content':base64.b64encode(text.encode()).decode(),'sha':sha,'branch':'main'}).encode()
+              req=urllib.request.Request(api+path,data=body,headers={**headers,'Content-Type':'application/json'},method='PUT')
+              with urllib.request.urlopen(req):pass
+          def patch(path,repls,msg):
+              text,sha=get(path)
+              for old,new in repls:
+                  if old not in text:raise SystemExit(f'anchor missing in {path}: {old[:120]!r}')
+                  text=text.replace(old,new,1)
+              put(path,text,sha,msg)
+          patch('app/backend/server.py',[
+              ('class PoolRequestCreate(BaseModel):\n    from_location: str\n    to_location: str\n    travel_datetime: datetime  # ISO8601\n    gender_preference: str = "any"  # "any" | "same"\n    companions: int = 0\n    luggage: Optional[str] = None\n    notes: Optional[str] = None','class PoolRequestCreate(BaseModel):\n    from_location: str\n    to_location: str\n    travel_datetime: datetime  # ISO8601\n    gender_preference: str = "any"  # "any" | "same"\n    companions: int = 0\n    luggage: Optional[str] = None\n    notes: Optional[str] = None\n    trip_mode: bool = False'),
+              ('class PoolRequestUpdate(BaseModel):\n    from_location: Optional[str] = None\n    to_location: Optional[str] = None\n    travel_datetime: Optional[datetime] = None\n    gender_preference: Optional[str] = None\n    companions: Optional[int] = None\n    luggage: Optional[str] = None\n    notes: Optional[str] = None','class PoolRequestUpdate(BaseModel):\n    from_location: Optional[str] = None\n    to_location: Optional[str] = None\n    travel_datetime: Optional[datetime] = None\n    gender_preference: Optional[str] = None\n    companions: Optional[int] = None\n    luggage: Optional[str] = None\n    notes: Optional[str] = None\n    trip_mode: Optional[bool] = None'),
+              ('class PoolRequestOut(BaseModel):\n    pool_id: str\n    user_id: str\n    user_name: str\n    user_email: EmailStr\n    user_gender: Optional[str] = None\n    from_location: str\n    to_location: str\n    travel_datetime: datetime\n    gender_preference: str\n    companions: int\n    luggage: Optional[str] = None\n    notes: Optional[str] = None\n    status: str = "open"','class PoolRequestOut(BaseModel):\n    pool_id: str\n    user_id: str\n    user_name: str\n    user_email: EmailStr\n    user_gender: Optional[str] = None\n    from_location: str\n    to_location: str\n    travel_datetime: datetime\n    gender_preference: str\n    companions: int\n    luggage: Optional[str] = None\n    notes: Optional[str] = None\n    trip_mode: bool = False\n    status: str = "open"'),
+              ('        "luggage": body.luggage,\n        "notes": body.notes,\n        "status": "open",','        "luggage": body.luggage,\n        "notes": body.notes,\n        "trip_mode": body.trip_mode,\n        "status": "open",'),
+              ('    results = await cursor.to_list(200)\n    results = await _enrich_with_ratings(results)','    results = await cursor.to_list(200)\n    from services.match_service import rank_pool_feed\n    results = await rank_pool_feed(user, results)\n    results = await _enrich_with_ratings(results)'),
+              ('    user = await get_current_user(authorization)\n    my = await db.pools.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(100)','    user = await get_current_user(authorization)\n    from services.match_service import smart_matches\n    return await smart_matches(user["user_id"])\n    my = await db.pools.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(100)'),
+          ],'[server-smart] activate real match scoring, smart feed, and trip mode')
+          wf='.github/workflows/server-smart-upgrade.yml'
+          _,sha=get(wf)
+          req=urllib.request.Request(api+wf,data=json.dumps({'message':'[server-smart] remove one-time server patch workflow','sha':sha,'branch':'main'}).encode(),headers={**headers,'Content-Type':'application/json'},method='DELETE')
+          with urllib.request.urlopen(req):pass
+          PY
