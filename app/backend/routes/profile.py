@@ -1,22 +1,30 @@
 """Profile, ratings, safety and university-verification routes."""
 
-from fastapi import APIRouter, HTTPException, Header
-from typing import List, Optional
 import logging
+from datetime import datetime, timezone
+from typing import List, Optional
 
-from services.user_service import (
-    update_profile, submit_rating, get_user_ratings, can_rate,
-    block_user, unblock_user, list_blocked,
-    start_college_verification, confirm_college_verification,
-)
-from services.auth_service import get_current_user as get_user_from_session
+from fastapi import APIRouter, Header, HTTPException
+
+from config.database import db
 from helpers.college_helper import sync_user_college_profile
-from models.user import UserProfileUpdate, CollegeVerifyStart, CollegeVerifyConfirm
 from models.auth import RatingCreate
 from models.response import BaseResponse
+from models.user import CollegeVerifyConfirm, CollegeVerifyStart, UserProfileUpdate
+from services.auth_service import get_current_user as get_user_from_session
+from services.user_service import (
+    block_user,
+    can_rate,
+    confirm_college_verification,
+    get_user_ratings,
+    list_blocked,
+    start_college_verification,
+    submit_rating,
+    unblock_user,
+    update_profile,
+)
 
 logger = logging.getLogger("unipool.routes.profile")
-# Public paths intentionally match the established frontend API contract.
 router = APIRouter(tags=["profile"])
 
 
@@ -24,6 +32,29 @@ async def current_user(authorization: Optional[str]) -> dict:
     if not authorization or not authorization.lower().startswith("bearer "):
         return None
     return await get_user_from_session(authorization)
+
+
+def _aware(dt: datetime) -> datetime:
+    if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+async def _assert_rating_eligible(rater_user_id: str, rated_user_id: str, pool_id: Optional[str]) -> dict:
+    if rater_user_id == rated_user_id:
+        raise HTTPException(status_code=400, detail="You can't rate yourself")
+    if not pool_id:
+        raise HTTPException(status_code=400, detail="Choose the completed UniPool ride you shared with this traveller")
+    pool = await db.pools.find_one({"pool_id": pool_id}, {"_id": 0})
+    if not pool:
+        raise HTTPException(status_code=404, detail="Trip not found")
+    participants = {pool.get("user_id")}
+    participants.update(t.get("user_id") for t in pool.get("confirmed_travelers", []) if t.get("user_id"))
+    if rater_user_id not in participants or rated_user_id not in participants:
+        raise HTTPException(status_code=403, detail="You can only rate someone you travelled with on this trip")
+    if _aware(pool["travel_datetime"]) > datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="You can rate this traveller after the trip has happened")
+    return pool
 
 
 @router.patch("/profile", response_model=dict)
@@ -49,12 +80,16 @@ async def submit_rating_endpoint(body: RatingCreate, authorization: Optional[str
     if not user:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
     try:
+        await _assert_rating_eligible(user["user_id"], body.rated_user_id, body.pool_id)
         return await submit_rating(user["user_id"], body)
+    except HTTPException:
+        raise
     except Exception as e:
         message = str(e)
         if "rate yourself" in message.lower() or "between" in message.lower() or "not found" in message.lower():
             raise HTTPException(status_code=400, detail=message)
-        raise HTTPException(status_code=500, detail=message)
+        logger.exception("Submit rating failed")
+        raise HTTPException(status_code=500, detail="Could not submit rating")
 
 
 @router.get("/ratings/user/{user_id}", response_model=dict)
