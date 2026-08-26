@@ -16,7 +16,7 @@ from config.database import db
 from config.settings import IST, VAPID_PUBLIC_KEY
 from models.auth import PushSubscribe, ReportCreate
 from models.response import BaseResponse
-from services.admin_service import get_trivia_questions
+from services.trivia_service import get_trivia_questions
 from services.auth_service import get_current_user
 
 router = APIRouter(tags=["compatibility"])
