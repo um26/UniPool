@@ -66,9 +66,9 @@
     "pill": 999
   },
   "navigation": {
-    "pattern": "bottom_tabs",
-    "primary_items": ["Home", "Matches", "Trips", "Chats", "Profile"],
-    "rule": "Do not add another primary tab unless it is central to Discover → Match → Request → Confirm → Trip Chat → Travel → Rate."
+    "pattern": "responsive_tabs_and_desktop_top_nav",
+    "primary_items": ["Home", "Matches", "Explore", "Chats", "Profile"],
+    "rule": "Do not add another primary tab unless it is central to Discover → Match → Request → Confirm → Trip Chat → Travel → Rate. Time-pass stays a secondary shortcut, not a sixth primary destination."
   },
   "motion": {
     "duration_fast_ms": 140,
@@ -108,8 +108,8 @@
       "layout": "Show backend-ranked compatibility with clear reasons, time overlap, verified identity and one next action. Do not invent frontend scores."
     },
     {
-      "name": "Trips",
-      "layout": "Treat confirmed journeys as the centre of coordination: countdown, meeting point, travellers, group chat, route and safety. Trip Mode belongs here as persisted trip state."
+      "name": "Explore",
+      "layout": "Use Explore for upcoming trips and secondary travel utilities. Keep confirmed journeys easy to reach, and keep route demand, Student ID and Time-pass subordinate to the journey lifecycle."
     },
     {
       "name": "PoolCreation",
@@ -121,7 +121,7 @@
     },
     {
       "name": "TimePass",
-      "layout": "Keep as a secondary destination for waiting time, not a primary navigation item. Games must support both themes."
+      "layout": "Keep Time-pass secondary and lightweight. Prefer short travel-knowledge, clue and word games such as Travel Trivia, Word Scramble, Airport Codes, Destination Detective and Travel Reveal. Avoid heavy artwork and reflex arcade mini-games. Trivia rounds should avoid recently served questions and draw from a broad, stable bank. All games must support both themes."
     }
   ],
   "interaction_rules": [
