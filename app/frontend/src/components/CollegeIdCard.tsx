@@ -3,12 +3,115 @@ import { View, Text, StyleSheet, Platform, Pressable, Modal, ScrollView, TextInp
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { COLORS, RADIUS, FONT, FONT_DISPLAY, SPACING } from "@/src/theme";
+import { RADIUS, FONT, FONT_DISPLAY, SPACING } from "@/src/theme";
 import { useTheme } from "@/src/theme_context/ThemeContext";
 import { api } from "@/src/api/client";
 
 const MONO = Platform.select({ ios: "Courier", android: "monospace", default: "monospace" });
 const isWeb = Platform.OS === "web";
+
+const SCHOOL_CODES: Record<string, string> = {
+  se: "School of Engineering",
+  sm: "School of Management",
+  sl: "School of Law",
+};
+
+const DEGREE_LEVEL_NAMES: Record<string, string> = {
+  u: "Undergraduate",
+  m: "Masters",
+  p: "PhD",
+};
+
+const BRANCH_CODES: Record<string, string> = {
+  aee: "Aerospace Engineering",
+  ari: "Artificial Intelligence",
+  mbt: "5-Year Integrated M.Tech - Biotechnology",
+  mcs: "5-Year Integrated M.Tech - Computer Science and Engineering",
+  bit: "Biotechnology",
+  cab: "Computational Biology",
+  cie: "Civil Engineering",
+  cam: "Computational Mathematics",
+  cse: "Computer Science and Engineering",
+  dsc: "Data Science",
+  ece: "Electronics and Communication Engineering",
+  ecm: "Electronics and Computer Engineering",
+  mee: "Mechanical Engineering",
+  mec: "Mechatronics",
+  nan: "Nano-Technology",
+  vls: "VLSI Design and Technology",
+  inm: "Infrastructure Management",
+  bef: "Applied Economics and Finance",
+  efb: "Entrepreneurship and Family Business",
+  bba: "Computational Business Analytics",
+  bbd: "Digital Technologies",
+};
+
+type AcademicIdentity = {
+  schoolName: string;
+  batchYear: number;
+  degreeLevelName: string;
+  branchName: string;
+};
+
+function decodeAcademicIdentity(value?: string | null): AcademicIdentity | null {
+  const roll = (value || "").trim().toLowerCase();
+  if (!roll) return null;
+
+  const lawIntegrated = roll.match(/^sl(\d{2})u(lbb|lba)$/);
+  if (lawIntegrated) {
+    return {
+      schoolName: SCHOOL_CODES.sl,
+      batchYear: 2000 + Number(lawIntegrated[1]),
+      degreeLevelName: "Undergraduate",
+      branchName: lawIntegrated[2] === "lbb" ? "BBA LLB" : "BA LLB",
+    };
+  }
+
+  const lawMasters = roll.match(/^sl(\d{2})mllb$/);
+  if (lawMasters) {
+    return {
+      schoolName: SCHOOL_CODES.sl,
+      batchYear: 2000 + Number(lawMasters[1]),
+      degreeLevelName: "Masters",
+      branchName: "Masters in Law",
+    };
+  }
+
+  const lawThreeYear = roll.match(/^sl(\d{2})(?:llba|ullb\d{3})$/);
+  if (lawThreeYear) {
+    return {
+      schoolName: SCHOOL_CODES.sl,
+      batchYear: 2000 + Number(lawThreeYear[1]),
+      degreeLevelName: "Undergraduate",
+      branchName: "LLB (3-year)",
+    };
+  }
+
+  const lawPhd = roll.match(/^sl(\d{2})plaw\d{3}$/);
+  if (lawPhd) {
+    return {
+      schoolName: SCHOOL_CODES.sl,
+      batchYear: 2000 + Number(lawPhd[1]),
+      degreeLevelName: "PhD",
+      branchName: "Law",
+    };
+  }
+
+  const match = roll.match(/^([a-z]{2})(\d{2})([ump])([a-z]+)(\d{3})$/);
+  if (!match) return null;
+  const [, schoolCode, yy, degreeCode, branchCode] = match;
+  const schoolName = SCHOOL_CODES[schoolCode];
+  const degreeLevelName = DEGREE_LEVEL_NAMES[degreeCode];
+  const branchName = BRANCH_CODES[branchCode];
+  if (!schoolName || !degreeLevelName || !branchName) return null;
+
+  return {
+    schoolName,
+    batchYear: 2000 + Number(yy),
+    degreeLevelName,
+    branchName,
+  };
+}
 
 type Props = {
   name: string;
@@ -36,8 +139,6 @@ export default function CollegeIdCard(props: Props) {
   const { colors, isDark } = useTheme();
   const modalStyles = useMemo(() => makeModalStyles(colors, isDark), [colors, isDark]);
 
-  // Web-only cursor-follow 3D tilt — computes rotation from pointer position
-  // relative to the card's bounding box.
   const onMouseMove = (e: any) => {
     if (!isWeb) return;
     const rect = e.currentTarget.getBoundingClientRect?.();
@@ -47,7 +148,6 @@ export default function CollegeIdCard(props: Props) {
     setTilt({ x: (py - 0.5) * -14, y: (px - 0.5) * 14 });
   };
   const onMouseLeave = () => setTilt({ x: 0, y: 0 });
-
   const webHandlers = isWeb ? { onMouseMove, onMouseLeave } as any : {};
 
   return (
@@ -92,7 +192,14 @@ export default function CollegeIdCard(props: Props) {
   );
 }
 
-function IdCardFace({ name, rollNumber, schoolName, branchName, batchYear, degreeLevelName, compact }: Props & { compact?: boolean }) {
+function IdCardFace({ name, rollNumber, schoolName, branchName, batchYear, degreeLevelName, collegeEmail, compact }: Props & { compact?: boolean }) {
+  const verifiedRoll = collegeEmail?.includes("@") ? collegeEmail.split("@", 1)[0] : rollNumber;
+  const decoded = decodeAcademicIdentity(verifiedRoll) || decodeAcademicIdentity(rollNumber);
+  const displaySchool = decoded?.schoolName || schoolName;
+  const displayBranch = decoded?.branchName || branchName;
+  const displayBatch = decoded?.batchYear || batchYear;
+  const displayLevel = decoded?.degreeLevelName || degreeLevelName;
+
   return (
     <View style={[styles.shadowLayer, compact && styles.shadowLayerCompact]}>
       <LinearGradient colors={["#283593", "#3949AB", "#F57F17"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.card}>
@@ -128,12 +235,12 @@ function IdCardFace({ name, rollNumber, schoolName, branchName, batchYear, degre
         <View style={styles.divider} />
 
         <View style={styles.detailsRow}>
-          <Detail label="School" value={schoolName} />
-          <Detail label="Batch" value={batchYear ? String(batchYear) : undefined} />
+          <Detail label="School" value={displaySchool} />
+          <Detail label="Batch" value={displayBatch ? String(displayBatch) : undefined} />
         </View>
         <View style={styles.detailsRow}>
-          <Detail label="Branch" value={branchName} />
-          <Detail label="Level" value={degreeLevelName} />
+          <Detail label="Branch" value={displayBranch} />
+          <Detail label="Level" value={displayLevel} />
         </View>
       </LinearGradient>
     </View>
