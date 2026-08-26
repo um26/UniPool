@@ -106,7 +106,6 @@ async function wakeBackend() {
   return wakePromise;
 }
 
-// Establish the network path to the API early on web. This does not block UI.
 if (typeof document !== "undefined" && BASE) {
   try {
     const origin = new URL(BASE).origin;
@@ -139,7 +138,12 @@ export const api = {
   closePool: (id: string) => mutate(`/pools/${id}/close`, { method: "PATCH" }),
   reopenPool: (id: string) => mutate(`/pools/${id}/reopen`, { method: "PATCH" }),
   deletePool: (id: string) => mutate(`/pools/${id}`, { method: "DELETE" }),
-  trivia: () => req("/trivia", {}, 60000),
+  trivia: (excludeIds: string[] = [], count = 8) => {
+    const params = new URLSearchParams();
+    if (excludeIds.length) params.set("exclude", excludeIds.join(","));
+    params.set("count", String(count));
+    return req(`/games/trivia?${params.toString()}`);
+  },
   adminStats: () => req("/admin/stats", {}, 10000),
   adminPools: () => req("/admin/pools", {}, 5000),
   adminDeletePool: (id: string) => mutate(`/admin/pools/${id}`, { method: "DELETE" }),
