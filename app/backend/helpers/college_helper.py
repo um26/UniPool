@@ -23,15 +23,21 @@ def _decode_roll_number(local_part: str) -> Optional[dict]:
 
 
 async def sync_user_college_profile(user: dict) -> dict:
-    """Repair verified academic identity from the authoritative roll mapping."""
+    """Repair verified academic identity from the authoritative roll mapping.
+
+    For a verified account, the verified college-email local part is the source
+    of truth for the roll number. Stored academic fields are treated as derived
+    cache only and are regenerated whenever they disagree with the decoder.
+    """
     if not user or not user.get("college_verified"):
         return user
 
-    roll = (user.get("roll_number") or "").strip()
+    roll = ""
+    college_email = (user.get("college_email") or "").strip().lower()
+    if "@" in college_email and college_email.split("@", 1)[1] == "mahindrauniversity.edu.in":
+        roll = college_email.split("@", 1)[0]
     if not roll:
-        college_email = (user.get("college_email") or "").strip()
-        if "@" in college_email:
-            roll = college_email.split("@", 1)[0]
+        roll = (user.get("roll_number") or "").strip()
     if not roll:
         return user
 
