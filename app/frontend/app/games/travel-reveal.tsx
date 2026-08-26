@@ -1,0 +1,192 @@
+import React, { useMemo, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import * as Haptics from "expo-haptics";
+
+import { FONT, RADIUS, SPACING } from "@/src/theme";
+import { useTheme } from "@/src/theme_context/ThemeContext";
+
+type Word = { answer: string; hint: string };
+
+const WORDS: Word[] = [
+  { answer: "UDAIPUR", hint: "Rajasthan's City of Lakes" },
+  { answer: "AMRITSAR", hint: "Home of the Golden Temple" },
+  { answer: "DARJEELING", hint: "Tea, hills and a Himalayan toy train" },
+  { answer: "RISHIKESH", hint: "Yoga and rafting on the Ganges" },
+  { answer: "PUDUCHERRY", hint: "French Quarter on India's southeast coast" },
+  { answer: "JODHPUR", hint: "The Blue City beneath Mehrangarh Fort" },
+  { answer: "JAISALMER", hint: "Golden sandstone in the Thar Desert" },
+  { answer: "MUNNAR", hint: "Kerala hill station famous for tea" },
+  { answer: "SRINAGAR", hint: "Houseboats and Dal Lake" },
+  { answer: "HAMPI", hint: "Boulder-strewn Vijayanagara ruins" },
+  { answer: "VARANASI", hint: "Ancient ghats along the Ganges" },
+  { answer: "MYSURU", hint: "Palace city known for Dasara" },
+  { answer: "GANGTOK", hint: "Capital of Sikkim" },
+  { answer: "SHILLONG", hint: "Capital of Meghalaya" },
+  { answer: "ITINERARY", hint: "Your plan for a journey" },
+  { answer: "BOARDING", hint: "What happens before your flight departs" },
+  { answer: "TERMINAL", hint: "Airport building for arrivals and departures" },
+  { answer: "PLATFORM", hint: "Where you wait for a train" },
+  { answer: "PASSPORT", hint: "Essential document for international travel" },
+  { answer: "BACKPACK", hint: "A travel bag carried on your shoulders" },
+  { answer: "COMPASS", hint: "Tool that points you north" },
+  { answer: "RUNWAY", hint: "Where aircraft take off and land" },
+  { answer: "JOURNEY", hint: "The trip from one place to another" },
+  { answer: "DESTINATION", hint: "The place you are travelling to" },
+];
+
+const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+const TOTAL_ROUNDS = 5;
+const MAX_MISSES = 6;
+
+function shuffled<T>(items: T[]) {
+  return [...items].sort(() => Math.random() - 0.5);
+}
+
+function hiddenWord(answer: string, guessed: Set<string>) {
+  return answer.split("").map((letter) => guessed.has(letter) ? letter : "_").join(" ");
+}
+
+export default function TravelReveal() {
+  const router = useRouter();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [rounds, setRounds] = useState<Word[]>(() => shuffled(WORDS).slice(0, TOTAL_ROUNDS));
+  const [index, setIndex] = useState(0);
+  const [guessed, setGuessed] = useState<Set<string>>(new Set());
+  const [misses, setMisses] = useState(0);
+  const [score, setScore] = useState(0);
+  const [status, setStatus] = useState<"playing" | "won" | "lost">("playing");
+  const [done, setDone] = useState(false);
+
+  const current = rounds[index];
+
+  const moveNext = () => {
+    if (index + 1 >= rounds.length) {
+      setDone(true);
+      return;
+    }
+    setIndex((value) => value + 1);
+    setGuessed(new Set());
+    setMisses(0);
+    setStatus("playing");
+  };
+
+  const guess = (letter: string) => {
+    if (status !== "playing" || guessed.has(letter)) return;
+    const next = new Set(guessed);
+    next.add(letter);
+    setGuessed(next);
+
+    if (!current.answer.includes(letter)) {
+      const nextMisses = misses + 1;
+      setMisses(nextMisses);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (nextMisses >= MAX_MISSES) {
+        setStatus("lost");
+        setTimeout(moveNext, 1300);
+      }
+      return;
+    }
+
+    Haptics.selectionAsync();
+    const complete = current.answer.split("").every((char) => next.has(char));
+    if (complete) {
+      setScore((value) => value + Math.max(1, MAX_MISSES - misses));
+      setStatus("won");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setTimeout(moveNext, 1300);
+    }
+  };
+
+  const restart = () => {
+    setRounds(shuffled(WORDS).slice(0, TOTAL_ROUNDS));
+    setIndex(0);
+    setGuessed(new Set());
+    setMisses(0);
+    setScore(0);
+    setStatus("playing");
+    setDone(false);
+  };
+
+  if (done) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.doneWrap}>
+          <View style={styles.doneIcon}><Ionicons name="key-outline" size={40} color={colors.saffron} /></View>
+          <Text style={styles.doneTitle}>{score} pts</Text>
+          <Text style={styles.doneSub}>{score >= 24 ? "Nearly every word revealed with room to spare." : score >= 15 ? "Strong word sense." : "Another round will sharpen the route."}</Text>
+          <Pressable onPress={restart} style={styles.primary}><Text style={styles.primaryText}>Play again</Text></Pressable>
+          <Pressable onPress={() => router.back()} style={styles.secondary}><Text style={styles.secondaryText}>Back to Time-pass</Text></Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const display = status === "lost" ? current.answer.split("").join(" ") : hiddenWord(current.answer, guessed);
+  const lives = MAX_MISSES - misses;
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.header}>
+        <Pressable onPress={() => router.back()} hitSlop={12}><Ionicons name="chevron-back" size={24} color={colors.onSurface} /></Pressable>
+        <Text style={styles.progress}>{index + 1} / {rounds.length}</Text>
+        <Text style={styles.progress}>{score} pts</Text>
+      </View>
+
+      <View style={styles.wordCard}>
+        <View style={styles.tagRow}><Ionicons name="text-outline" size={16} color={colors.saffron} /><Text style={styles.tag}>TRAVEL REVEAL</Text></View>
+        <Text style={styles.hint}>{current.hint}</Text>
+        <Text style={[styles.word, status === "lost" && { color: colors.error }]}>{display}</Text>
+        <View style={styles.ticketRow}>
+          {Array.from({ length: MAX_MISSES }).map((_, lifeIndex) => (
+            <Ionicons key={lifeIndex} name={lifeIndex < lives ? "ticket" : "ticket-outline"} size={18} color={lifeIndex < lives ? colors.saffron : colors.borderStrong} />
+          ))}
+        </View>
+        {status === "won" && <Text style={[styles.feedback, { color: colors.success }]}>Revealed · +{Math.max(1, MAX_MISSES - misses)} pts</Text>}
+        {status === "lost" && <Text style={[styles.feedback, { color: colors.error }]}>Out of tickets · {current.answer}</Text>}
+      </View>
+
+      <View style={styles.keyboard}>
+        {LETTERS.map((letter) => {
+          const used = guessed.has(letter);
+          const hit = used && current.answer.includes(letter);
+          const miss = used && !current.answer.includes(letter);
+          return (
+            <Pressable key={letter} onPress={() => guess(letter)} disabled={used || status !== "playing"} style={[styles.key, hit && styles.keyHit, miss && styles.keyMiss, status !== "playing" && !used && { opacity: 0.45 }]}>
+              <Text style={[styles.keyText, (hit || miss) && { color: "#fff" }]}>{letter}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const makeStyles = (colors: any) => StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.surface },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: SPACING.lg },
+  progress: { color: colors.muted, fontWeight: "800", fontSize: 12 },
+  wordCard: { marginHorizontal: SPACING.lg, borderRadius: RADIUS.xl, padding: SPACING.xl, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, alignItems: "center" },
+  tagRow: { flexDirection: "row", gap: 7, alignItems: "center", alignSelf: "flex-start" },
+  tag: { color: colors.saffron, fontSize: 10, fontWeight: "900", letterSpacing: 1 },
+  hint: { color: colors.muted, fontSize: 13, textAlign: "center", marginTop: 22 },
+  word: { color: colors.onSurface, fontSize: FONT.xl, fontWeight: "900", letterSpacing: 2.4, textAlign: "center", marginTop: 18, lineHeight: 34 },
+  ticketRow: { flexDirection: "row", gap: 6, marginTop: 22 },
+  feedback: { fontSize: 12, fontWeight: "900", marginTop: 12 },
+  keyboard: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.xl, flexDirection: "row", flexWrap: "wrap", gap: 7, justifyContent: "center" },
+  key: { width: 38, height: 42, borderRadius: 10, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
+  keyText: { color: colors.onSurface, fontWeight: "900", fontSize: 13 },
+  keyHit: { backgroundColor: colors.success, borderColor: colors.success },
+  keyMiss: { backgroundColor: colors.error, borderColor: colors.error },
+  doneWrap: { flex: 1, justifyContent: "center", alignItems: "center", padding: SPACING.xl },
+  doneIcon: { width: 78, height: 78, borderRadius: 39, backgroundColor: colors.cream, alignItems: "center", justifyContent: "center" },
+  doneTitle: { color: colors.onSurface, fontSize: 34, fontWeight: "900", marginTop: 18 },
+  doneSub: { color: colors.muted, textAlign: "center", maxWidth: 380, lineHeight: 20, marginTop: 6, marginBottom: 22 },
+  primary: { width: "100%", maxWidth: 400, backgroundColor: colors.indigo, borderRadius: RADIUS.pill, paddingVertical: 14, alignItems: "center" },
+  primaryText: { color: "#fff", fontWeight: "900" },
+  secondary: { width: "100%", maxWidth: 400, borderWidth: 1, borderColor: colors.border, borderRadius: RADIUS.pill, paddingVertical: 14, alignItems: "center", marginTop: 10 },
+  secondaryText: { color: colors.onSurface, fontWeight: "800" },
+});
