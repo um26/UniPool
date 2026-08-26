@@ -3,6 +3,7 @@ Authentication service.
 Contains business logic for user authentication, registration, and session management.
 """
 
+import asyncio
 import sys
 from pathlib import Path
 
@@ -22,6 +23,8 @@ from models.auth import GoogleSignIn
 from config.settings import GOOGLE_CLIENT_ID
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
+from cachecontrol import CacheControl
+import requests as requests_lib
 import logging
 import httpx
 from datetime import datetime, timezone, timedelta
@@ -30,12 +33,15 @@ from config.settings import TURNSTILE_SECRET_KEY
 logger = logging.getLogger("unipool.auth")
 
 IST = timezone(timedelta(hours=5, minutes=30))
+_GOOGLE_REQUEST = google_requests.Request(session=CacheControl(requests_lib.Session()))
+
 
 def _fmt_ist(dt: datetime) -> str:
     """Format stored datetimes as India Standard Time for notifications."""
     if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(IST).strftime("%d %b %Y, %I:%M %p IST")
+
 
 async def verify_turnstile(token: Optional[str], remote_ip: Optional[str]) -> bool:
     if not TURNSTILE_SECRET_KEY:
@@ -53,6 +59,7 @@ async def verify_turnstile(token: Optional[str], remote_ip: Optional[str]) -> bo
         logger.error("Turnstile verification failed: %s", exc)
         return False
 
+
 async def signup_user(body: SignupRequest) -> Dict[str, Any]:
     """
     Register a new user with email and password.
@@ -66,17 +73,14 @@ async def signup_user(body: SignupRequest) -> Dict[str, Any]:
     Raises:
         Exception: If email or username already exists
     """
-    # Check if email already exists
     if await db.users.find_one({"email": body.email.lower()}, {"_id": 0}):
         raise Exception("An account with this email already exists")
 
-    # Check if username already exists (if provided)
     username = (body.username or "").strip() or None
     if username:
         if await db.users.find_one({"username": username}, {"_id": 0}):
             raise Exception("That username is already taken")
 
-    # Create new user
     user_id = f"user_{__import__('uuid').uuid4().hex[:12]}"
     await db.users.insert_one({
         "user_id": user_id,
@@ -91,10 +95,10 @@ async def signup_user(body: SignupRequest) -> Dict[str, Any]:
         "last_login": datetime.now(timezone.utc),
     })
 
-    # Create session and return user data
     session_token = await _create_session_token(user_id)
     user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
     return {"session_token": session_token, "user": _with_admin_flag(user_doc)}
+
 
 async def login_user(body: LoginRequest) -> Dict[str, Any]:
     """
@@ -118,35 +122,29 @@ async def login_user(body: LoginRequest) -> Dict[str, Any]:
     if not user or not user.get("password_hash") or not _verify_password(body.password, user["password_hash"]):
         raise Exception("Incorrect email/username or password")
 
-    # Update last login time
     await db.users.update_one(
         {"user_id": user["user_id"]},
         {"$set": {"last_login": datetime.now(timezone.utc)}}
     )
 
-    # Create session and return user data
     session_token = await _create_session_token(user["user_id"])
     user_doc = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "password_hash": 0})
     return {"session_token": session_token, "user": _with_admin_flag(user_doc)}
 
+
 async def google_sign_in(body: GoogleSignIn) -> Dict[str, Any]:
-    """
-    Authenticate or register user via Google OAuth.
-
-    Args:
-        body: Google sign-in request containing ID token
-
-    Returns:
-        Dictionary containing session_token and user data
-
-    The ID token is verified against the configured Google client ID before
-    the user account and session are created.
-    """
+    """Authenticate or register a user via Google OAuth."""
     if not GOOGLE_CLIENT_ID:
         raise RuntimeError("Server missing GOOGLE_CLIENT_ID")
     try:
-        idinfo = google_id_token.verify_oauth2_token(
-            body.id_token, google_requests.Request(), GOOGLE_CLIENT_ID
+        # google-auth normally performs certificate I/O synchronously. Keep its
+        # certificate response cached and run verification off the event loop so
+        # one Google login never stalls unrelated API traffic.
+        idinfo = await asyncio.to_thread(
+            google_id_token.verify_oauth2_token,
+            body.id_token,
+            _GOOGLE_REQUEST,
+            GOOGLE_CLIENT_ID,
         )
     except Exception as exc:
         logger.warning("Google token verification failed: %s", exc)
@@ -161,30 +159,14 @@ async def google_sign_in(body: GoogleSignIn) -> Dict[str, Any]:
     picture = idinfo.get("picture")
     return await _create_session_for_user(email.strip().lower(), name, picture)
 
+
 async def logout_user(session_token: str) -> bool:
-    """
-    Log out a user by deleting their session.
-
-    Args:
-        session_token: Session token to delete
-
-    Returns:
-        True if session was deleted, False otherwise
-    """
     result = await db.user_sessions.delete_one({"session_token": session_token})
     return result.deleted_count > 0
 
+
 async def get_current_user(session_token: str) -> Optional[Dict[str, Any]]:
-    """
-    Get current user from session token.
-
-    Args:
-        session_token: Session token to validate
-
-    Returns:
-        User dictionary if session is valid, None otherwise
-    """
-
+    """Get current user from session token."""
     if not session_token or not session_token.lower().startswith("bearer "):
         return None
 
@@ -196,12 +178,10 @@ async def get_current_user(session_token: str) -> Optional[Dict[str, Any]]:
     if not session:
         return None
 
-    # Check if session has expired
     expires_at = _ensure_aware(session["expires_at"])
     if expires_at < _now_utc():
         return None
 
-    # Get user data (excluding password hash)
     user = await db.users.find_one(
         {"user_id": session["user_id"]},
         {"_id": 0, "password_hash": 0}
@@ -210,7 +190,6 @@ async def get_current_user(session_token: str) -> Optional[Dict[str, Any]]:
     if not user:
         return None
 
-    # Update last seen timestamp (heartbeat)
     await db.users.update_one(
         {"user_id": session["user_id"]},
         {"$set": {"last_seen": _now_utc()}}
@@ -218,12 +197,14 @@ async def get_current_user(session_token: str) -> Optional[Dict[str, Any]]:
 
     return _with_admin_flag(user)
 
+
 # Helper functions (moved from original server.py for compatibility)
 def _ensure_aware(dt: datetime) -> datetime:
     """Ensure datetime is timezone aware."""
     if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt
+
 
 def _now_utc() -> datetime:
     """Get current UTC datetime."""
