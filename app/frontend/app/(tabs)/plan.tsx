@@ -1,32 +1,244 @@
-import React, { useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from "react-native";
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
+
 import { SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
 import { useTheme } from "@/src/theme_context/ThemeContext";
-import { useAuth } from "@/src/auth/AuthContext";
+import { api } from "@/src/api/client";
 
-const QUICK = [
-  { icon: "airplane-outline", title: "Airport rides", subtitle: "Find people heading to the airport", route: "/" },
-  { icon: "train-outline", title: "Railway rides", subtitle: "Share the last mile to your station", route: "/" },
-  { icon: "calendar-outline", title: "Plan ahead", subtitle: "Post a ride for today, tomorrow or later", route: "/post-request" },
-];
+type Pool = {
+  pool_id: string;
+  from_location: string;
+  to_location: string;
+  travel_datetime: string;
+  status?: string;
+  confirmed_travelers?: { user_id: string; name: string }[];
+};
 
-export default function PlanScreen() {
-  const router = useRouter(); const { user } = useAuth(); const { colors, isDark } = useTheme();
-  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]); const [busy, setBusy] = useState(false);
-  const openQuick = (item: any) => { Haptics.selectionAsync(); router.push(item.route as any); };
-  const shareReferral = async () => { try { setBusy(true); const text = "Join me on UniPool — share rides with verified university students."; if (typeof navigator !== "undefined" && navigator.share) await navigator.share({ title: "UniPool", text }); else Alert.alert("Invite friends", text); } catch {} finally { setBusy(false); } };
-  return <SafeAreaView style={styles.safe} edges={["top"]}><ScrollView contentContainerStyle={styles.content}>
-    <View style={styles.hero}><View style={styles.heroIcon}><Ionicons name="sparkles" size={22} color={colors.saffron} /></View><Text style={styles.kicker}>MAKE EVERY RIDE EASIER</Text><Text style={styles.title}>Plan your next ride</Text><Text style={styles.subtitle}>Discovery, trust and planning — together, without making UniPool complicated.</Text></View>
-    <View style={styles.section}><Text style={styles.sectionTitle}>Quick start</Text>{QUICK.map((item) => <Pressable key={item.title} onPress={() => openQuick(item)} style={styles.card}><View style={styles.cardIcon}><Ionicons name={item.icon as any} size={21} color={colors.indigo} /></View><View style={{ flex: 1 }}><Text style={styles.cardTitle}>{item.title}</Text><Text style={styles.cardSub}>{item.subtitle}</Text></View><Ionicons name="chevron-forward" size={18} color={colors.muted} /></Pressable>)}</View>
-    <View style={styles.section}><Text style={styles.sectionTitle}>Build trust faster</Text><View style={styles.trustCard}><TrustRow done={!!user?.college_verified} icon="shield-checkmark-outline" title="Verify your university" subtitle="Get the verified student badge" colors={colors} onPress={() => router.push("/profile" as any)} /><TrustRow done={!!user?.name} icon="person-outline" title="Complete your profile" subtitle="A fuller profile gets more requests accepted" colors={colors} onPress={() => router.push("/profile" as any)} /><TrustRow done={false} icon="star-outline" title="Rate your completed rides" subtitle="Help the next student choose confidently" colors={colors} onPress={() => router.push("/matches" as any)} /></View></View>
-    <View style={styles.section}><Text style={styles.sectionTitle}>Discover demand</Text><Pressable style={styles.feature} onPress={() => router.push("/heatmap" as any)}><View style={styles.featureIcon}><Ionicons name="flame-outline" size={24} color={colors.saffron} /></View><View style={{ flex: 1 }}><Text style={styles.featureTitle}>See where people are travelling</Text><Text style={styles.featureSub}>Spot popular airport and railway corridors before you post.</Text></View><Ionicons name="arrow-forward" size={18} color={colors.saffron} /></Pressable></View>
-    <View style={styles.section}><Text style={styles.sectionTitle}>Bring your friends</Text><View style={styles.referral}><View style={styles.referralIcon}><Ionicons name="people-outline" size={24} color={colors.indigo} /></View><View style={{ flex: 1 }}><Text style={styles.cardTitle}>More students = better matches</Text><Text style={styles.cardSub}>Invite classmates and make usual routes easier to fill.</Text></View><Pressable disabled={busy} onPress={shareReferral} style={styles.invite}><Text style={styles.inviteText}>{busy ? "…" : "Invite"}</Text></Pressable></View></View>
-    <View style={styles.tip}><Ionicons name="bulb-outline" size={18} color={colors.saffron} /><Text style={styles.tipText}>Tip: add luggage and a clear pickup note when you post. Small details reduce back-and-forth in chat.</Text></View>
-  </ScrollView></SafeAreaView>;
+function when(iso: string) {
+  return new Date(iso).toLocaleString(undefined, {
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "Asia/Kolkata",
+  });
 }
-function TrustRow({ done, icon, title, subtitle, colors, onPress }: any) { return <Pressable onPress={onPress} style={{ flexDirection: "row", alignItems: "center", paddingVertical: 13, gap: 12 }}><View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: done ? colors.successSoft : colors.surface2, alignItems: "center", justifyContent: "center" }}><Ionicons name={done ? "checkmark" : icon} size={18} color={done ? colors.success : colors.indigo} /></View><View style={{ flex: 1 }}><Text style={{ color: colors.onSurface, fontWeight: "800", fontSize: 14 }}>{title}</Text><Text style={{ color: colors.muted, marginTop: 2, fontSize: 12 }}>{subtitle}</Text></View><Ionicons name="chevron-forward" size={16} color={colors.muted} /></Pressable>; }
-const makeStyles = (colors: any, isDark: boolean) => StyleSheet.create({ safe: { flex: 1, backgroundColor: colors.surface }, content: { padding: SPACING.lg, paddingBottom: 120 }, hero: { backgroundColor: isDark ? colors.surface2 : colors.indigo, borderRadius: RADIUS.xl, padding: 22, borderWidth: 1, borderColor: colors.border }, heroIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: isDark ? colors.card : "rgba(255,255,255,.12)", alignItems: "center", justifyContent: "center", marginBottom: 14 }, kicker: { color: isDark ? colors.saffron : "rgba(255,255,255,.72)", fontSize: 10, fontWeight: "900", letterSpacing: 1.2 }, title: { color: isDark ? colors.onSurface : "#fff", fontSize: 28, fontWeight: "900", fontFamily: FONT_DISPLAY, marginTop: 5 }, subtitle: { color: isDark ? colors.onSurface2 : "rgba(255,255,255,.78)", fontSize: 14, lineHeight: 21, marginTop: 7 }, section: { marginTop: 24 }, sectionTitle: { color: colors.onSurface, fontSize: 17, fontWeight: "900", marginBottom: 10 }, card: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: RADIUS.lg, padding: 14, marginBottom: 9 }, cardIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center" }, cardTitle: { color: colors.onSurface, fontSize: 14, fontWeight: "800" }, cardSub: { color: colors.muted, fontSize: 12, lineHeight: 17, marginTop: 2 }, trustCard: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: RADIUS.lg, paddingHorizontal: 14 }, feature: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.card, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: colors.border, padding: 15 }, featureIcon: { width: 46, height: 46, borderRadius: 15, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center" }, featureTitle: { color: colors.onSurface, fontWeight: "800", fontSize: 14 }, featureSub: { color: colors.muted, fontSize: 12, lineHeight: 17, marginTop: 3 }, referral: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.card, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: colors.border, padding: 14 }, referralIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center" }, invite: { backgroundColor: colors.saffron, borderRadius: RADIUS.pill, paddingHorizontal: 14, paddingVertical: 9 }, inviteText: { color: "#fff", fontWeight: "900", fontSize: 12 }, tip: { flexDirection: "row", gap: 9, backgroundColor: colors.surface2, borderRadius: RADIUS.md, padding: 13, marginTop: 20, borderWidth: 1, borderColor: colors.border }, tipText: { color: colors.muted, flex: 1, fontSize: 12, lineHeight: 18 } });
+
+export default function ExploreScreen() {
+  const router = useRouter();
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
+  const [pools, setPools] = useState<Pool[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const loadedOnce = useRef(false);
+
+  const load = useCallback(async () => {
+    try {
+      setError(null);
+      const data = await api.myPools();
+      setPools(data || []);
+    } catch (e: any) {
+      setError(e?.message || "Couldn't refresh your trips.");
+    } finally {
+      loadedOnce.current = true;
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => {
+    if (!loadedOnce.current) setLoading(true);
+    load();
+  }, [load]));
+
+  const active = useMemo(
+    () => pools
+      .filter((pool) => (pool.status ?? "open") === "open" && new Date(pool.travel_datetime).getTime() >= Date.now() - 3600000)
+      .sort((a, b) => +new Date(a.travel_datetime) - +new Date(b.travel_datetime)),
+    [pools]
+  );
+
+  const shareReferral = async () => {
+    const text = "Join me on UniPool — find and share rides with verified university students.";
+    try {
+      if (typeof navigator !== "undefined" && navigator.share) {
+        await navigator.share({ title: "UniPool", text });
+      } else {
+        Alert.alert("Invite friends", text);
+      }
+    } catch {}
+  };
+
+  const go = (path: string) => {
+    Haptics.selectionAsync();
+    router.push(path as any);
+  };
+
+  return (
+    <SafeAreaView style={styles.safe} edges={["top"]}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.headingRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.eyebrow}>EXPLORE</Text>
+            <Text style={styles.title}>Everything around your ride</Text>
+            <Text style={styles.subtitle}>Your trips, useful tools and something to do while you wait.</Text>
+          </View>
+          <Pressable onPress={() => go("/post-request")} style={styles.postButton}>
+            <Ionicons name="add" size={18} color="#fff" />
+            <Text style={styles.postButtonText}>Post trip</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.sectionHeading}>
+          <Text style={styles.sectionTitle}>Your upcoming trips</Text>
+          {active.length > 0 ? <Text style={styles.count}>{active.length}</Text> : null}
+        </View>
+
+        {loading && !loadedOnce.current ? (
+          <View style={styles.loadingCard}>
+            <ActivityIndicator color={colors.indigo} />
+            <Text style={styles.loadingText}>Loading your trips…</Text>
+          </View>
+        ) : error && active.length === 0 ? (
+          <Pressable onPress={load} style={styles.stateCard}>
+            <Ionicons name="refresh-outline" size={22} color={colors.indigo} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>Couldn't refresh trips</Text>
+              <Text style={styles.cardSub}>Tap to try again. The rest of Explore still works.</Text>
+            </View>
+          </Pressable>
+        ) : active.length === 0 ? (
+          <View style={styles.emptyTrip}>
+            <View style={styles.emptyIcon}><Ionicons name="navigate-outline" size={24} color={colors.indigo} /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>No upcoming trip yet</Text>
+              <Text style={styles.cardSub}>Post where you're going and UniPool will start matching automatically.</Text>
+            </View>
+            <Pressable onPress={() => go("/post-request")}><Ionicons name="arrow-forward-circle" size={28} color={colors.saffron} /></Pressable>
+          </View>
+        ) : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tripRail}>
+            {active.slice(0, 5).map((pool) => (
+              <Pressable key={pool.pool_id} onPress={() => go(`/pool/${pool.pool_id}`)} style={styles.tripCard}>
+                <View style={styles.tripTop}>
+                  <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveText}>ACTIVE</Text></View>
+                  {(pool.confirmed_travelers?.length || 0) > 0 ? (
+                    <View style={styles.peoplePill}><Ionicons name="people" size={12} color={colors.success} /><Text style={styles.peopleText}>{pool.confirmed_travelers?.length}</Text></View>
+                  ) : null}
+                </View>
+                <Text numberOfLines={1} style={styles.routeStrong}>{pool.from_location}</Text>
+                <View style={styles.routeConnector}><View style={styles.routeLine} /><Ionicons name="arrow-down" size={13} color={colors.muted} /></View>
+                <Text numberOfLines={1} style={styles.routeStrong}>{pool.to_location}</Text>
+                <View style={styles.whenRow}><Ionicons name="time-outline" size={14} color={colors.muted} /><Text style={styles.whenText}>{when(pool.travel_datetime)}</Text></View>
+              </Pressable>
+            ))}
+          </ScrollView>
+        )}
+
+        <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>Useful right now</Text></View>
+        <View style={styles.toolGrid}>
+          <Tool icon="search-outline" title="Find a ride" sub="Browse open routes" onPress={() => go("/(tabs)")} colors={colors} styles={styles} />
+          <Tool icon="flame-outline" title="Route demand" sub="See busy corridors" onPress={() => go("/heatmap")} colors={colors} styles={styles} accent />
+          <Tool icon="chatbubbles-outline" title="Trip chats" sub="Open conversations" onPress={() => go("/(tabs)/messages")} colors={colors} styles={styles} />
+          <Tool icon="shield-checkmark-outline" title="Student ID" sub="Verify or update profile" onPress={() => go("/(tabs)/profile")} colors={colors} styles={styles} />
+        </View>
+
+        <View style={styles.sectionHeading}>
+          <View>
+            <Text style={styles.sectionTitle}>Time-pass</Text>
+            <Text style={styles.sectionSub}>The games are still here — now they're actually easy to find.</Text>
+          </View>
+          <Pressable onPress={() => go("/(tabs)/games")}><Text style={styles.seeAll}>See all</Text></Pressable>
+        </View>
+
+        <View style={styles.gameRow}>
+          <GameShortcut icon="flash" title="Rickshaw Rush" label="ARCADE" onPress={() => go("/games/rickshaw-rush")} colors={colors} styles={styles} />
+          <GameShortcut icon="bulb" title="Travel Trivia" label="QUIZ" onPress={() => go("/games/trivia")} colors={colors} styles={styles} />
+          <GameShortcut icon="grid" title="Memory Match" label="QUICK" onPress={() => go("/games/memory-match")} colors={colors} styles={styles} />
+        </View>
+
+        <Pressable onPress={shareReferral} style={styles.inviteCard}>
+          <View style={styles.inviteIcon}><Ionicons name="people-outline" size={22} color={colors.indigo} /></View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardTitle}>Bring your usual travel group</Text>
+            <Text style={styles.cardSub}>More classmates on UniPool means faster, better matches.</Text>
+          </View>
+          <Ionicons name="share-social-outline" size={20} color={colors.saffron} />
+        </Pressable>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function Tool({ icon, title, sub, onPress, colors, styles, accent = false }: any) {
+  return (
+    <Pressable onPress={onPress} style={styles.toolCard}>
+      <View style={[styles.toolIcon, accent && { backgroundColor: colors.cream }]}>
+        <Ionicons name={icon} size={20} color={accent ? colors.saffron : colors.indigo} />
+      </View>
+      <Text style={styles.cardTitle}>{title}</Text>
+      <Text style={styles.cardSub}>{sub}</Text>
+    </Pressable>
+  );
+}
+
+function GameShortcut({ icon, title, label, onPress, colors, styles }: any) {
+  return (
+    <Pressable onPress={onPress} style={styles.gameCard}>
+      <View style={styles.gameIcon}><Ionicons name={icon} size={22} color={colors.saffron} /></View>
+      <Text style={styles.gameLabel}>{label}</Text>
+      <Text style={styles.gameTitle}>{title}</Text>
+      <Ionicons name="arrow-forward" size={17} color={colors.indigo} style={{ marginTop: 10 }} />
+    </Pressable>
+  );
+}
+
+const makeStyles = (colors: any, isDark: boolean) => StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.surface },
+  content: { width: "100%", maxWidth: 980, alignSelf: "center", padding: SPACING.lg, paddingBottom: 130 },
+  headingRow: { flexDirection: "row", alignItems: "flex-start", gap: 16, marginBottom: 26 },
+  eyebrow: { color: colors.saffron, fontWeight: "900", fontSize: 10, letterSpacing: 1.3 },
+  title: { color: colors.onSurface, fontSize: 28, fontWeight: "900", fontFamily: FONT_DISPLAY, marginTop: 4 },
+  subtitle: { color: colors.muted, fontSize: 13, lineHeight: 19, marginTop: 5 },
+  postButton: { minHeight: 40, borderRadius: 20, paddingHorizontal: 14, backgroundColor: colors.indigo, flexDirection: "row", alignItems: "center", gap: 6 },
+  postButtonText: { color: "#fff", fontWeight: "900", fontSize: 12 },
+  sectionHeading: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", marginTop: 6, marginBottom: 11 },
+  sectionTitle: { color: colors.onSurface, fontSize: 17, fontWeight: "900" },
+  sectionSub: { color: colors.muted, fontSize: 12, marginTop: 3 },
+  count: { minWidth: 25, height: 25, borderRadius: 13, backgroundColor: colors.surface2, color: colors.muted, textAlign: "center", lineHeight: 25, fontWeight: "800", fontSize: 11 },
+  loadingCard: { minHeight: 110, borderRadius: RADIUS.lg, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", gap: 8 },
+  loadingText: { color: colors.muted, fontSize: 12 },
+  stateCard: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: RADIUS.lg, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, padding: 15 },
+  emptyTrip: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: RADIUS.lg, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, padding: 15 },
+  emptyIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface2 },
+  tripRail: { gap: 10, paddingBottom: 4 },
+  tripCard: { width: 260, backgroundColor: colors.card, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: colors.border, padding: 15 },
+  tripTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
+  livePill: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, backgroundColor: colors.surface2 },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.success },
+  liveText: { color: colors.success, fontSize: 9, fontWeight: "900", letterSpacing: .6 },
+  peoplePill: { flexDirection: "row", alignItems: "center", gap: 4 },
+  peopleText: { color: colors.success, fontSize: 11, fontWeight: "800" },
+  routeStrong: { color: colors.onSurface, fontWeight: "800", fontSize: 13 },
+  routeConnector: { flexDirection: "row", alignItems: "center", gap: 6, height: 25, paddingLeft: 4 },
+  routeLine: { width: 1, height: 17, backgroundColor: colors.borderStrong },
+  whenRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 10 },
+  whenText: { color: colors.muted, fontSize: 11 },
+  toolGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 20 },
+  toolCard: { flexGrow: 1, flexBasis: 190, minHeight: 125, backgroundColor: colors.card, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: colors.border, padding: 14 },
+  toolIcon: { width: 40, height: 40, borderRadius: 13, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center", marginBottom: 11 },
+  cardTitle: { color: colors.onSurface, fontSize: 13, fontWeight: "850" as any },
+  cardSub: { color: colors.muted, fontSize: 11, lineHeight: 16, marginTop: 3 },
+  seeAll: { color: colors.indigo, fontSize: 12, fontWeight: "900" },
+  gameRow: { flexDirection: "row", gap: 10, flexWrap: "wrap", marginBottom: 24 },
+  gameCard: { flexGrow: 1, flexBasis: 190, minHeight: 150, backgroundColor: isDark ? colors.surface2 : colors.cream, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: colors.border, padding: 15 },
+  gameIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: colors.card, alignItems: "center", justifyContent: "center", marginBottom: 10 },
+  gameLabel: { color: colors.saffron, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  gameTitle: { color: colors.onSurface, fontSize: 14, fontWeight: "900", marginTop: 3 },
+  inviteCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.card, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: colors.border, padding: 15, marginTop: 4 },
+  inviteIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center" },
+});
