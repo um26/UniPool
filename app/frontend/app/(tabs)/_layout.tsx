@@ -1,7 +1,7 @@
 import React from "react";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { Platform, StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, useWindowDimensions, View } from "react-native";
 import { BlurView } from "expo-blur";
 import { useTheme } from "@/src/theme_context/ThemeContext";
 
@@ -15,6 +15,8 @@ const ICONS: Record<string, { active: any; inactive: any }> = {
 
 export default function TabsLayout() {
   const { colors, isDark } = useTheme();
+  const { width } = useWindowDimensions();
+  const desktopWeb = Platform.OS === "web" && width >= 820;
   const barBackground = isDark ? "rgba(23,26,29,0.96)" : "rgba(255,255,255,0.97)";
 
   return (
@@ -28,14 +30,14 @@ export default function TabsLayout() {
           tabBarInactiveTintColor: colors.muted,
           tabBarLabelStyle: styles.label,
           tabBarItemStyle: styles.item,
-          tabBarStyle: [
+          tabBarStyle: desktopWeb ? { display: "none" } : [
             styles.bar,
             {
               borderTopColor: colors.border,
               backgroundColor: Platform.OS === "android" ? barBackground : "transparent",
             },
           ],
-          tabBarBackground: () => (
+          tabBarBackground: () => desktopWeb ? null : (
             <BlurView
               intensity={isDark ? 16 : 20}
               tint={isDark ? "dark" : "light"}
@@ -47,12 +49,7 @@ export default function TabsLayout() {
             return (
               <View style={styles.iconArea}>
                 <Ionicons name={focused ? icon.active : icon.inactive} size={21} color={color} />
-                <View
-                  style={[
-                    styles.activeDot,
-                    { backgroundColor: focused ? colors.saffron : "transparent" },
-                  ]}
-                />
+                <View style={[styles.activeDot, { backgroundColor: focused ? colors.saffron : "transparent" }]} />
               </View>
             );
           },
