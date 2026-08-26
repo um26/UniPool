@@ -10,6 +10,7 @@ import { useAuth, AuthProvider } from "@/src/auth/AuthContext";
 import { ThemeProvider, useTheme } from "@/src/theme_context/ThemeContext";
 import { applyPremiumFontDefaults } from "@/src/utils/setupFonts";
 import AnimatedSplash from "@/src/components/AnimatedSplash";
+import WebTopBar from "@/src/components/WebTopBar";
 import { api } from "@/src/api/client";
 
 LogBox.ignoreAllLogs(true);
@@ -28,22 +29,19 @@ function TripChatAutoOpen() {
 
     const check = async () => {
       if (running.current) return;
+      if (typeof document !== "undefined" && document.hidden) return;
       running.current = true;
       try {
-        const [rawMatches, confirmed] = await Promise.all([api.myMatches(), api.confirmedMatches()]);
-        const matches = await Promise.all((rawMatches || []).map(async (item: any) => {
-          if (item.conversation_id || !item.pool_id) return item;
-          try {
-            const chat = await api.ensureTripChat(item.pool_id);
-            return { ...item, conversation_id: chat.conversation_id, conversation_name: chat.name };
-          } catch {
-            return item;
-          }
-        }));
-
-        const ids = new Set<string>();
-        for (const item of matches) if (item.conversation_id) ids.add(item.conversation_id);
-        for (const item of confirmed || []) if (item.conversation_id) ids.add(item.conversation_id);
+        // Conversations are now materialized by the backend when a match is
+        // created/accepted. Watching one lightweight endpoint is enough; the
+        // old implementation repeatedly fetched matches + confirmed trips and
+        // then called ensureTripChat for each item every seven seconds.
+        const conversations = await api.listConversations();
+        const ids = new Set<string>(
+          (conversations || [])
+            .filter((item: any) => item.kind === "group" && item.conversation_id)
+            .map((item: any) => item.conversation_id as string)
+        );
 
         if (known.current === null) {
           known.current = ids;
@@ -58,14 +56,14 @@ function TripChatAutoOpen() {
           router.push({ pathname: "/chat/group/[conversationId]", params: { conversationId: fresh } });
         }
       } catch {
-        // Matching/chat availability should never break navigation.
+        // Chat availability should never break navigation.
       } finally {
         running.current = false;
       }
     };
 
     check();
-    const timer = setInterval(check, 7000);
+    const timer = setInterval(check, 20000);
     return () => clearInterval(timer);
   }, [user?.user_id, router, segments]);
 
@@ -91,22 +89,25 @@ function AuthGate() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <TripChatAutoOpen />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface } }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="post-request" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
-        <Stack.Screen name="games/trivia" options={{ animation: "slide_from_right" }} />
-        <Stack.Screen name="games/tap-plane" options={{ animation: "slide_from_right" }} />
-        <Stack.Screen name="games/memory-match" options={{ animation: "slide_from_right" }} />
-        <Stack.Screen name="games/word-scramble" options={{ animation: "slide_from_right" }} />
-        <Stack.Screen name="games/rickshaw-rush" options={{ animation: "slide_from_right" }} />
-        <Stack.Screen name="chat/[userId]" options={{ animation: "slide_from_right" }} />
-        <Stack.Screen name="chat/group/[conversationId]" options={{ animation: "slide_from_right" }} />
-        <Stack.Screen name="pool/[poolId]" options={{ animation: "slide_from_right" }} />
-        <Stack.Screen name="heatmap" options={{ animation: "slide_from_right" }} />
-        <Stack.Screen name="trip-receipt/[poolId]" options={{ animation: "slide_from_bottom" }} />
-      </Stack>
+      {user ? <WebTopBar /> : null}
+      <View style={{ flex: 1 }}>
+        <TripChatAutoOpen />
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface } }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="post-request" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+          <Stack.Screen name="games/trivia" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="games/tap-plane" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="games/memory-match" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="games/word-scramble" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="games/rickshaw-rush" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="chat/[userId]" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="chat/group/[conversationId]" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="pool/[poolId]" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="heatmap" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="trip-receipt/[poolId]" options={{ animation: "slide_from_bottom" }} />
+        </Stack>
+      </View>
     </View>
   );
 }
