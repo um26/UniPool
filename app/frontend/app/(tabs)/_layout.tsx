@@ -8,7 +8,7 @@ import { useTheme } from "@/src/theme_context/ThemeContext";
 const ICONS: Record<string, { active: any; inactive: any }> = {
   index: { active: "home", inactive: "home-outline" },
   matches: { active: "people", inactive: "people-outline" },
-  plan: { active: "navigate", inactive: "navigate-outline" },
+  plan: { active: "compass", inactive: "compass-outline" },
   messages: { active: "chatbubble", inactive: "chatbubble-outline" },
   profile: { active: "person", inactive: "person-outline" },
 };
@@ -50,9 +50,7 @@ export default function TabsLayout() {
                 <View
                   style={[
                     styles.activeDot,
-                    {
-                      backgroundColor: focused ? colors.saffron : "transparent",
-                    },
+                    { backgroundColor: focused ? colors.saffron : "transparent" },
                   ]}
                 />
               </View>
@@ -62,12 +60,9 @@ export default function TabsLayout() {
       >
         <Tabs.Screen name="index" options={{ title: "Home" }} />
         <Tabs.Screen name="matches" options={{ title: "Matches" }} />
-        <Tabs.Screen name="plan" options={{ title: "Trips" }} />
+        <Tabs.Screen name="plan" options={{ title: "Explore" }} />
         <Tabs.Screen name="messages" options={{ title: "Chats" }} />
         <Tabs.Screen name="profile" options={{ title: "Profile" }} />
-
-        {/* Time-pass stays available as a destination, but it is not important
-            enough to compete with the core travel loop in primary navigation. */}
         <Tabs.Screen name="games" options={{ href: null }} />
       </Tabs>
     </View>
@@ -84,24 +79,8 @@ const styles = StyleSheet.create({
     elevation: 0,
     shadowOpacity: 0,
   },
-  item: {
-    paddingVertical: 2,
-  },
-  label: {
-    fontSize: 10,
-    fontWeight: "700",
-    marginTop: 0,
-  },
-  iconArea: {
-    minWidth: 34,
-    height: 30,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  activeDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    marginTop: 3,
-  },
+  item: { paddingVertical: 2 },
+  label: { fontSize: 10, fontWeight: "700", marginTop: 0 },
+  iconArea: { minWidth: 34, height: 30, alignItems: "center", justifyContent: "center" },
+  activeDot: { width: 4, height: 4, borderRadius: 2, marginTop: 3 },
 });
