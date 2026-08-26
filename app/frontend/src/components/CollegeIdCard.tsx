@@ -1,9 +1,10 @@
-import React, { useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { View, Text, StyleSheet, Platform, Pressable, Modal, ScrollView, TextInput, ActivityIndicator, Alert } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { COLORS, RADIUS, FONT, FONT_DISPLAY, SPACING } from "@/src/theme";
+import { useTheme } from "@/src/theme_context/ThemeContext";
 import { api } from "@/src/api/client";
 
 const MONO = Platform.select({ ios: "Courier", android: "monospace", default: "monospace" });
@@ -26,11 +27,14 @@ type Props = {
   onProfileUpdated?: () => void;
 };
 
+type ModalStyleSet = ReturnType<typeof makeModalStyles>;
+
 export default function CollegeIdCard(props: Props) {
-  const { name, rollNumber, schoolName, branchName, batchYear, degreeLevelName } = props;
   const [expanded, setExpanded] = useState(false);
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
   const cardRef = useRef<View>(null);
+  const { colors, isDark } = useTheme();
+  const modalStyles = useMemo(() => makeModalStyles(colors, isDark), [colors, isDark]);
 
   // Web-only cursor-follow 3D tilt — computes rotation from pointer position
   // relative to the card's bounding box.
@@ -50,7 +54,7 @@ export default function CollegeIdCard(props: Props) {
     <>
       <View style={styles.outer} testID="college-id-card">
         <View style={styles.strap} />
-        <View style={styles.hole} />
+        <View style={[styles.hole, { backgroundColor: colors.surface, borderColor: colors.borderStrong }]} />
 
         <Pressable
           onPress={() => { setExpanded(true); Haptics.selectionAsync(); }}
@@ -58,6 +62,7 @@ export default function CollegeIdCard(props: Props) {
           {...webHandlers}
         >
           <View
+            ref={cardRef}
             style={[
               styles.tiltWrap,
               isWeb ? ({ transform: `perspective(700px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)` } as any) : { transform: [{ rotate: "-1.5deg" }] },
@@ -79,7 +84,7 @@ export default function CollegeIdCard(props: Props) {
               <IdCardFace {...props} />
             </View>
 
-            <ProfileDetails {...props} />
+            <ProfileDetails {...props} modalStyles={modalStyles} colors={colors} />
           </ScrollView>
         </View>
       </Modal>
@@ -145,8 +150,8 @@ function Detail({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
-function ProfileDetails(props: Props) {
-  const { email, collegeEmail, phone, bloodGroup, ratingAvg, ratingCount, ridesCompleted, onProfileUpdated } = props;
+function ProfileDetails(props: Props & { modalStyles: ModalStyleSet; colors: any }) {
+  const { email, collegeEmail, phone, bloodGroup, ratingAvg, ratingCount, ridesCompleted, onProfileUpdated, modalStyles, colors } = props;
   const [editingPhone, setEditingPhone] = useState(false);
   const [editingBlood, setEditingBlood] = useState(false);
   const [phoneVal, setPhoneVal] = useState(phone || "");
@@ -171,11 +176,11 @@ function ProfileDetails(props: Props) {
     <View style={modalStyles.detailsCard}>
       <Text style={modalStyles.sectionTitle}>Profile</Text>
 
-      <Stat icon="mail-outline" label="Login email" value={email} />
-      <Stat icon="school-outline" label="College email" value={collegeEmail} />
+      <Stat icon="mail-outline" label="Login email" value={email} modalStyles={modalStyles} colors={colors} />
+      <Stat icon="school-outline" label="College email" value={collegeEmail} modalStyles={modalStyles} colors={colors} />
 
       <View style={modalStyles.statRowEditable}>
-        <Ionicons name="call-outline" size={16} color={COLORS.muted} style={{ marginTop: 2 }} />
+        <Ionicons name="call-outline" size={16} color={colors.muted} style={{ marginTop: 2 }} />
         <View style={{ flex: 1, marginLeft: 10 }}>
           <Text style={modalStyles.statLabel}>Phone</Text>
           {editingPhone ? (
@@ -185,13 +190,13 @@ function ProfileDetails(props: Props) {
                 value={phoneVal}
                 onChangeText={setPhoneVal}
                 placeholder="Add phone number"
-                placeholderTextColor={COLORS.muted}
+                placeholderTextColor={colors.muted}
                 keyboardType="phone-pad"
                 style={modalStyles.inlineInput}
                 autoFocus
               />
               <Pressable testID="save-phone" onPress={() => save({ phone: phoneVal }, () => setEditingPhone(false))} disabled={saving}>
-                {saving ? <ActivityIndicator size="small" color={COLORS.indigo} /> : <Ionicons name="checkmark-circle" size={22} color={COLORS.success} />}
+                {saving ? <ActivityIndicator size="small" color={colors.indigo} /> : <Ionicons name="checkmark-circle" size={22} color={colors.success} />}
               </Pressable>
             </View>
           ) : (
@@ -203,7 +208,7 @@ function ProfileDetails(props: Props) {
       </View>
 
       <View style={modalStyles.statRowEditable}>
-        <Ionicons name="water-outline" size={16} color={COLORS.muted} style={{ marginTop: 2 }} />
+        <Ionicons name="water-outline" size={16} color={colors.muted} style={{ marginTop: 2 }} />
         <View style={{ flex: 1, marginLeft: 10 }}>
           <Text style={modalStyles.statLabel}>Blood group</Text>
           {editingBlood ? (
@@ -213,13 +218,13 @@ function ProfileDetails(props: Props) {
                 value={bloodVal}
                 onChangeText={setBloodVal}
                 placeholder="e.g. O+"
-                placeholderTextColor={COLORS.muted}
+                placeholderTextColor={colors.muted}
                 autoCapitalize="characters"
                 style={modalStyles.inlineInput}
                 autoFocus
               />
               <Pressable testID="save-blood" onPress={() => save({ blood_group: bloodVal }, () => setEditingBlood(false))} disabled={saving}>
-                {saving ? <ActivityIndicator size="small" color={COLORS.indigo} /> : <Ionicons name="checkmark-circle" size={22} color={COLORS.success} />}
+                {saving ? <ActivityIndicator size="small" color={colors.indigo} /> : <Ionicons name="checkmark-circle" size={22} color={colors.success} />}
               </Pressable>
             </View>
           ) : (
@@ -232,12 +237,12 @@ function ProfileDetails(props: Props) {
 
       <View style={modalStyles.statsGrid}>
         <View style={modalStyles.statBox}>
-          <Ionicons name="star" size={18} color={COLORS.saffron} />
+          <Ionicons name="star" size={18} color={colors.saffron} />
           <Text style={modalStyles.statBig}>{ratingAvg != null ? ratingAvg.toFixed(1) : "—"}</Text>
           <Text style={modalStyles.statSmall}>{ratingCount || 0} rating{ratingCount === 1 ? "" : "s"}</Text>
         </View>
         <View style={modalStyles.statBox}>
-          <Ionicons name="car-sport" size={18} color={COLORS.success} />
+          <Ionicons name="car-sport" size={18} color={colors.success} />
           <Text style={modalStyles.statBig}>{ridesCompleted ?? 0}</Text>
           <Text style={modalStyles.statSmall}>trips together</Text>
         </View>
@@ -246,10 +251,10 @@ function ProfileDetails(props: Props) {
   );
 }
 
-function Stat({ icon, label, value }: { icon: any; label: string; value?: string | null }) {
+function Stat({ icon, label, value, modalStyles, colors }: { icon: any; label: string; value?: string | null; modalStyles: ModalStyleSet; colors: any }) {
   return (
     <View style={modalStyles.statRow}>
-      <Ionicons name={icon} size={16} color={COLORS.muted} />
+      <Ionicons name={icon} size={16} color={colors.muted} />
       <View style={{ flex: 1, marginLeft: 10 }}>
         <Text style={modalStyles.statLabel}>{label}</Text>
         <Text style={modalStyles.statValue}>{value || "—"}</Text>
@@ -267,7 +272,7 @@ const styles = StyleSheet.create({
   },
   hole: {
     position: "absolute", top: 26, width: 14, height: 14, borderRadius: 7,
-    backgroundColor: COLORS.surface, borderWidth: 2, borderColor: "rgba(26,35,126,0.35)",
+    borderWidth: 2,
     zIndex: 2,
   },
   tiltWrap: { width: "100%" },
@@ -314,20 +319,47 @@ const styles = StyleSheet.create({
   detailValue: { color: "#fff", fontSize: 11, fontWeight: "700", marginTop: 1 },
 });
 
-const modalStyles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(15,15,20,0.85)" },
+const makeModalStyles = (colors: any, isDark: boolean) => StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: isDark ? "rgba(5,7,12,0.94)" : "rgba(15,15,20,0.85)" },
   scrollContent: { padding: SPACING.xl, paddingTop: 60, alignItems: "center" },
   closeBtn: { position: "absolute", top: 16, right: 16, zIndex: 10 },
   bigCardWrap: { width: "100%", maxWidth: 380, marginBottom: SPACING.xl },
-  detailsCard: { backgroundColor: "#fff", borderRadius: RADIUS.lg, padding: SPACING.lg, width: "100%", maxWidth: 380 },
-  sectionTitle: { fontSize: FONT.lg, fontWeight: "800", color: COLORS.onSurface, marginBottom: SPACING.md, fontFamily: FONT_DISPLAY },
-  statRow: { flexDirection: "row", alignItems: "flex-start", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  statRowEditable: { flexDirection: "row", alignItems: "flex-start", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  statLabel: { fontSize: 11, fontWeight: "700", color: COLORS.muted, textTransform: "uppercase", letterSpacing: 0.5 },
-  statValue: { fontSize: FONT.base, fontWeight: "600", color: COLORS.onSurface, marginTop: 2 },
-  inlineInput: { flex: 1, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: 10, paddingVertical: 6, fontSize: FONT.base, color: COLORS.onSurface },
+  detailsCard: {
+    backgroundColor: colors.card,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
+    width: "100%",
+    maxWidth: 380,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...(isWeb ? { boxShadow: isDark ? "0 18px 48px rgba(0,0,0,0.36)" : "0 18px 48px rgba(0,0,0,0.16)" } as any : {}),
+  },
+  sectionTitle: { fontSize: FONT.lg, fontWeight: "800", color: colors.onSurface, marginBottom: SPACING.md, fontFamily: FONT_DISPLAY },
+  statRow: { flexDirection: "row", alignItems: "flex-start", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
+  statRowEditable: { flexDirection: "row", alignItems: "flex-start", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
+  statLabel: { fontSize: 11, fontWeight: "700", color: colors.muted, textTransform: "uppercase", letterSpacing: 0.5 },
+  statValue: { fontSize: FONT.base, fontWeight: "600", color: colors.onSurface, marginTop: 2 },
+  inlineInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: FONT.base,
+    color: colors.onSurface,
+    backgroundColor: colors.surface2,
+  },
   statsGrid: { flexDirection: "row", gap: SPACING.md, marginTop: SPACING.lg },
-  statBox: { flex: 1, alignItems: "center", backgroundColor: COLORS.surface, borderRadius: RADIUS.md, paddingVertical: SPACING.md },
-  statBig: { fontSize: FONT.xl, fontWeight: "800", color: COLORS.onSurface, marginTop: 4 },
-  statSmall: { fontSize: 11, color: COLORS.muted, marginTop: 2 },
+  statBox: {
+    flex: 1,
+    alignItems: "center",
+    backgroundColor: colors.surface2,
+    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  statBig: { fontSize: FONT.xl, fontWeight: "800", color: colors.onSurface, marginTop: 4 },
+  statSmall: { fontSize: 11, color: colors.muted, marginTop: 2 },
 });
