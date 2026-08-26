@@ -11,44 +11,44 @@ import { useTheme } from "@/src/theme_context/ThemeContext";
 
 const GAMES = [
   {
-    testID: "game-rickshaw-rush-card",
-    route: "/games/rickshaw-rush",
-    icon: "flash" as const,
-    tag: "ARCADE",
-    title: "Rickshaw Rush",
-    sub: "Dodge traffic, grab coins and survive rush hour.",
-  },
-  {
     testID: "game-trivia-card",
     route: "/games/trivia",
     icon: "bulb" as const,
     tag: "TRIVIA",
     title: "Travel Trivia",
-    sub: "Fresh Bharat travel questions every round.",
-  },
-  {
-    testID: "game-tap-plane-card",
-    route: "/games/tap-plane",
-    icon: "airplane" as const,
-    tag: "QUICK TAP",
-    title: "Tap-the-Plane",
-    sub: "Catch the plane before it flies off screen.",
-  },
-  {
-    testID: "game-memory-match-card",
-    route: "/games/memory-match",
-    icon: "grid" as const,
-    tag: "MEMORY",
-    title: "Memory Match",
-    sub: "Flip travel icons, find pairs and beat your moves.",
+    sub: "Eight varied India travel questions with fresh rounds that avoid recent repeats.",
   },
   {
     testID: "game-word-scramble-card",
     route: "/games/word-scramble",
     icon: "text" as const,
-    tag: "SPEED ROUND",
+    tag: "WORD GAME",
     title: "Word Scramble",
-    sub: "Unscramble Indian cities before time runs out.",
+    sub: "Unscramble Indian cities and travel words before time runs out.",
+  },
+  {
+    testID: "game-airport-codes-card",
+    route: "/games/airport-codes",
+    icon: "airplane" as const,
+    tag: "QUICK QUIZ",
+    title: "Airport Codes",
+    sub: "Match Indian cities and airport codes in both directions.",
+  },
+  {
+    testID: "game-destination-detective-card",
+    route: "/games/destination-detective",
+    icon: "search" as const,
+    tag: "CLUE GAME",
+    title: "Destination Detective",
+    sub: "Guess the destination with as few clues as possible.",
+  },
+  {
+    testID: "game-travel-reveal-card",
+    route: "/games/travel-reveal",
+    icon: "key-outline" as const,
+    tag: "WORD PUZZLE",
+    title: "Travel Reveal",
+    sub: "Reveal destinations and travel words one letter at a time.",
   },
 ];
 
@@ -71,23 +71,23 @@ export default function GamesHub() {
           </Pressable>
           <View style={{ flex: 1 }}>
             <Text style={styles.eyebrow}>TIME-PASS</Text>
-            <Text style={styles.title}>Play while you wait</Text>
-            <Text style={styles.sub}>Zero heavy artwork, zero waiting — just tap and play.</Text>
+            <Text style={styles.title}>Small games for the wait</Text>
+            <Text style={styles.sub}>Travel knowledge, words and clues — quick to open, easy to replay.</Text>
           </View>
         </View>
 
         <Pressable testID={GAMES[0].testID} onPress={() => open(GAMES[0].route)} style={styles.heroCard}>
           <LinearGradient
-            colors={isDark ? ["#17233A", "#2D2535", "#6B4518"] : [colors.indigo, "#4657C8", colors.saffron]}
+            colors={isDark ? ["#17233A", "#252B46", "#5C421F"] : [colors.indigo, "#4657C8", colors.saffron]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={StyleSheet.absoluteFill}
           />
-          <View style={styles.heroIcon}><Ionicons name="flash" size={30} color="#fff" /></View>
-          <Text style={styles.heroTag}>FEATURED · ARCADE</Text>
-          <Text style={styles.heroTitle}>Rickshaw Rush</Text>
-          <Text style={styles.heroSub}>Dodge traffic, grab coins and survive the chaos.</Text>
-          <View style={styles.playPill}><Text style={styles.playPillText}>Play now</Text><Ionicons name="arrow-forward" size={15} color="#fff" /></View>
+          <View style={styles.heroIcon}><Ionicons name="bulb" size={30} color="#fff" /></View>
+          <Text style={styles.heroTag}>FEATURED · TRAVEL TRIVIA</Text>
+          <Text style={styles.heroTitle}>A genuinely fresh round</Text>
+          <Text style={styles.heroSub}>Eight questions sampled across airports, railways, geography, landmarks and travel smarts — with recent repeats filtered out.</Text>
+          <View style={styles.playPill}><Text style={styles.playPillText}>Play trivia</Text><Ionicons name="arrow-forward" size={15} color="#fff" /></View>
         </Pressable>
 
         <View style={styles.grid}>
@@ -105,8 +105,8 @@ export default function GamesHub() {
         </View>
 
         <View style={styles.note}>
-          <Ionicons name="speedometer-outline" size={18} color={colors.saffron} />
-          <Text style={styles.noteText}>The hub no longer downloads several full-width Unsplash images before it feels ready, so opening Time-pass is much lighter.</Text>
+          <Ionicons name="sparkles-outline" size={18} color={colors.saffron} />
+          <Text style={styles.noteText}>Time-pass is intentionally text-first now. No heavy artwork or reflex mini-games — every game is designed for a short cab, airport or station wait.</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -125,7 +125,7 @@ const makeStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   heroIcon: { width: 50, height: 50, borderRadius: 16, backgroundColor: "rgba(255,255,255,.14)", alignItems: "center", justifyContent: "center", marginBottom: 18 },
   heroTag: { color: "rgba(255,255,255,.76)", fontSize: 10, fontWeight: "900", letterSpacing: 1 },
   heroTitle: { color: "#fff", fontSize: 28, fontWeight: "900", marginTop: 4 },
-  heroSub: { color: "rgba(255,255,255,.86)", fontSize: 13, lineHeight: 19, marginTop: 5, maxWidth: 520 },
+  heroSub: { color: "rgba(255,255,255,.86)", fontSize: 13, lineHeight: 19, marginTop: 5, maxWidth: 560 },
   playPill: { alignSelf: "flex-start", marginTop: 16, height: 36, borderRadius: 18, paddingHorizontal: 13, backgroundColor: "rgba(0,0,0,.22)", flexDirection: "row", alignItems: "center", gap: 6 },
   playPillText: { color: "#fff", fontWeight: "900", fontSize: 12 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
