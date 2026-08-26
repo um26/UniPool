@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -8,8 +8,35 @@ import * as Haptics from "expo-haptics";
 import { SPACING, RADIUS, FONT } from "@/src/theme";
 import { useTheme } from "@/src/theme_context/ThemeContext";
 import { api } from "@/src/api/client";
+import { storage } from "@/src/utils/storage";
 
-type Q = { q: string; options: string[]; answer: number };
+type Q = { id: string; category?: string; q: string; options: string[]; answer: number };
+
+const ROUND_SIZE = 8;
+const SEEN_KEY = "unipool.trivia.seen.v2";
+const MAX_RECENT = 56;
+
+function parseSeen(raw: unknown): string[] {
+  if (typeof raw !== "string" || !raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function categoryLabel(value?: string) {
+  const labels: Record<string, string> = {
+    air: "AIR TRAVEL",
+    rail: "RAILWAYS",
+    geography: "GEOGRAPHY",
+    landmarks: "LANDMARKS",
+    culture: "PLACES & CULTURE",
+    transport: "TRAVEL SMARTS",
+  };
+  return labels[value || ""] || "TRAVEL TRIVIA";
+}
 
 export default function Trivia() {
   const router = useRouter();
@@ -20,33 +47,90 @@ export default function Trivia() {
   const [picked, setPicked] = useState<number | null>(null);
   const [score, setScore] = useState(0);
   const [done, setDone] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const loadQuestions = useMemo(() => () => api.trivia().then(setQs).catch(() => setQs([])), []);
+  const loadQuestions = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const recent = parseSeen(await storage.secureGet(SEEN_KEY, "[]"));
+      const next: Q[] = await api.trivia(recent, ROUND_SIZE);
+      if (!next.length) throw new Error("No trivia questions available");
+
+      const ids = next.map((question) => question.id).filter(Boolean);
+      const merged = Array.from(new Set([...recent, ...ids])).slice(-MAX_RECENT);
+      await storage.secureSet(SEEN_KEY, JSON.stringify(merged));
+
+      setQs(next);
+      setI(0);
+      setPicked(null);
+      setScore(0);
+      setDone(false);
+    } catch (e: any) {
+      setError(e?.message || "Couldn't load a fresh trivia round.");
+      setQs([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => { loadQuestions(); }, [loadQuestions]);
 
-  if (!qs.length) return <SafeAreaView style={styles.safe}><View style={styles.center}><ActivityIndicator color={colors.indigo} /><Text style={styles.loadingText}>Finding fresh questions…</Text></View></SafeAreaView>;
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.center}>
+          <ActivityIndicator color={colors.indigo} />
+          <Text style={styles.loadingText}>Building a fresh round…</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !qs.length) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.doneWrap}>
+          <Ionicons name="cloud-offline-outline" size={42} color={colors.error} />
+          <Text style={styles.doneTitle}>Trivia took a detour</Text>
+          <Text style={styles.doneSub}>{error || "No questions were returned."}</Text>
+          <Pressable onPress={loadQuestions} style={styles.btn}><Text style={styles.btnText}>Try again</Text></Pressable>
+          <Pressable onPress={() => router.back()} style={[styles.btn, styles.btnGhost]}><Text style={[styles.btnText, { color: colors.indigo }]}>Back</Text></Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const current = qs[i];
 
   const pick = (idx: number) => {
     if (picked !== null) return;
     setPicked(idx);
-    if (idx === current.answer) { setScore((s) => s + 1); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }
-    else Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    if (idx === current.answer) {
+      setScore((s) => s + 1);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
     setTimeout(() => {
       if (i + 1 >= qs.length) setDone(true);
-      else { setI(i + 1); setPicked(null); }
+      else {
+        setI((value) => value + 1);
+        setPicked(null);
+      }
     }, 850);
   };
 
   if (done) {
+    const ratio = score / qs.length;
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.doneWrap}>
           <View style={styles.trophy}><Ionicons name="trophy" size={42} color={colors.saffron} /></View>
           <Text style={styles.doneTitle}>Score: {score} / {qs.length}</Text>
-          <Text style={styles.doneSub}>{score === qs.length ? "Bharat Yatri, you know it all!" : score >= qs.length / 2 ? "Well travelled!" : "Try again — you'll ace it."}</Text>
-          <Pressable onPress={() => { setDone(false); setI(0); setPicked(null); setScore(0); loadQuestions(); }} style={styles.btn}><Text style={styles.btnText}>Fresh round</Text></Pressable>
+          <Text style={styles.doneSub}>{ratio === 1 ? "Perfect route. You know your way around India." : ratio >= 0.7 ? "Strong traveller energy." : ratio >= 0.45 ? "Nice run — one more round?" : "Fresh round, fresh comeback."}</Text>
+          <Pressable onPress={loadQuestions} style={styles.btn}><Text style={styles.btnText}>Fresh round</Text></Pressable>
           <Pressable onPress={() => router.back()} style={[styles.btn, styles.btnGhost]}><Text style={[styles.btnText, { color: colors.indigo }]}>Back</Text></Pressable>
         </View>
       </SafeAreaView>
@@ -62,7 +146,10 @@ export default function Trivia() {
       </View>
 
       <View style={styles.qBox}>
-        <View style={styles.qTop}><Text style={styles.qNum}>QUESTION {i + 1}</Text><Ionicons name="sparkles" size={16} color={colors.saffron} /></View>
+        <View style={styles.qTop}>
+          <Text style={styles.qNum}>{categoryLabel(current.category)}</Text>
+          <Ionicons name="sparkles" size={16} color={colors.saffron} />
+        </View>
         <Text style={styles.q}>{current.q}</Text>
       </View>
 
@@ -71,8 +158,10 @@ export default function Trivia() {
           const correct = picked !== null && idx === current.answer;
           const wrong = picked === idx && picked !== current.answer;
           return (
-            <Pressable key={idx} onPress={() => pick(idx)} style={[styles.opt, correct && styles.optCorrect, wrong && styles.optWrong]}>
-              <View style={[styles.optionIndex, { borderColor: correct || wrong ? "rgba(255,255,255,0.45)" : colors.border }]}><Text style={[styles.optionIndexText, { color: correct || wrong ? "#fff" : colors.muted }]}>{String.fromCharCode(65 + idx)}</Text></View>
+            <Pressable key={`${current.id}-${idx}`} onPress={() => pick(idx)} style={[styles.opt, correct && styles.optCorrect, wrong && styles.optWrong]}>
+              <View style={[styles.optionIndex, { borderColor: correct || wrong ? "rgba(255,255,255,0.45)" : colors.border }]}>
+                <Text style={[styles.optionIndexText, { color: correct || wrong ? "#fff" : colors.muted }]}>{String.fromCharCode(65 + idx)}</Text>
+              </View>
               <Text style={[styles.optText, (correct || wrong) && { color: "#fff" }]}>{opt}</Text>
             </Pressable>
           );
@@ -101,9 +190,9 @@ const makeStyles = (colors: any) => StyleSheet.create({
   optText: { flex: 1, fontSize: FONT.base, color: colors.onSurface, fontWeight: "600" },
   trophy: { width: 82, height: 82, borderRadius: 41, backgroundColor: colors.cream, alignItems: "center", justifyContent: "center" },
   doneWrap: { flex: 1, alignItems: "center", justifyContent: "center", padding: SPACING.xl },
-  doneTitle: { fontSize: FONT["2xl"], fontWeight: "800", color: colors.onSurface, marginTop: SPACING.lg },
-  doneSub: { color: colors.muted, marginBottom: SPACING.xl, textAlign: "center", marginTop: 5 },
-  btn: { backgroundColor: colors.indigo, paddingHorizontal: 24, paddingVertical: 14, borderRadius: RADIUS.pill, marginTop: SPACING.sm, alignSelf: "stretch", alignItems: "center" },
+  doneTitle: { fontSize: FONT["2xl"], fontWeight: "800", color: colors.onSurface, marginTop: SPACING.lg, textAlign: "center" },
+  doneSub: { color: colors.muted, marginBottom: SPACING.xl, textAlign: "center", marginTop: 5, maxWidth: 420, lineHeight: 20 },
+  btn: { backgroundColor: colors.indigo, paddingHorizontal: 24, paddingVertical: 14, borderRadius: RADIUS.pill, marginTop: SPACING.sm, alignSelf: "stretch", alignItems: "center", maxWidth: 420, width: "100%" },
   btnGhost: { backgroundColor: "transparent", borderWidth: 1, borderColor: colors.indigo },
   btnText: { color: "#fff", fontWeight: "800" },
 });
