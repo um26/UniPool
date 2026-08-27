@@ -9,190 +9,26 @@ import { SPACING, RADIUS, FONT } from "@/src/theme";
 import { useTheme } from "@/src/theme_context/ThemeContext";
 import { api } from "@/src/api/client";
 import { storage } from "@/src/utils/storage";
+import GameShareButton from "@/src/components/GameShareButton";
 
 type Q = { id: string; category?: string; q: string; options: string[]; answer: number };
-
 const ROUND_SIZE = 8;
 const SEEN_KEY = "unipool.trivia.seen.v2";
 const MAX_RECENT = 56;
-
-function parseSeen(raw: unknown): string[] {
-  if (typeof raw !== "string" || !raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-function categoryLabel(value?: string) {
-  const labels: Record<string, string> = {
-    air: "AIR TRAVEL",
-    rail: "RAILWAYS",
-    geography: "GEOGRAPHY",
-    landmarks: "LANDMARKS",
-    culture: "PLACES & CULTURE",
-    transport: "TRAVEL SMARTS",
-  };
-  return labels[value || ""] || "TRAVEL TRIVIA";
-}
+function parseSeen(raw: unknown): string[] { if (typeof raw !== "string" || !raw) return []; try { const parsed = JSON.parse(raw); return Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string") : []; } catch { return []; } }
+function categoryLabel(value?: string) { const labels: Record<string,string> = { air:"AIR TRAVEL", rail:"RAILWAYS", geography:"GEOGRAPHY", landmarks:"LANDMARKS", culture:"PLACES & CULTURE", transport:"TRAVEL SMARTS" }; return labels[value || ""] || "TRAVEL TRIVIA"; }
 
 export default function Trivia() {
-  const router = useRouter();
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [qs, setQs] = useState<Q[]>([]);
-  const [i, setI] = useState(0);
-  const [picked, setPicked] = useState<number | null>(null);
-  const [score, setScore] = useState(0);
-  const [done, setDone] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadQuestions = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const recent = parseSeen(await storage.secureGet(SEEN_KEY, "[]"));
-      const next: Q[] = await api.trivia(recent, ROUND_SIZE);
-      if (!next.length) throw new Error("No trivia questions available");
-
-      const ids = next.map((question) => question.id).filter(Boolean);
-      const merged = Array.from(new Set([...recent, ...ids])).slice(-MAX_RECENT);
-      await storage.secureSet(SEEN_KEY, JSON.stringify(merged));
-
-      setQs(next);
-      setI(0);
-      setPicked(null);
-      setScore(0);
-      setDone(false);
-    } catch (e: any) {
-      setError(e?.message || "Couldn't load a fresh trivia round.");
-      setQs([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadQuestions(); }, [loadQuestions]);
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.center}>
-          <ActivityIndicator color={colors.indigo} />
-          <Text style={styles.loadingText}>Building a fresh round…</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (error || !qs.length) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.doneWrap}>
-          <Ionicons name="cloud-offline-outline" size={42} color={colors.error} />
-          <Text style={styles.doneTitle}>Trivia took a detour</Text>
-          <Text style={styles.doneSub}>{error || "No questions were returned."}</Text>
-          <Pressable onPress={loadQuestions} style={styles.btn}><Text style={styles.btnText}>Try again</Text></Pressable>
-          <Pressable onPress={() => router.back()} style={[styles.btn, styles.btnGhost]}><Text style={[styles.btnText, { color: colors.indigo }]}>Back</Text></Pressable>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  const current = qs[i];
-
-  const pick = (idx: number) => {
-    if (picked !== null) return;
-    setPicked(idx);
-    if (idx === current.answer) {
-      setScore((s) => s + 1);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } else {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    }
-    setTimeout(() => {
-      if (i + 1 >= qs.length) setDone(true);
-      else {
-        setI((value) => value + 1);
-        setPicked(null);
-      }
-    }, 850);
-  };
-
-  if (done) {
-    const ratio = score / qs.length;
-    return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.doneWrap}>
-          <View style={styles.trophy}><Ionicons name="trophy" size={42} color={colors.saffron} /></View>
-          <Text style={styles.doneTitle}>Score: {score} / {qs.length}</Text>
-          <Text style={styles.doneSub}>{ratio === 1 ? "Perfect route. You know your way around India." : ratio >= 0.7 ? "Strong traveller energy." : ratio >= 0.45 ? "Nice run — one more round?" : "Fresh round, fresh comeback."}</Text>
-          <Pressable onPress={loadQuestions} style={styles.btn}><Text style={styles.btnText}>Fresh round</Text></Pressable>
-          <Pressable onPress={() => router.back()} style={[styles.btn, styles.btnGhost]}><Text style={[styles.btnText, { color: colors.indigo }]}>Back</Text></Pressable>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}><Ionicons name="chevron-back" size={24} color={colors.onSurface} /></Pressable>
-        <Text style={styles.progress}>{i + 1} / {qs.length}</Text>
-        <Text style={styles.progress}>Score {score}</Text>
-      </View>
-
-      <View style={styles.qBox}>
-        <View style={styles.qTop}>
-          <Text style={styles.qNum}>{categoryLabel(current.category)}</Text>
-          <Ionicons name="sparkles" size={16} color={colors.saffron} />
-        </View>
-        <Text style={styles.q}>{current.q}</Text>
-      </View>
-
-      <View style={styles.options}>
-        {current.options.map((opt, idx) => {
-          const correct = picked !== null && idx === current.answer;
-          const wrong = picked === idx && picked !== current.answer;
-          return (
-            <Pressable key={`${current.id}-${idx}`} onPress={() => pick(idx)} style={[styles.opt, correct && styles.optCorrect, wrong && styles.optWrong]}>
-              <View style={[styles.optionIndex, { borderColor: correct || wrong ? "rgba(255,255,255,0.45)" : colors.border }]}>
-                <Text style={[styles.optionIndexText, { color: correct || wrong ? "#fff" : colors.muted }]}>{String.fromCharCode(65 + idx)}</Text>
-              </View>
-              <Text style={[styles.optText, (correct || wrong) && { color: "#fff" }]}>{opt}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
-    </SafeAreaView>
-  );
+  const router = useRouter(); const { colors } = useTheme(); const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [qs,setQs]=useState<Q[]>([]); const [i,setI]=useState(0); const [picked,setPicked]=useState<number|null>(null); const [score,setScore]=useState(0); const [done,setDone]=useState(false); const [loading,setLoading]=useState(true); const [error,setError]=useState<string|null>(null);
+  const loadQuestions = useCallback(async () => { setLoading(true); setError(null); try { const recent=parseSeen(await storage.secureGet(SEEN_KEY,"[]")); const next:Q[]=await api.trivia(recent,ROUND_SIZE); if(!next.length) throw new Error("No trivia questions available"); const ids=next.map(q=>q.id).filter(Boolean); await storage.secureSet(SEEN_KEY,JSON.stringify(Array.from(new Set([...recent,...ids])).slice(-MAX_RECENT))); setQs(next); setI(0); setPicked(null); setScore(0); setDone(false); } catch(e:any){ setError(e?.message||"Couldn't load a fresh trivia round."); setQs([]); } finally { setLoading(false); } },[]);
+  useEffect(()=>{loadQuestions();},[loadQuestions]);
+  if(loading) return <SafeAreaView style={styles.safe}><View style={styles.center}><ActivityIndicator color={colors.indigo}/><Text style={styles.loadingText}>Building a fresh round…</Text></View></SafeAreaView>;
+  if(error||!qs.length) return <SafeAreaView style={styles.safe}><View style={styles.doneWrap}><Ionicons name="cloud-offline-outline" size={42} color={colors.error}/><Text style={styles.doneTitle}>Trivia took a detour</Text><Text style={styles.doneSub}>{error||"No questions were returned."}</Text><Pressable onPress={loadQuestions} style={styles.btn}><Text style={styles.btnText}>Try again</Text></Pressable><Pressable onPress={()=>router.back()} style={[styles.btn,styles.btnGhost]}><Text style={[styles.btnText,{color:colors.indigo}]}>Back</Text></Pressable></View></SafeAreaView>;
+  const current=qs[i];
+  const pick=(idx:number)=>{ if(picked!==null)return; setPicked(idx); if(idx===current.answer){setScore(s=>s+1);Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);}else Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); setTimeout(()=>{if(i+1>=qs.length)setDone(true);else{setI(v=>v+1);setPicked(null);}},850); };
+  if(done){ const ratio=score/qs.length; return <SafeAreaView style={styles.safe}><View style={styles.doneWrap}><View style={styles.trophy}><Ionicons name="trophy" size={42} color={colors.saffron}/></View><Text style={styles.doneTitle}>Score: {score} / {qs.length}</Text><Text style={styles.doneSub}>{ratio===1?"Perfect route. You know your way around India.":ratio>=.7?"Strong traveller energy.":ratio>=.45?"Nice run — one more round?":"Fresh round, fresh comeback."}</Text><GameShareButton game="Travel Trivia" result={`I scored ${score}/${qs.length}`}/><Pressable onPress={loadQuestions} style={styles.btn}><Text style={styles.btnText}>Fresh round</Text></Pressable><Pressable onPress={()=>router.back()} style={[styles.btn,styles.btnGhost]}><Text style={[styles.btnText,{color:colors.indigo}]}>Back</Text></Pressable></View></SafeAreaView>; }
+  return <SafeAreaView style={styles.safe}><View style={styles.header}><Pressable onPress={()=>router.back()} hitSlop={12}><Ionicons name="chevron-back" size={24} color={colors.onSurface}/></Pressable><Text style={styles.progress}>{i+1} / {qs.length}</Text><Text style={styles.progress}>Score {score}</Text></View><View style={styles.qBox}><View style={styles.qTop}><Text style={styles.qNum}>{categoryLabel(current.category)}</Text><Ionicons name="sparkles" size={16} color={colors.saffron}/></View><Text style={styles.q}>{current.q}</Text></View><View style={styles.options}>{current.options.map((opt,idx)=>{const correct=picked!==null&&idx===current.answer; const wrong=picked===idx&&picked!==current.answer; return <Pressable key={`${current.id}-${idx}`} onPress={()=>pick(idx)} style={[styles.opt,correct&&styles.optCorrect,wrong&&styles.optWrong]}><View style={[styles.optionIndex,{borderColor:correct||wrong?"rgba(255,255,255,.45)":colors.border}]}><Text style={[styles.optionIndexText,{color:correct||wrong?"#fff":colors.muted}]}>{String.fromCharCode(65+idx)}</Text></View><Text style={[styles.optText,(correct||wrong)&&{color:"#fff"}]}>{opt}</Text></Pressable>;})}</View></SafeAreaView>;
 }
 
-const makeStyles = (colors: any) => StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.surface },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface, gap: 8 },
-  loadingText: { color: colors.muted, fontSize: FONT.sm },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: SPACING.lg },
-  progress: { color: colors.muted, fontWeight: "700" },
-  qBox: { backgroundColor: colors.indigo, marginHorizontal: SPACING.lg, borderRadius: RADIUS.lg, padding: SPACING.lg, shadowColor: colors.indigo, shadowOpacity: 0.18, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 4 },
-  qTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  qNum: { color: colors.saffron, fontWeight: "900", fontSize: FONT.sm, letterSpacing: 1.2 },
-  q: { color: "#fff", fontSize: FONT.xl, fontWeight: "700", marginTop: 8, lineHeight: 28 },
-  options: { padding: SPACING.lg, gap: SPACING.md },
-  opt: { flexDirection: "row", alignItems: "center", gap: SPACING.md, backgroundColor: colors.card, borderRadius: RADIUS.md, padding: SPACING.md, borderWidth: 1, borderColor: colors.border, minHeight: 58 },
-  optCorrect: { backgroundColor: colors.success, borderColor: colors.success },
-  optWrong: { backgroundColor: colors.error, borderColor: colors.error },
-  optionIndex: { width: 32, height: 32, borderRadius: 16, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  optionIndexText: { fontWeight: "800", fontSize: 12 },
-  optText: { flex: 1, fontSize: FONT.base, color: colors.onSurface, fontWeight: "600" },
-  trophy: { width: 82, height: 82, borderRadius: 41, backgroundColor: colors.cream, alignItems: "center", justifyContent: "center" },
-  doneWrap: { flex: 1, alignItems: "center", justifyContent: "center", padding: SPACING.xl },
-  doneTitle: { fontSize: FONT["2xl"], fontWeight: "800", color: colors.onSurface, marginTop: SPACING.lg, textAlign: "center" },
-  doneSub: { color: colors.muted, marginBottom: SPACING.xl, textAlign: "center", marginTop: 5, maxWidth: 420, lineHeight: 20 },
-  btn: { backgroundColor: colors.indigo, paddingHorizontal: 24, paddingVertical: 14, borderRadius: RADIUS.pill, marginTop: SPACING.sm, alignSelf: "stretch", alignItems: "center", maxWidth: 420, width: "100%" },
-  btnGhost: { backgroundColor: "transparent", borderWidth: 1, borderColor: colors.indigo },
-  btnText: { color: "#fff", fontWeight: "800" },
-});
+const makeStyles=(colors:any)=>StyleSheet.create({safe:{flex:1,backgroundColor:colors.surface},center:{flex:1,alignItems:"center",justifyContent:"center",backgroundColor:colors.surface,gap:8},loadingText:{color:colors.muted,fontSize:FONT.sm},header:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",padding:SPACING.lg},progress:{color:colors.muted,fontWeight:"700"},qBox:{backgroundColor:colors.indigo,marginHorizontal:SPACING.lg,borderRadius:RADIUS.lg,padding:SPACING.lg,shadowColor:colors.indigo,shadowOpacity:.18,shadowRadius:18,shadowOffset:{width:0,height:8},elevation:4},qTop:{flexDirection:"row",alignItems:"center",justifyContent:"space-between"},qNum:{color:colors.saffron,fontWeight:"900",fontSize:FONT.sm,letterSpacing:1.2},q:{color:"#fff",fontSize:FONT.xl,fontWeight:"700",marginTop:8,lineHeight:28},options:{padding:SPACING.lg,gap:SPACING.md},opt:{flexDirection:"row",alignItems:"center",gap:SPACING.md,backgroundColor:colors.card,borderRadius:RADIUS.md,padding:SPACING.md,borderWidth:1,borderColor:colors.border,minHeight:58},optCorrect:{backgroundColor:colors.success,borderColor:colors.success},optWrong:{backgroundColor:colors.error,borderColor:colors.error},optionIndex:{width:32,height:32,borderRadius:16,borderWidth:1,alignItems:"center",justifyContent:"center"},optionIndexText:{fontWeight:"800",fontSize:12},optText:{flex:1,fontSize:FONT.base,color:colors.onSurface,fontWeight:"600"},trophy:{width:82,height:82,borderRadius:41,backgroundColor:colors.cream,alignItems:"center",justifyContent:"center"},doneWrap:{flex:1,alignItems:"center",justifyContent:"center",padding:SPACING.xl},doneTitle:{fontSize:FONT["2xl"],fontWeight:"800",color:colors.onSurface,marginTop:SPACING.lg,textAlign:"center"},doneSub:{color:colors.muted,marginBottom:SPACING.xl,textAlign:"center",marginTop:5,maxWidth:420,lineHeight:20},btn:{backgroundColor:colors.indigo,paddingHorizontal:24,paddingVertical:14,borderRadius:RADIUS.pill,marginTop:SPACING.sm,alignSelf:"stretch",alignItems:"center",maxWidth:420,width:"100%"},btnGhost:{backgroundColor:"transparent",borderWidth:1,borderColor:colors.indigo},btnText:{color:"#fff",fontWeight:"800"}});
