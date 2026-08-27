@@ -10,145 +10,37 @@ import { SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
 import { useTheme } from "@/src/theme_context/ThemeContext";
 
 const GAMES = [
-  {
-    testID: "game-trivia-card",
-    route: "/games/trivia",
-    icon: "bulb" as const,
-    tag: "TRIVIA",
-    title: "Travel Trivia",
-    sub: "Eight varied India travel questions with fresh rounds that avoid recent repeats.",
-  },
-  {
-    testID: "game-word-scramble-card",
-    route: "/games/word-scramble",
-    icon: "text" as const,
-    tag: "WORD GAME",
-    title: "Word Scramble",
-    sub: "Unscramble Indian cities and travel words before time runs out.",
-  },
-  {
-    testID: "game-airport-codes-card",
-    route: "/games/airport-codes",
-    icon: "airplane" as const,
-    tag: "QUICK QUIZ",
-    title: "Airport Codes",
-    sub: "Match Indian cities and airport codes in both directions.",
-  },
-  {
-    testID: "game-destination-detective-card",
-    route: "/games/destination-detective",
-    icon: "search" as const,
-    tag: "CLUE GAME",
-    title: "Destination Detective",
-    sub: "Guess the destination with as few clues as possible.",
-  },
-  {
-    testID: "game-travel-reveal-card",
-    route: "/games/travel-reveal",
-    icon: "key-outline" as const,
-    tag: "WORD PUZZLE",
-    title: "Travel Reveal",
-    sub: "Reveal destinations and travel words one letter at a time.",
-  },
+  { testID: "game-trivia-card", route: "/games/trivia", icon: "bulb" as const, tag: "TRIVIA", title: "Travel Trivia", sub: "Eight varied India travel questions with fresh rounds that avoid recent repeats." },
+  { testID: "game-word-scramble-card", route: "/games/word-scramble", icon: "text" as const, tag: "WORD GAME", title: "Word Scramble", sub: "Unscramble Indian cities and travel words before time runs out." },
+  { testID: "game-airport-codes-card", route: "/games/airport-codes", icon: "airplane" as const, tag: "QUICK QUIZ", title: "Airport Codes", sub: "Match Indian cities and airport codes in both directions." },
+  { testID: "game-destination-detective-card", route: "/games/destination-detective", icon: "search" as const, tag: "CLUE GAME", title: "Destination Detective", sub: "Guess the destination with as few clues as possible." },
+  { testID: "game-travel-reveal-card", route: "/games/travel-reveal", icon: "key-outline" as const, tag: "WORD PUZZLE", title: "Travel Reveal", sub: "Reveal destinations and travel words one letter at a time." },
+  { testID: "game-guess-state-card", route: "/games/guess-state", icon: "map-outline" as const, tag: "MAP QUIZ", title: "Guess the State", sub: "Use real travel clues to identify Indian states." },
+  { testID: "game-station-codes-card", route: "/games/station-codes", icon: "train-outline" as const, tag: "RAIL QUIZ", title: "Station Codes", sub: "Learn useful Indian railway station codes in both directions." },
 ];
 
 export default function GamesHub() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
+  const open = (route: string) => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(route as any); };
 
-  const open = (route: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push(route as any);
-  };
+  return <SafeAreaView style={styles.safe} edges={["top"]}>
+    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <View style={styles.header}><Pressable onPress={() => router.back()} style={styles.back} accessibilityLabel="Go back"><Ionicons name="chevron-back" size={20} color={colors.onSurface} /></Pressable><View style={{ flex: 1 }}><Text style={styles.eyebrow}>TIME-PASS</Text><Text style={styles.title}>Small games for the wait</Text><Text style={styles.sub}>Travel knowledge, words and clues — quick to open, easy to replay.</Text></View></View>
 
-  return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.back} accessibilityLabel="Go back">
-            <Ionicons name="chevron-back" size={20} color={colors.onSurface} />
-          </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.eyebrow}>TIME-PASS</Text>
-            <Text style={styles.title}>Small games for the wait</Text>
-            <Text style={styles.sub}>Travel knowledge, words and clues — quick to open, easy to replay.</Text>
-          </View>
-        </View>
+      <Pressable testID="game-daily-challenge-card" onPress={() => open("/games/daily-challenge")} style={styles.dailyCard}><View style={styles.dailyIcon}><Ionicons name="sparkles" size={23} color={colors.saffron} /></View><View style={{ flex: 1 }}><Text style={styles.dailyTag}>DAILY CHALLENGE</Text><Text style={styles.dailyTitle}>One question. One shot. Every day.</Text><Text style={styles.dailySub}>A shared travel challenge with a local streak; campus leaderboard syncs when the backend supports it.</Text></View><Ionicons name="arrow-forward-circle" size={24} color={colors.indigo} /></Pressable>
 
-        <Pressable testID="game-daily-challenge-card" onPress={() => open("/games/daily-challenge")} style={styles.dailyCard}>
-          <View style={styles.dailyIcon}><Ionicons name="sparkles" size={23} color={colors.saffron} /></View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.dailyTag}>DAILY CHALLENGE</Text>
-            <Text style={styles.dailyTitle}>One question. One shot. Every day.</Text>
-            <Text style={styles.dailySub}>A shared UniPool travel challenge with a correct-answer streak.</Text>
-          </View>
-          <Ionicons name="arrow-forward-circle" size={24} color={colors.indigo} />
-        </Pressable>
+      <Pressable testID={GAMES[0].testID} onPress={() => open(GAMES[0].route)} style={styles.heroCard}>
+        <LinearGradient colors={isDark ? ["#17233A", "#252B46", "#5C421F"] : [colors.indigo, "#4657C8", colors.saffron]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+        <View style={styles.heroIcon}><Ionicons name="bulb" size={30} color="#fff" /></View><Text style={styles.heroTag}>FEATURED · TRAVEL TRIVIA</Text><Text style={styles.heroTitle}>A genuinely fresh round</Text><Text style={styles.heroSub}>Eight questions sampled across airports, railways, geography, landmarks and travel smarts — with recent repeats filtered out.</Text><View style={styles.playPill}><Text style={styles.playPillText}>Play trivia</Text><Ionicons name="arrow-forward" size={15} color="#fff" /></View>
+      </Pressable>
 
-        <Pressable testID={GAMES[0].testID} onPress={() => open(GAMES[0].route)} style={styles.heroCard}>
-          <LinearGradient
-            colors={isDark ? ["#17233A", "#252B46", "#5C421F"] : [colors.indigo, "#4657C8", colors.saffron]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={styles.heroIcon}><Ionicons name="bulb" size={30} color="#fff" /></View>
-          <Text style={styles.heroTag}>FEATURED · TRAVEL TRIVIA</Text>
-          <Text style={styles.heroTitle}>A genuinely fresh round</Text>
-          <Text style={styles.heroSub}>Eight questions sampled across airports, railways, geography, landmarks and travel smarts — with recent repeats filtered out.</Text>
-          <View style={styles.playPill}><Text style={styles.playPillText}>Play trivia</Text><Ionicons name="arrow-forward" size={15} color="#fff" /></View>
-        </Pressable>
+      <View style={styles.grid}>{GAMES.slice(1).map((game, index) => <Pressable key={game.testID} testID={game.testID} onPress={() => open(game.route)} style={styles.card}><View style={[styles.cardIcon, index % 2 === 1 && { backgroundColor: colors.cream }]}><Ionicons name={game.icon} size={23} color={index % 2 === 1 ? colors.saffron : colors.indigo} /></View><Text style={styles.tag}>{game.tag}</Text><Text style={styles.cardTitle}>{game.title}</Text><Text style={styles.cardSub}>{game.sub}</Text><Ionicons name="arrow-forward-circle-outline" size={21} color={colors.indigo} style={{ marginTop: 12 }} /></Pressable>)}</View>
 
-        <View style={styles.grid}>
-          {GAMES.slice(1).map((game, index) => (
-            <Pressable key={game.testID} testID={game.testID} onPress={() => open(game.route)} style={styles.card}>
-              <View style={[styles.cardIcon, index % 2 === 1 && { backgroundColor: colors.cream }]}>
-                <Ionicons name={game.icon} size={23} color={index % 2 === 1 ? colors.saffron : colors.indigo} />
-              </View>
-              <Text style={styles.tag}>{game.tag}</Text>
-              <Text style={styles.cardTitle}>{game.title}</Text>
-              <Text style={styles.cardSub}>{game.sub}</Text>
-              <Ionicons name="arrow-forward-circle-outline" size={21} color={colors.indigo} style={{ marginTop: 12 }} />
-            </Pressable>
-          ))}
-        </View>
-
-        <View style={styles.note}>
-          <Ionicons name="sparkles-outline" size={18} color={colors.saffron} />
-          <Text style={styles.noteText}>Time-pass is intentionally text-first now. No heavy artwork or reflex mini-games — every game is designed for a short cab, airport or station wait.</Text>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
-  );
+      <View style={styles.note}><Ionicons name="sparkles-outline" size={18} color={colors.saffron} /><Text style={styles.noteText}>Time-pass stays text-first and lightweight. No heavy artwork or reflex games: everything here should open instantly during a cab, airport or station wait.</Text></View>
+    </ScrollView>
+  </SafeAreaView>;
 }
 
-const makeStyles = (colors: any, isDark: boolean) => StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.surface },
-  content: { width: "100%", maxWidth: 900, alignSelf: "center", padding: SPACING.lg, paddingBottom: 130 },
-  header: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 20 },
-  back: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
-  eyebrow: { color: colors.saffron, fontSize: 10, fontWeight: "900", letterSpacing: 1.2 },
-  title: { fontSize: FONT["2xl"], fontWeight: "900", color: colors.onSurface, fontFamily: FONT_DISPLAY, marginTop: 3 },
-  sub: { color: colors.muted, fontSize: 13, marginTop: 4 },
-  dailyCard: { minHeight: 112, flexDirection: "row", alignItems: "center", gap: 13, backgroundColor: isDark ? colors.surface2 : colors.cream, borderWidth: 1, borderColor: colors.border, borderRadius: RADIUS.lg, padding: 15, marginBottom: 14 },
-  dailyIcon: { width: 46, height: 46, borderRadius: 15, backgroundColor: colors.card, alignItems: "center", justifyContent: "center" },
-  dailyTag: { color: colors.saffron, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
-  dailyTitle: { color: colors.onSurface, fontSize: 15, fontWeight: "900", marginTop: 3 },
-  dailySub: { color: colors.muted, fontSize: 10, lineHeight: 15, marginTop: 3 },
-  heroCard: { minHeight: 245, borderRadius: RADIUS.xl, overflow: "hidden", padding: 22, justifyContent: "flex-end", marginBottom: 14 },
-  heroIcon: { width: 50, height: 50, borderRadius: 16, backgroundColor: "rgba(255,255,255,.14)", alignItems: "center", justifyContent: "center", marginBottom: 18 },
-  heroTag: { color: "rgba(255,255,255,.76)", fontSize: 10, fontWeight: "900", letterSpacing: 1 },
-  heroTitle: { color: "#fff", fontSize: 28, fontWeight: "900", marginTop: 4 },
-  heroSub: { color: "rgba(255,255,255,.86)", fontSize: 13, lineHeight: 19, marginTop: 5, maxWidth: 560 },
-  playPill: { alignSelf: "flex-start", marginTop: 16, height: 36, borderRadius: 18, paddingHorizontal: 13, backgroundColor: "rgba(0,0,0,.22)", flexDirection: "row", alignItems: "center", gap: 6 },
-  playPillText: { color: "#fff", fontWeight: "900", fontSize: 12 },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
-  card: { flexGrow: 1, flexBasis: 260, minHeight: 205, backgroundColor: colors.card, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: colors.border, padding: 16 },
-  cardIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center", marginBottom: 14 },
-  tag: { color: colors.saffron, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
-  cardTitle: { color: colors.onSurface, fontSize: FONT.lg, fontWeight: "900", marginTop: 4 },
-  cardSub: { color: colors.muted, marginTop: 4, lineHeight: 18, fontSize: 12 },
-  note: { flexDirection: "row", gap: 9, alignItems: "flex-start", backgroundColor: isDark ? colors.surface2 : colors.cream, borderRadius: RADIUS.md, borderWidth: 1, borderColor: colors.border, padding: 13, marginTop: 18 },
-  noteText: { flex: 1, color: colors.muted, fontSize: 11, lineHeight: 17 },
-});
+const makeStyles = (colors: any, isDark: boolean) => StyleSheet.create({ safe: { flex: 1, backgroundColor: colors.surface }, content: { width: "100%", maxWidth: 960, alignSelf: "center", padding: SPACING.lg, paddingBottom: 130 }, header: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 20 }, back: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" }, eyebrow: { color: colors.saffron, fontSize: 10, fontWeight: "900", letterSpacing: 1.2 }, title: { fontSize: FONT["2xl"], fontWeight: "900", color: colors.onSurface, fontFamily: FONT_DISPLAY, marginTop: 3 }, sub: { color: colors.muted, fontSize: 13, marginTop: 4 }, dailyCard: { minHeight: 112, flexDirection: "row", alignItems: "center", gap: 13, backgroundColor: isDark ? colors.surface2 : colors.cream, borderWidth: 1, borderColor: colors.border, borderRadius: RADIUS.lg, padding: 15, marginBottom: 14 }, dailyIcon: { width: 46, height: 46, borderRadius: 15, backgroundColor: colors.card, alignItems: "center", justifyContent: "center" }, dailyTag: { color: colors.saffron, fontSize: 9, fontWeight: "900", letterSpacing: 1 }, dailyTitle: { color: colors.onSurface, fontSize: 15, fontWeight: "900", marginTop: 3 }, dailySub: { color: colors.muted, fontSize: 10, lineHeight: 15, marginTop: 3 }, heroCard: { minHeight: 245, borderRadius: RADIUS.xl, overflow: "hidden", padding: 22, justifyContent: "flex-end", marginBottom: 14 }, heroIcon: { width: 50, height: 50, borderRadius: 16, backgroundColor: "rgba(255,255,255,.14)", alignItems: "center", justifyContent: "center", marginBottom: 18 }, heroTag: { color: "rgba(255,255,255,.76)", fontSize: 10, fontWeight: "900", letterSpacing: 1 }, heroTitle: { color: "#fff", fontSize: 28, fontWeight: "900", marginTop: 4 }, heroSub: { color: "rgba(255,255,255,.86)", fontSize: 13, lineHeight: 19, marginTop: 5, maxWidth: 560 }, playPill: { alignSelf: "flex-start", marginTop: 16, height: 36, borderRadius: 18, paddingHorizontal: 13, backgroundColor: "rgba(0,0,0,.22)", flexDirection: "row", alignItems: "center", gap: 6 }, playPillText: { color: "#fff", fontWeight: "900", fontSize: 12 }, grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 }, card: { flexGrow: 1, flexBasis: 260, minHeight: 205, backgroundColor: colors.card, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: colors.border, padding: 16 }, cardIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center", marginBottom: 14 }, tag: { color: colors.saffron, fontSize: 9, fontWeight: "900", letterSpacing: 1 }, cardTitle: { color: colors.onSurface, fontSize: FONT.lg, fontWeight: "900", marginTop: 4 }, cardSub: { color: colors.muted, marginTop: 4, lineHeight: 18, fontSize: 12 }, note: { flexDirection: "row", gap: 9, alignItems: "flex-start", backgroundColor: isDark ? colors.surface2 : colors.cream, borderRadius: RADIUS.md, borderWidth: 1, borderColor: colors.border, padding: 13, marginTop: 18 }, noteText: { flex: 1, color: colors.muted, fontSize: 11, lineHeight: 17 } });
