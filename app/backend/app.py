@@ -1,5 +1,6 @@
 """Canonical FastAPI entry point for the UniPool backend."""
 
+import asyncio
 import logging
 import sys
 from datetime import datetime, timezone
@@ -20,6 +21,7 @@ from routes import (
     games_router,
     matches_router,
     messages_router,
+    mobility_router,
     pools_router,
     profile_router,
     requests_router,
@@ -29,7 +31,7 @@ from routes import (
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("unipool")
 
-API_VERSION = "1.2.0"
+API_VERSION = "2.0.0"
 
 app = FastAPI(
     title="UniPool API",
@@ -55,6 +57,7 @@ for router in (
     games_router,
     matches_router,
     users_router,
+    mobility_router,
     compat_router,
 ):
     app.include_router(router, prefix="/api")
@@ -82,6 +85,7 @@ async def health():
         "status": "ok" if database == "ok" else "degraded",
         "database": database,
         "version": API_VERSION,
+        "mobility_version": "2.0",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -94,6 +98,17 @@ def _explicit_seed_admin(email: str, username: str, password: str) -> bool:
         "admin",
         "securepassword123",
     )
+
+
+async def _recurring_materializer_loop():
+    """Keep weekly recurring templates materialized without requiring a page visit."""
+    from services.mobility_service import materialize_due_recurring_routes
+    while True:
+        try:
+            await materialize_due_recurring_routes()
+        except Exception as exc:
+            logger.warning("Recurring journey materializer failed: %s", exc)
+        await asyncio.sleep(3600)
 
 
 @app.on_event("startup")
@@ -109,6 +124,7 @@ async def startup_event():
         await db.user_sessions.create_index("expires_at", expireAfterSeconds=0)
         await db.pools.create_index("pool_id", unique=True)
         await db.pools.create_index([("from_location", 1), ("to_location", 1), ("travel_datetime", 1)])
+        await db.pools.create_index([("route_key", 1), ("status", 1), ("travel_datetime", 1)])
         await db.pools.create_index([("user_id", 1), ("status", 1), ("travel_datetime", 1)])
         await db.join_requests.create_index("request_id", unique=True)
         await db.join_requests.create_index([("pool_owner_id", 1), ("status", 1)])
@@ -124,6 +140,10 @@ async def startup_event():
         await db.push_subscriptions.create_index("endpoint", unique=True)
         await db.push_subscriptions.create_index("user_id")
         await db.game_scores.create_index([("game", 1)])
+        await db.saved_routes.create_index([("user_id", 1), ("route_key", 1)], unique=True)
+        await db.saved_routes.create_index([("route_key", 1), ("alerts_enabled", 1)])
+        await db.recurring_routes.create_index("template_id", unique=True)
+        await db.recurring_routes.create_index([("user_id", 1), ("active", 1)])
 
         from config.settings import SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD, SEED_ADMIN_USERNAME
         from helpers.auth_helper import _hash_password
@@ -151,6 +171,7 @@ async def startup_event():
         else:
             logger.warning("Admin seed skipped: configure explicit credentials instead of the historical demo defaults.")
 
+        asyncio.create_task(_recurring_materializer_loop())
         logger.info("UniPool database indexes ready")
     except Exception as exc:
         logger.exception("UniPool startup initialization failed: %s", exc)
