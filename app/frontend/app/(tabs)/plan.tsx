@@ -40,8 +40,6 @@ export default function ExploreScreen() {
   const [saved, setSaved] = useState<SavedRoute[]>([]);
   const [recurring, setRecurring] = useState<RecurringRoute[]>([]);
   const [insights, setInsights] = useState<RouteInsight[]>([]);
-  const [diagnostics, setDiagnostics] = useState<any>(null);
-  const [digest, setDigest] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [showSave, setShowSave] = useState(false);
   const [saveFrom, setSaveFrom] = useState("Mahindra University");
@@ -62,16 +60,12 @@ export default function ExploreScreen() {
       api.savedRoutes(),
       api.recurringRoutes(),
       api.routeInsights(),
-      api.travelDigest(),
-      api.diagnostics(),
     ]);
     const val = (i: number, fallback: any) => results[i].status === "fulfilled" ? (results[i] as PromiseFulfilledResult<any>).value : fallback;
     setJourneys(val(0, []));
     setSaved(val(1, []));
     setRecurring(val(2, []));
     setInsights(val(3, []));
-    setDigest(val(4, null));
-    setDiagnostics(val(5, null));
     if (results.every((r) => r.status === "rejected")) setError("Couldn't refresh mobility data. Tap to retry.");
     loadedOnce.current = true;
     setLoading(false);
@@ -188,11 +182,6 @@ export default function ExploreScreen() {
           <GameShortcut icon="ticket" title="Travel Reveal" onPress={() => go("/games/travel-reveal")} colors={colors} styles={styles} />
         </View>
       </Section>
-
-      <View style={styles.bottomGrid}>
-        <View style={styles.digestCard}><Text style={styles.eyebrow}>NETWORK DIGEST</Text><Text style={styles.cardTitle}>{digest?.open_trips_next_7d ?? "—"} open trips in the next 7 days</Text><Text style={styles.cardSub}>{saved.length ? `${saved.length} route alert${saved.length === 1 ? "" : "s"} watching for opportunities.` : "Save a route to make this personal."}</Text></View>
-        <View style={styles.digestCard}><Text style={styles.eyebrow}>SYSTEM</Text><Text style={styles.cardTitle}>{diagnostics?.status === "ok" ? "All systems healthy" : diagnostics ? "Backend degraded" : "Checking health"}</Text><Text style={styles.cardSub}>{diagnostics ? `${diagnostics.database_latency_ms} ms database · Mobility ${diagnostics.mobility_version}` : "Diagnostics load quietly in the background."}</Text></View>
-      </View>
     </ScrollView>
   </SafeAreaView>;
 }
@@ -250,8 +239,6 @@ const makeStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   gameCard: { flexGrow: 1, flexBasis: 150, minHeight: 110, backgroundColor: isDark ? colors.surface2 : colors.cream, borderWidth: 1, borderColor: colors.border, borderRadius: RADIUS.lg, padding: 13, justifyContent: "space-between" },
   gameIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: colors.card, alignItems: "center", justifyContent: "center" },
   gameTitle: { color: colors.onSurface, fontWeight: "900", fontSize: 12, marginVertical: 8 },
-  bottomGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  digestCard: { flexGrow: 1, flexBasis: 260, minHeight: 105, backgroundColor: colors.card, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: colors.border, padding: 14 },
   cardTitle: { color: colors.onSurface, fontSize: 12, fontWeight: "900" },
   cardSub: { color: colors.muted, fontSize: 10, lineHeight: 15, marginTop: 3 },
   muted: { color: colors.muted, fontSize: 11 },
