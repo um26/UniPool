@@ -2,10 +2,10 @@
   "expo": {
     "name": "UniPool",
     "slug": "unipool",
-    "version": "1.0.0",
+    "version": "2.2.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "frontend",
+    "scheme": "unipool",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -15,7 +15,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#2447A8"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.emergent.journeypool.xqz695"
@@ -23,7 +23,8 @@
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "name": "UniPool"
     },
     "plugins": [
       "expo-router",
@@ -33,7 +34,7 @@
           "image": "./assets/images/splash-image.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#000000"
+          "backgroundColor": "#F8F7F3"
         }
       ]
     ],
