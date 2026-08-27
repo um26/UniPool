@@ -15,7 +15,7 @@ from config.database import db
 from config.locations import search_locations
 from config.trivia_bank import TRIVIA_BANK
 from services.auth_service import get_current_user
-from services.mobility_service import aware, seats_summary, trip_phase
+from services.mobility_service import seats_summary, trip_phase
 
 router = APIRouter(tags=["network-intelligence"])
 
@@ -106,10 +106,15 @@ async def travel_history(authorization: Optional[str] = Header(None), limit: int
         if pool.get("user_id") != user["user_id"]:
             others.insert(0, {"user_id": pool.get("user_id"), "name": pool.get("user_name")})
         result.append({
-            "pool_id": pool["pool_id"], "from_location": pool["from_location"], "to_location": pool["to_location"],
-            "travel_datetime": pool["travel_datetime"], "trip_status": pool.get("trip_status") or trip_phase(pool),
-            "co_travellers": others, "is_owner": pool.get("user_id") == user["user_id"],
-            "fare": pool.get("fare"), "seats": seats_summary(pool),
+            "pool_id": pool["pool_id"],
+            "from_location": pool["from_location"],
+            "to_location": pool["to_location"],
+            "travel_datetime": pool["travel_datetime"],
+            "trip_status": pool.get("trip_status") or trip_phase(pool),
+            "co_travellers": others,
+            "is_owner": pool.get("user_id") == user["user_id"],
+            "fare": pool.get("fare"),
+            "seats": seats_summary(pool),
         })
     return result
 
@@ -183,8 +188,11 @@ async def record_event(body: AnalyticsEvent, authorization: Optional[str] = Head
     user = await _user(authorization)
     safe_context = {k: v for k, v in body.context.items() if k not in {"email", "phone", "password", "token"}}
     await db.product_events.insert_one({
-        "event_id": f"evt_{uuid.uuid4().hex[:12]}", "user_id": user["user_id"], "event": body.event,
-        "context": safe_context, "created_at": datetime.now(timezone.utc),
+        "event_id": f"evt_{uuid.uuid4().hex[:12]}",
+        "user_id": user["user_id"],
+        "event": body.event,
+        "context": safe_context,
+        "created_at": datetime.now(timezone.utc),
     })
     return {"ok": True}
 
@@ -216,6 +224,19 @@ def _daily_question(day: date) -> dict:
     return TRIVIA_BANK[int(digest[:8], 16) % len(TRIVIA_BANK)]
 
 
+async def _correct_streak(user_id: str, today: date) -> int:
+    recent = await db.daily_challenges.find(
+        {"user_id": user_id, "correct": True}, {"_id": 0, "date": 1}
+    ).sort("date", -1).limit(90).to_list(90)
+    completed_dates = {row["date"] for row in recent}
+    cursor = today if today.isoformat() in completed_dates else today - timedelta(days=1)
+    streak = 0
+    while cursor.isoformat() in completed_dates:
+        streak += 1
+        cursor -= timedelta(days=1)
+    return streak
+
+
 @router.get("/daily-challenge")
 async def daily_challenge(authorization: Optional[str] = Header(None)):
     user = await _user(authorization)
@@ -223,7 +244,17 @@ async def daily_challenge(authorization: Optional[str] = Header(None)):
     question = _daily_question(today)
     challenge_id = f"daily_{today.isoformat()}_{question['id']}"
     completion = await db.daily_challenges.find_one({"user_id": user["user_id"], "challenge_id": challenge_id}, {"_id": 0})
-    return {"challenge_id": challenge_id, "date": today.isoformat(), "q": question["q"], "options": question["options"], "category": question.get("category"), "completed": bool(completion), "correct": completion.get("correct") if completion else None}
+    return {
+        "challenge_id": challenge_id,
+        "date": today.isoformat(),
+        "q": question["q"],
+        "options": question["options"],
+        "category": question.get("category"),
+        "completed": bool(completion),
+        "correct": completion.get("correct") if completion else None,
+        "answer": question["answer"] if completion else None,
+        "streak": await _correct_streak(user["user_id"], today),
+    }
 
 
 @router.post("/daily-challenge/answer")
@@ -234,19 +265,30 @@ async def answer_daily_challenge(body: ChallengeAnswer, authorization: Optional[
     expected_id = f"daily_{today.isoformat()}_{question['id']}"
     if body.challenge_id != expected_id:
         raise HTTPException(status_code=400, detail="This daily challenge has expired")
+
+    existing = await db.daily_challenges.find_one(
+        {"user_id": user["user_id"], "challenge_id": expected_id}, {"_id": 0}
+    )
+    if existing:
+        return {
+            "correct": bool(existing.get("correct")),
+            "answer": question["answer"],
+            "streak": await _correct_streak(user["user_id"], today),
+            "locked": True,
+        }
+
     correct = body.answer == int(question["answer"])
     now = datetime.now(timezone.utc)
-    await db.daily_challenges.update_one(
-        {"user_id": user["user_id"], "challenge_id": expected_id},
-        {"$set": {"user_id": user["user_id"], "challenge_id": expected_id, "date": today.isoformat(), "correct": correct, "answered_at": now}}, upsert=True,
-    )
-    recent = await db.daily_challenges.find({"user_id": user["user_id"], "correct": True}, {"_id": 0, "date": 1}).sort("date", -1).limit(60).to_list(60)
-    completed_dates = {row["date"] for row in recent}
-    streak = 0
-    cursor = today
-    while cursor.isoformat() in completed_dates:
-        streak += 1; cursor -= timedelta(days=1)
-    return {"correct": correct, "answer": question["answer"], "streak": streak}
+    await db.daily_challenges.insert_one({
+        "user_id": user["user_id"],
+        "challenge_id": expected_id,
+        "date": today.isoformat(),
+        "selected_answer": body.answer,
+        "correct": correct,
+        "answered_at": now,
+    })
+    streak = await _correct_streak(user["user_id"], today) if correct else 0
+    return {"correct": correct, "answer": question["answer"], "streak": streak, "locked": True}
 
 
 __all__ = ["router"]
