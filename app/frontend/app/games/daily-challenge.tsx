@@ -17,9 +17,10 @@ type Challenge = {
   category?: string;
   completed: boolean;
   correct?: boolean | null;
+  answer?: number | null;
+  streak?: number;
 };
-
-type Result = { correct: boolean; answer: number; streak: number };
+type Result = { correct: boolean; answer: number; streak: number; locked?: boolean };
 
 export default function DailyChallengeScreen() {
   const router = useRouter();
@@ -39,7 +40,7 @@ export default function DailyChallengeScreen() {
       const data = await api.dailyChallenge();
       setChallenge(data);
       setSelected(null);
-      setResult(data.completed ? { correct: !!data.correct, answer: -1, streak: 0 } : null);
+      setResult(data.completed ? { correct: !!data.correct, answer: Number(data.answer ?? -1), streak: Number(data.streak || 0), locked: true } : null);
       api.recordEvent("daily_challenge_view", { completed: !!data.completed }).catch(() => {});
     } catch (e: any) {
       setError(e?.message || "Couldn't load today's challenge.");
@@ -57,7 +58,7 @@ export default function DailyChallengeScreen() {
     try {
       const data = await api.answerDailyChallenge(challenge.challenge_id, index);
       setResult(data);
-      setChallenge((current) => current ? { ...current, completed: true, correct: !!data.correct } : current);
+      setChallenge((current) => current ? { ...current, completed: true, correct: !!data.correct, answer: data.answer, streak: data.streak } : current);
       api.recordEvent("daily_challenge_answer", { correct: !!data.correct }).catch(() => {});
       Haptics.notificationAsync(data.correct ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning);
     } catch (e: any) {
@@ -108,7 +109,7 @@ export default function DailyChallengeScreen() {
           <Ionicons name={(result?.correct ?? challenge.correct) ? "checkmark-circle" : "flag-outline"} size={24} color={(result?.correct ?? challenge.correct) ? colors.success : colors.saffron} />
           <View style={{ flex: 1 }}>
             <Text style={styles.resultTitle}>{(result?.correct ?? challenge.correct) ? "Nice one." : "Challenge complete."}</Text>
-            <Text style={styles.muted}>{result?.streak ? `${result.streak}-day correct streak. Come back tomorrow to keep it going.` : "A new travel challenge unlocks tomorrow."}</Text>
+            <Text style={styles.muted}>{result?.streak ? `${result.streak}-day correct streak. Come back tomorrow to keep it going.` : "Your answer is locked for today. A new travel challenge unlocks tomorrow."}</Text>
           </View>
           {result?.streak ? <View style={styles.streak}><Ionicons name="flame" size={15} color={colors.saffron} /><Text style={styles.streakText}>{result.streak}</Text></View> : null}
         </View> : <View style={styles.tip}><Ionicons name="time-outline" size={16} color={colors.muted} /><Text style={styles.muted}>Your first answer counts for today's challenge.</Text></View>}
