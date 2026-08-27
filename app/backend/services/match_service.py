@@ -6,6 +6,7 @@ from difflib import SequenceMatcher
 from typing import Any, Dict, List
 
 from config.database import db
+from config.locations import canonical_location
 
 
 def _aware(dt: datetime) -> datetime:
@@ -20,26 +21,19 @@ def _norm(value: Any) -> str:
     return " ".join(text.split())
 
 
-_LOCATION_ALIASES = {
-    "mu": "mahindra university",
-    "mahindra uni": "mahindra university",
-    "mahindra campus": "mahindra university",
-    "mahindra university campus": "mahindra university",
-    "rgia": "hyderabad airport",
-    "rgi airport": "hyderabad airport",
-    "rajiv gandhi airport": "hyderabad airport",
-    "rajiv gandhi international airport": "hyderabad airport",
-    "hyderabad international airport": "hyderabad airport",
-    "hyd airport": "hyderabad airport",
-}
+def _canonical_token(value: Any) -> str:
+    """Resolve every matcher location through UniPool's shared catalogue.
 
-
-def _canonical_location(value: Any) -> str:
-    text = _norm(value)
+    Known places compare by stable location id (RGIA/HYD, MU, IGIA, railway
+    stations, etc). Unknown free-text places retain the older fuzzy cleanup so
+    arbitrary destinations continue to work without being in the catalogue.
+    """
+    resolved = canonical_location(str(value or ""))
+    if resolved.get("id"):
+        return f"id:{resolved['id']}"
+    text = _norm(resolved.get("name") or value)
     if not text:
         return ""
-    if text in _LOCATION_ALIASES:
-        return _LOCATION_ALIASES[text]
     replacements = {
         " intl ": " ",
         " international ": " ",
@@ -47,20 +41,22 @@ def _canonical_location(value: Any) -> str:
         " campus ": " ",
         " main gate ": " ",
         " pickup point ": " ",
+        " railway station ": " station ",
     }
     padded = f" {text} "
     for old, new in replacements.items():
         padded = padded.replace(old, new)
-    text = " ".join(padded.split())
-    return _LOCATION_ALIASES.get(text, text)
+    return " ".join(padded.split())
 
 
 def _sim(a: Any, b: Any) -> float:
-    a_text, b_text = _canonical_location(a), _canonical_location(b)
+    a_text, b_text = _canonical_token(a), _canonical_token(b)
     if not a_text or not b_text:
         return 0.0
     if a_text == b_text:
         return 1.0
+    if a_text.startswith("id:") or b_text.startswith("id:"):
+        return 0.0
     if a_text in b_text or b_text in a_text:
         return 0.94
     seq = SequenceMatcher(None, a_text, b_text).ratio()
