@@ -9,187 +9,22 @@ import { SPACING, RADIUS, FONT } from "@/src/theme";
 import { useTheme } from "@/src/theme_context/ThemeContext";
 import { api } from "@/src/api/client";
 import LeaderboardModal from "@/src/components/LeaderboardModal";
+import GameShareButton from "@/src/components/GameShareButton";
 
-const WORDS = [
-  "MUMBAI", "DELHI", "JAIPUR", "GOA", "KOLKATA", "CHENNAI", "HYDERABAD", "BENGALURU", "PUNE", "SURAT",
-  "INDORE", "LUCKNOW", "AGRA", "VARANASI", "UDAIPUR", "JODHPUR", "AMRITSAR", "KOCHI", "MYSURU", "NAGPUR",
-  "SHIMLA", "MANALI", "MUSSOORIE", "NAINITAL", "DARJEELING", "GANGTOK", "SRINAGAR", "LEH", "OOTY", "MUNNAR",
-  "RISHIKESH", "HARIDWAR", "PONDICHERRY", "VADODARA", "AHMEDABAD", "BHUBANESWAR", "GUWAHATI", "CHANDIGARH", "PATNA", "RANCHI",
-  "RICKSHAW", "PLATFORM", "LUGGAGE", "TICKET", "JOURNEY", "HIGHWAY", "AIRPORT", "RAILWAY", "STATION", "TERMINAL",
-  "BOARDING", "PASSPORT", "BACKPACK", "COMPASS", "ITINERARY", "HOSTEL", "CHECKIN", "SUNRISE", "SUNSET", "MOUNTAIN",
-  "BEACH", "DESERT", "TEMPLE", "PALACE", "FORT", "MARKET", "CAMPING", "TREKKING", "TAXI", "METRO",
-  "EXPRESS", "VANDEBHARAT", "RUNWAY", "TRAVELLER", "CARRIAGE", "WINDOW", "TUNNEL", "BRIDGE", "ROUTE", "DESTINATION",
-];
+const WORDS=["MUMBAI","DELHI","JAIPUR","GOA","KOLKATA","CHENNAI","HYDERABAD","BENGALURU","PUNE","SURAT","INDORE","LUCKNOW","AGRA","VARANASI","UDAIPUR","JODHPUR","AMRITSAR","KOCHI","MYSURU","NAGPUR","SHIMLA","MANALI","MUSSOORIE","NAINITAL","DARJEELING","GANGTOK","SRINAGAR","LEH","OOTY","MUNNAR","RISHIKESH","HARIDWAR","PONDICHERRY","VADODARA","AHMEDABAD","BHUBANESWAR","GUWAHATI","CHANDIGARH","PATNA","RANCHI","RICKSHAW","PLATFORM","LUGGAGE","TICKET","JOURNEY","HIGHWAY","AIRPORT","RAILWAY","STATION","TERMINAL","BOARDING","PASSPORT","BACKPACK","COMPASS","ITINERARY","HOSTEL","CHECKIN","SUNRISE","SUNSET","MOUNTAIN","BEACH","DESERT","TEMPLE","PALACE","FORT","MARKET","CAMPING","TREKKING","TAXI","METRO","EXPRESS","VANDEBHARAT","RUNWAY","TRAVELLER","CARRIAGE","WINDOW","TUNNEL","BRIDGE","ROUTE","DESTINATION"];
+const ROUND_SECONDS=15;const TOTAL_ROUNDS=8;
+function scramble(word:string){let letters=word.split("");let attempt=word;let guard=0;while(attempt===word&&guard<12){letters=[...letters].sort(()=>Math.random()-.5);attempt=letters.join("");guard++;}return attempt;}
+function pickWords(){return [...WORDS].map(w=>({w,sort:Math.random()})).sort((a,b)=>a.sort-b.sort).slice(0,TOTAL_ROUNDS).map(x=>x.w);}
 
-const ROUND_SECONDS = 15;
-const TOTAL_ROUNDS = 8;
-
-function scramble(word: string): string {
-  let letters = word.split("");
-  let attempt = word;
-  let guard = 0;
-  while (attempt === word && guard < 12) {
-    letters = [...letters].sort(() => Math.random() - 0.5);
-    attempt = letters.join("");
-    guard++;
-  }
-  return attempt;
+export default function WordScramble(){
+ const router=useRouter();const{colors}=useTheme();const styles=useMemo(()=>makeStyles(colors),[colors]);const[words,setWords]=useState<string[]>(()=>pickWords());const[round,setRound]=useState(0);const[scrambled,setScrambled]=useState(()=>scramble(words[0]));const[guess,setGuess]=useState("");const[score,setScore]=useState(0);const[timeLeft,setTimeLeft]=useState(ROUND_SECONDS);const[feedback,setFeedback]=useState<"correct"|"wrong"|null>(null);const[done,setDone]=useState(false);const[showBoard,setShowBoard]=useState(false);
+ useEffect(()=>{if(done)api.submitScore("word-scramble",score).catch(()=>{});},[done,score]);
+ const current=words[round];
+ const nextRound=useCallback(()=>{setFeedback(null);setGuess("");if(round+1>=TOTAL_ROUNDS){setDone(true);Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);}else{const nextIdx=round+1;setRound(nextIdx);setScrambled(scramble(words[nextIdx]));setTimeLeft(ROUND_SECONDS);}},[round,words]);
+ useEffect(()=>{if(done||feedback)return;if(timeLeft<=0){setFeedback("wrong");Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);setTimeout(nextRound,900);return;}const t=setTimeout(()=>setTimeLeft(s=>s-1),1000);return()=>clearTimeout(t);},[timeLeft,done,feedback,nextRound]);
+ const submit=()=>{if(feedback)return;const correct=guess.trim().toUpperCase()===current;if(correct){setScore(s=>s+Math.max(1,Math.ceil(timeLeft/3)));setFeedback("correct");Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);}else{setFeedback("wrong");Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);}setTimeout(nextRound,900);};
+ const restart=()=>{const fresh=pickWords();setWords(fresh);setRound(0);setScrambled(scramble(fresh[0]));setGuess("");setScore(0);setTimeLeft(ROUND_SECONDS);setFeedback(null);setDone(false);};
+ if(done)return <SafeAreaView style={styles.safe}><View style={styles.doneWrap}><Ionicons name="ribbon" size={64} color={colors.saffron}/><Text style={styles.doneTitle}>Score: {score}</Text><Text style={styles.doneSub}>{score>=TOTAL_ROUNDS*4?"Word wizard!":score>=TOTAL_ROUNDS*2?"Nicely done!":"Give it another shot!"}</Text><GameShareButton game="Word Scramble" result={`I scored ${score} points`}/><Pressable onPress={restart} style={styles.btn}><Text style={styles.btnText}>Play again</Text></Pressable><Pressable onPress={()=>setShowBoard(true)} style={{marginTop:SPACING.sm}}><Text style={styles.link}>View leaderboard</Text></Pressable><Pressable onPress={()=>router.back()} style={[styles.btn,styles.btnGhost]}><Text style={[styles.btnText,{color:colors.indigo}]}>Back</Text></Pressable></View><LeaderboardModal visible={showBoard} onClose={()=>setShowBoard(false)} game="word-scramble" gameLabel="Word Scramble" unit="pts"/></SafeAreaView>;
+ return <SafeAreaView style={styles.safe}><View style={styles.header}><Pressable onPress={()=>router.back()} hitSlop={12}><Ionicons name="chevron-back" size={24} color={colors.onSurface}/></Pressable><Text style={styles.progress}>{round+1} / {TOTAL_ROUNDS}</Text><View style={styles.timerPill}><Ionicons name="time" size={14} color={timeLeft<=5?colors.error:colors.indigo}/><Text style={[styles.timerText,timeLeft<=5&&{color:colors.error}]}>{timeLeft}s</Text></View></View><Text style={styles.scoreText}>Score: {score}</Text><Text style={styles.hint}>Unscramble this travel word</Text><View style={styles.letterRow}>{scrambled.split("").map((letter,i)=><View key={i} style={styles.letterBox}><Text style={styles.letterText}>{letter}</Text></View>)}</View><View style={styles.inputRow}><TextInput value={guess} onChangeText={setGuess} onSubmitEditing={submit} autoCapitalize="characters" autoCorrect={false} placeholder="Your answer" placeholderTextColor={colors.muted} style={[styles.input,feedback==="correct"&&{borderColor:colors.success,backgroundColor:colors.surface2},feedback==="wrong"&&{borderColor:colors.error,backgroundColor:colors.surface2}]} editable={!feedback}/><Pressable onPress={submit} disabled={!!feedback||!guess.trim()} style={[styles.submitBtn,(!!feedback||!guess.trim())&&{opacity:.5}]}><Ionicons name="checkmark" size={22} color="#fff"/></Pressable></View>{feedback==="wrong"&&<Text style={styles.answerReveal}>Answer: {current}</Text>}</SafeAreaView>;
 }
-
-function pickWords(): string[] {
-  return [...WORDS].map((w) => ({ w, sort: Math.random() })).sort((a, b) => a.sort - b.sort).slice(0, TOTAL_ROUNDS).map((x) => x.w);
-}
-
-export default function WordScramble() {
-  const router = useRouter();
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [words, setWords] = useState<string[]>(() => pickWords());
-  const [round, setRound] = useState(0);
-  const [scrambled, setScrambled] = useState(() => scramble(words[0]));
-  const [guess, setGuess] = useState("");
-  const [score, setScore] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(ROUND_SECONDS);
-  const [feedback, setFeedback] = useState<"correct" | "wrong" | null>(null);
-  const [done, setDone] = useState(false);
-  const [showBoard, setShowBoard] = useState(false);
-
-  useEffect(() => {
-    if (done) api.submitScore("word-scramble", score).catch(() => {});
-  }, [done, score]);
-
-  const current = words[round];
-
-  const nextRound = useCallback(() => {
-    setFeedback(null);
-    setGuess("");
-    if (round + 1 >= TOTAL_ROUNDS) {
-      setDone(true);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } else {
-      const nextIdx = round + 1;
-      setRound(nextIdx);
-      setScrambled(scramble(words[nextIdx]));
-      setTimeLeft(ROUND_SECONDS);
-    }
-  }, [round, words]);
-
-  useEffect(() => {
-    if (done || feedback) return;
-    if (timeLeft <= 0) {
-      setFeedback("wrong");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      setTimeout(nextRound, 900);
-      return;
-    }
-    const t = setTimeout(() => setTimeLeft((s) => s - 1), 1000);
-    return () => clearTimeout(t);
-  }, [timeLeft, done, feedback, nextRound]);
-
-  const submit = () => {
-    if (feedback) return;
-    const correct = guess.trim().toUpperCase() === current;
-    if (correct) {
-      setScore((s) => s + Math.max(1, Math.ceil(timeLeft / 3)));
-      setFeedback("correct");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } else {
-      setFeedback("wrong");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    }
-    setTimeout(nextRound, 900);
-  };
-
-  const restart = () => {
-    const fresh = pickWords();
-    setWords(fresh);
-    setRound(0);
-    setScrambled(scramble(fresh[0]));
-    setGuess("");
-    setScore(0);
-    setTimeLeft(ROUND_SECONDS);
-    setFeedback(null);
-    setDone(false);
-  };
-
-  if (done) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.doneWrap}>
-          <Ionicons name="ribbon" size={64} color={colors.saffron} />
-          <Text style={styles.doneTitle}>Score: {score}</Text>
-          <Text style={styles.doneSub}>{score >= TOTAL_ROUNDS * 4 ? "Word wizard!" : score >= TOTAL_ROUNDS * 2 ? "Nicely done!" : "Give it another shot!"}</Text>
-          <Pressable onPress={restart} style={styles.btn}><Text style={styles.btnText}>Play again</Text></Pressable>
-          <Pressable onPress={() => setShowBoard(true)} style={{ marginTop: SPACING.sm }}><Text style={styles.link}>View leaderboard</Text></Pressable>
-          <Pressable onPress={() => router.back()} style={[styles.btn, styles.btnGhost]}><Text style={[styles.btnText, { color: colors.indigo }]}>Back</Text></Pressable>
-        </View>
-        <LeaderboardModal visible={showBoard} onClose={() => setShowBoard(false)} game="word-scramble" gameLabel="Word Scramble" unit="pts" />
-      </SafeAreaView>
-    );
-  }
-
-  return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}><Ionicons name="chevron-back" size={24} color={colors.onSurface} /></Pressable>
-        <Text style={styles.progress}>{round + 1} / {TOTAL_ROUNDS}</Text>
-        <View style={styles.timerPill}>
-          <Ionicons name="time" size={14} color={timeLeft <= 5 ? colors.error : colors.indigo} />
-          <Text style={[styles.timerText, timeLeft <= 5 && { color: colors.error }]}>{timeLeft}s</Text>
-        </View>
-      </View>
-
-      <Text style={styles.scoreText}>Score: {score}</Text>
-      <Text style={styles.hint}>Unscramble this travel word</Text>
-
-      <View style={styles.letterRow}>
-        {scrambled.split("").map((letter, i) => (
-          <View key={i} style={styles.letterBox}><Text style={styles.letterText}>{letter}</Text></View>
-        ))}
-      </View>
-
-      <View style={styles.inputRow}>
-        <TextInput
-          value={guess}
-          onChangeText={setGuess}
-          onSubmitEditing={submit}
-          autoCapitalize="characters"
-          autoCorrect={false}
-          placeholder="Your answer"
-          placeholderTextColor={colors.muted}
-          style={[styles.input, feedback === "correct" && { borderColor: colors.success, backgroundColor: colors.surface2 }, feedback === "wrong" && { borderColor: colors.error, backgroundColor: colors.surface2 }]}
-          editable={!feedback}
-        />
-        <Pressable onPress={submit} disabled={!!feedback || !guess.trim()} style={[styles.submitBtn, (!!feedback || !guess.trim()) && { opacity: 0.5 }]}>
-          <Ionicons name="checkmark" size={22} color="#fff" />
-        </Pressable>
-      </View>
-
-      {feedback === "wrong" && <Text style={styles.answerReveal}>Answer: {current}</Text>}
-    </SafeAreaView>
-  );
-}
-
-const makeStyles = (colors: any) => StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.surface },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: SPACING.lg },
-  progress: { color: colors.muted, fontWeight: "700" },
-  timerPill: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.surface2, borderRadius: RADIUS.pill, paddingHorizontal: 10, paddingVertical: 4 },
-  timerText: { fontWeight: "800", color: colors.indigo },
-  scoreText: { textAlign: "center", color: colors.muted, fontWeight: "700" },
-  hint: { textAlign: "center", fontSize: FONT.lg, fontWeight: "700", color: colors.onSurface, marginTop: SPACING.lg },
-  letterRow: { flexDirection: "row", justifyContent: "center", flexWrap: "wrap", gap: SPACING.sm, marginTop: SPACING.xl, paddingHorizontal: SPACING.lg },
-  letterBox: { minWidth: 40, height: 52, paddingHorizontal: 8, borderRadius: RADIUS.sm, backgroundColor: colors.indigo, alignItems: "center", justifyContent: "center" },
-  letterText: { color: colors.onIndigo, fontSize: FONT.lg, fontWeight: "800" },
-  inputRow: { flexDirection: "row", gap: SPACING.sm, paddingHorizontal: SPACING.lg, marginTop: SPACING.xxl },
-  input: { flex: 1, backgroundColor: colors.card, borderRadius: RADIUS.md, borderWidth: 2, borderColor: colors.border, paddingHorizontal: 16, paddingVertical: 14, fontSize: FONT.lg, fontWeight: "700", color: colors.onSurface, letterSpacing: 1 },
-  submitBtn: { width: 52, height: 52, borderRadius: RADIUS.md, backgroundColor: colors.saffron, alignItems: "center", justifyContent: "center" },
-  answerReveal: { textAlign: "center", color: colors.error, marginTop: SPACING.md, fontWeight: "700" },
-  doneWrap: { flex: 1, alignItems: "center", justifyContent: "center", padding: SPACING.xl },
-  doneTitle: { fontSize: FONT["2xl"], fontWeight: "800", color: colors.onSurface, marginTop: SPACING.md },
-  doneSub: { color: colors.muted, marginBottom: SPACING.xl, textAlign: "center" },
-  btn: { backgroundColor: colors.indigo, paddingHorizontal: 24, paddingVertical: 14, borderRadius: RADIUS.pill, marginTop: SPACING.sm, alignSelf: "stretch", alignItems: "center" },
-  btnGhost: { backgroundColor: "transparent", borderWidth: 1, borderColor: colors.indigo },
-  btnText: { color: "#fff", fontWeight: "800" },
-  link: { color: colors.indigo, fontWeight: "700", textDecorationLine: "underline" },
-});
+const makeStyles=(colors:any)=>StyleSheet.create({safe:{flex:1,backgroundColor:colors.surface},header:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",padding:SPACING.lg},progress:{color:colors.muted,fontWeight:"700"},timerPill:{flexDirection:"row",alignItems:"center",gap:4,backgroundColor:colors.surface2,borderRadius:RADIUS.pill,paddingHorizontal:10,paddingVertical:4},timerText:{fontWeight:"800",color:colors.indigo},scoreText:{textAlign:"center",color:colors.muted,fontWeight:"700"},hint:{textAlign:"center",fontSize:FONT.lg,fontWeight:"700",color:colors.onSurface,marginTop:SPACING.lg},letterRow:{flexDirection:"row",justifyContent:"center",flexWrap:"wrap",gap:SPACING.sm,marginTop:SPACING.xl,paddingHorizontal:SPACING.lg},letterBox:{minWidth:40,height:52,paddingHorizontal:8,borderRadius:RADIUS.sm,backgroundColor:colors.indigo,alignItems:"center",justifyContent:"center"},letterText:{color:colors.onIndigo,fontSize:FONT.lg,fontWeight:"800"},inputRow:{flexDirection:"row",gap:SPACING.sm,paddingHorizontal:SPACING.lg,marginTop:SPACING.xxl},input:{flex:1,backgroundColor:colors.card,borderRadius:RADIUS.md,borderWidth:2,borderColor:colors.border,paddingHorizontal:16,paddingVertical:14,fontSize:FONT.lg,fontWeight:"700",color:colors.onSurface,letterSpacing:1},submitBtn:{width:52,height:52,borderRadius:RADIUS.md,backgroundColor:colors.saffron,alignItems:"center",justifyContent:"center"},answerReveal:{textAlign:"center",color:colors.error,marginTop:SPACING.md,fontWeight:"700"},doneWrap:{flex:1,alignItems:"center",justifyContent:"center",padding:SPACING.xl,gap:8},doneTitle:{fontSize:FONT["2xl"],fontWeight:"800",color:colors.onSurface,marginTop:SPACING.md},doneSub:{color:colors.muted,marginBottom:8,textAlign:"center"},btn:{backgroundColor:colors.indigo,paddingHorizontal:24,paddingVertical:14,borderRadius:RADIUS.pill,marginTop:SPACING.sm,alignSelf:"stretch",alignItems:"center"},btnGhost:{backgroundColor:"transparent",borderWidth:1,borderColor:colors.indigo},btnText:{color:"#fff",fontWeight:"800"},link:{color:colors.indigo,fontWeight:"700",textDecorationLine:"underline"}});
