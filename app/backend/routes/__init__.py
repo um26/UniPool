@@ -10,6 +10,7 @@ from .games import router as games_router
 from .matches import router as matches_router
 from .users import router as users_router
 from .compat import router as compat_router
+from .mobility import router as mobility_router
 
 __all__ = [
     "auth_router",
@@ -22,4 +23,5 @@ __all__ = [
     "matches_router",
     "users_router",
     "compat_router",
+    "mobility_router",
 ]
