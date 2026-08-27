@@ -1,5 +1,12 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "cd app/frontend && npm install --legacy-peer-deps && npx expo export -p web",
   "outputDirectory": "app/frontend/dist",
-  "installCommand": "echo 'handled in buildCommand'"
+  "installCommand": "echo 'handled in buildCommand'",
+  "ignoreCommand": "git diff --quiet \"${VERCEL_GIT_PREVIOUS_SHA:-HEAD^}\" HEAD -- app/frontend vercel.json",
+  "git": {
+    "deploymentEnabled": {
+      "ci/*": false
+    }
+  }
 }

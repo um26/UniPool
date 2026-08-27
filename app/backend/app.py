@@ -18,6 +18,7 @@ from routes import (
     admin_router,
     auth_router,
     compat_router,
+    experience_router,
     games_router,
     matches_router,
     messages_router,
@@ -32,7 +33,7 @@ from routes import (
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("unipool")
 
-API_VERSION = "2.1.0"
+API_VERSION = "2.2.0"
 
 app = FastAPI(
     title="UniPool API",
@@ -60,6 +61,7 @@ for router in (
     users_router,
     mobility_router,
     network_router,
+    experience_router,
     compat_router,
 ):
     app.include_router(router, prefix="/api")
@@ -79,7 +81,7 @@ async def health():
         database = "degraded"
     return {
         "app": "UniPool", "status": "ok" if database == "ok" else "degraded", "database": database,
-        "version": API_VERSION, "mobility_version": "2.1", "timestamp": datetime.now(timezone.utc).isoformat(),
+        "version": API_VERSION, "mobility_version": "2.2", "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -124,6 +126,7 @@ async def startup_event():
         await db.join_requests.create_index([("requester_id", 1), ("status", 1)])
         await db.blocks.create_index([("blocker_id", 1), ("blocked_id", 1)], unique=True)
         await db.reports.create_index("created_at")
+        await db.reports.create_index([("pool_id", 1), ("reporter_id", 1), ("reported_user_id", 1), ("reason", 1)])
         await db.college_verifications.create_index("user_id", unique=True)
         await db.messages.create_index("message_id", unique=True)
         await db.messages.create_index([("from_user_id", 1), ("created_at", 1)])
@@ -140,6 +143,13 @@ async def startup_event():
         await db.product_events.create_index([("event", 1), ("created_at", -1)])
         await db.product_events.create_index([("user_id", 1), ("created_at", -1)])
         await db.daily_challenges.create_index([("user_id", 1), ("challenge_id", 1)], unique=True)
+        await db.notifications.create_index("notification_id", unique=True)
+        await db.notifications.create_index([("user_id", 1), ("read_at", 1), ("created_at", -1)])
+        await db.notification_preferences.create_index("user_id", unique=True)
+        await db.pickup_points.create_index("pickup_point_id", unique=True)
+        await db.pickup_points.create_index([("user_id", 1), ("normalized_label", 1)], unique=True)
+        await db.client_errors.create_index([("created_at", -1)])
+        await db.client_errors.create_index([("app_version", 1), ("status", 1)])
 
         from config.settings import SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD, SEED_ADMIN_USERNAME
         from helpers.auth_helper import _hash_password
