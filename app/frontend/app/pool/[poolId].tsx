@@ -1,8 +1,8 @@
-import React, { useCallback, useState, useMemo } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert, Platform, Share as RNShare } from "react-native";
+import React, { useCallback, useMemo, useState } from "react";
+import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, Share as RNShare, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 
 import { SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
@@ -15,231 +15,100 @@ import PoolMapView from "@/src/components/PoolMapView";
 import ReportBlockModal from "@/src/components/ReportBlockModal";
 
 const WEB_BASE_URL = "https://uni-pool-ruddy.vercel.app";
-
 type ConfirmedTraveler = { user_id: string; name: string; email: string };
 type Pool = {
   pool_id: string; user_id: string; user_name: string; user_email: string;
   from_location: string; to_location: string; travel_datetime: string;
-  gender_preference: string; companions: number; luggage?: string | null; notes?: string | null;
-  user_rating_avg?: number | null; user_rating_count?: number;
-  user_badges?: { id: string; label: string; icon: string }[];
-  user_college_id?: { roll_number: string; school_name: string; degree_level_name: string; branch_name: string; batch_year: number } | null;
-  confirmed_travelers?: ConfirmedTraveler[];
-  my_request_status?: "pending" | "accepted" | "declined" | null;
+  gender_preference: string; companions: number; total_seats?: number;
+  luggage?: string | null; notes?: string | null; status?: string; trip_status?: string;
+  user_rating_avg?: number | null; user_rating_count?: number; user_badges?: any[]; user_college_id?: any;
+  confirmed_travelers?: ConfirmedTraveler[]; my_request_status?: "pending" | "waitlisted" | "accepted" | "declined" | null;
+  trip_conversation_id?: string | null; meeting_point?: { label?: string; notes?: string; lat?: number; lng?: number } | null;
+  fare?: { amount?: number; currency?: string } | null; member_statuses?: Record<string, string>;
 };
 
-function fmtWhen(iso: string) {
-  return new Date(iso).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
-}
+function fmtWhen(iso: string) { return new Date(iso).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }); }
+function prettyStatus(value?: string | null) { return (value || "planning").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()); }
 
 export default function PoolDetailScreen() {
   const { poolId } = useLocalSearchParams<{ poolId: string }>();
-  const router = useRouter();
-  const { user } = useAuth();
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [pool, setPool] = useState<Pool | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [requesting, setRequesting] = useState(false);
-  const [showReport, setShowReport] = useState(false);
+  const router = useRouter(); const { user } = useAuth(); const { colors } = useTheme(); const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [pool, setPool] = useState<Pool | null>(null); const [loading, setLoading] = useState(true); const [busy, setBusy] = useState<string | null>(null); const [showReport, setShowReport] = useState(false);
+  const [editingMeeting, setEditingMeeting] = useState(false); const [meetingLabel, setMeetingLabel] = useState(""); const [meetingNotes, setMeetingNotes] = useState("");
+  const [editingFare, setEditingFare] = useState(false); const [fareAmount, setFareAmount] = useState("");
 
-  const load = useCallback(async () => {
-    try { setPool(await api.getPool(poolId as string)); }
-    catch (e: any) { Alert.alert("Not found", "This pool no longer exists."); router.back(); }
-    finally { setLoading(false); }
-  }, [poolId]);
-
+  const load = useCallback(async () => { try { const data = await api.getPool(poolId as string); setPool(data); setMeetingLabel(data.meeting_point?.label || ""); setMeetingNotes(data.meeting_point?.notes || ""); setFareAmount(data.fare?.amount ? String(data.fare.amount) : ""); } catch { Alert.alert("Not found", "This journey no longer exists."); router.back(); } finally { setLoading(false); } }, [poolId]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  if (loading || !pool) return <SafeAreaView style={styles.safe}><View style={styles.loading}><ActivityIndicator color={colors.indigo} /></View></SafeAreaView>;
+
+  const mine = pool.user_id === user?.user_id; const travelers = pool.confirmed_travelers || []; const participant = mine || travelers.some((t) => t.user_id === user?.user_id);
+  const totalSeats = pool.total_seats || 4; const occupied = 1 + (pool.companions || 0) + travelers.length; const available = Math.max(0, totalSeats - occupied); const perPerson = pool.fare?.amount ? Number(pool.fare.amount) / Math.max(1, occupied) : null;
+  const myStatus = user?.user_id ? pool.member_statuses?.[user.user_id] : null;
+
   const share = async () => {
-    const url = `${WEB_BASE_URL}/pool/${poolId}`;
-    const text = pool ? `Join my UniPool ride: ${pool.from_location} → ${pool.to_location} — ${url}` : url;
-    if (Platform.OS === "web" && typeof navigator !== "undefined" && (navigator as any).share) {
-      try { await (navigator as any).share({ title: "UniPool ride", text, url }); return; } catch { /* user cancelled */ }
-    }
-    if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.clipboard) {
-      try { await navigator.clipboard.writeText(url); Alert.alert("Link copied", "Pool link copied to clipboard."); return; } catch {}
-    }
+    const url = `${WEB_BASE_URL}/pool/${pool.pool_id}`;
+    const people = [pool.user_name, ...travelers.map((t) => t.name)].join(", ");
+    const text = participant ? `UniPool trip\n${pool.from_location} → ${pool.to_location}\n${fmtWhen(pool.travel_datetime)}\nTravellers: ${people}${pool.meeting_point?.label ? `\nMeeting: ${pool.meeting_point.label}` : ""}\n${url}` : `Join this UniPool ride: ${pool.from_location} → ${pool.to_location} — ${url}`;
+    if (Platform.OS === "web" && typeof navigator !== "undefined" && (navigator as any).share) { try { await (navigator as any).share({ title: "UniPool journey", text, url }); return; } catch {} }
+    if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.clipboard) { try { await navigator.clipboard.writeText(text); Alert.alert("Trip summary copied", "Share it with someone you trust."); return; } catch {} }
     try { await RNShare.share({ message: text }); } catch {}
   };
 
-  const sendRequest = async () => {
-    if (!pool) return;
-    setRequesting(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    try {
-      await api.requestToJoin(pool.pool_id);
-      setPool({ ...pool, my_request_status: "pending" });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e: any) {
-      Alert.alert("Couldn't send request", e.message || "Try again");
-    } finally {
-      setRequesting(false);
-    }
-  };
+  const request = async () => { setBusy("request"); try { const result = await api.requestToJoin(pool.pool_id); setPool({ ...pool, my_request_status: result.status }); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch (e: any) { Alert.alert("Couldn't send request", e.message || "Try again"); } finally { setBusy(null); } };
+  const setMemberStatus = async (status: string) => { setBusy(status); try { const updated = await api.setJourneyStatus(pool.pool_id, status); setPool({ ...pool, ...updated }); Haptics.selectionAsync(); } catch (e: any) { Alert.alert("Couldn't update status", e.message); } finally { setBusy(null); } };
+  const setGlobalStatus = async (status: string) => { setBusy(status); try { const updated = await api.setJourneyStatus(pool.pool_id, status); setPool({ ...pool, ...updated }); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch (e: any) { Alert.alert("Couldn't update trip", e.message); } finally { setBusy(null); } };
+  const saveMeeting = async () => { if (!meetingLabel.trim()) return; setBusy("meeting"); try { const updated = await api.setMeetingPoint(pool.pool_id, { label: meetingLabel.trim(), notes: meetingNotes.trim() || null }); setPool({ ...pool, ...updated }); setEditingMeeting(false); } catch (e: any) { Alert.alert("Couldn't set meeting point", e.message); } finally { setBusy(null); } };
+  const saveFare = async () => { const amount = Number(fareAmount); if (!Number.isFinite(amount) || amount < 0) return Alert.alert("Check fare", "Enter a valid amount."); setBusy("fare"); try { const updated = await api.setJourneyFare(pool.pool_id, amount); setPool({ ...pool, ...updated }); setEditingFare(false); } catch (e: any) { Alert.alert("Couldn't update fare", e.message); } finally { setBusy(null); } };
+  const openTripChat = async () => { setBusy("chat"); try { const conv = pool.trip_conversation_id ? { conversation_id: pool.trip_conversation_id } : await api.ensureTripChat(pool.pool_id); if (conv?.conversation_id) router.push(`/chat/group/${conv.conversation_id}` as any); } catch (e: any) { Alert.alert("Couldn't open trip chat", e.message); } finally { setBusy(null); } };
+  const repeat = () => router.push({ pathname: "/post-request", params: { from: pool.from_location, to: pool.to_location } } as any);
 
-  if (loading || !pool) {
-    return (
-      <SafeAreaView style={styles.safe} edges={["top"]}>
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-          <ActivityIndicator color={colors.indigo} />
-        </View>
-      </SafeAreaView>
-    );
-  }
+  return <SafeAreaView style={styles.safe} edges={["top"]}>
+    <View style={styles.header}><Pressable onPress={() => router.back()} hitSlop={10}><Ionicons name="arrow-back" size={24} color={colors.onSurface} /></Pressable><Text style={styles.headerTitle}>{participant ? "Trip Command Centre" : "Ride details"}</Text><View style={styles.headerActions}><Pressable onPress={share} hitSlop={10}><Ionicons name="share-outline" size={21} color={colors.onSurface} /></Pressable>{mine ? <Pressable onPress={() => router.push({ pathname: "/post-request", params: { edit: pool.pool_id } } as any)}><Ionicons name="create-outline" size={21} color={colors.onSurface} /></Pressable> : <Pressable onPress={() => setShowReport(true)}><Ionicons name="ellipsis-vertical" size={21} color={colors.onSurface} /></Pressable>}</View></View>
+    <ScrollView contentContainerStyle={styles.content}>
+      <View style={styles.ownerRow}><View style={styles.avatar}><Text style={styles.avatarText}>{pool.user_name?.[0]?.toUpperCase() || "U"}</Text></View><View style={{ flex: 1 }}><Text style={styles.ownerName}>{pool.user_name}{mine ? " · you" : ""}</Text><RatingBadge avg={pool.user_rating_avg} count={pool.user_rating_count} /><UserBadges badges={pool.user_badges} /></View><View style={styles.statusPill}><Text style={styles.statusText}>{prettyStatus(pool.trip_status)}</Text></View></View>
+      <View style={styles.mapWrap}><PoolMapView pools={[pool]} /></View>
 
-  const mine = pool.user_id === user?.user_id;
-  const travelers = pool.confirmed_travelers || [];
+      <View style={styles.routeCard}><Row icon="location" color={colors.saffron} label="Pickup" value={pool.from_location} styles={styles} /><Row icon="flag" color={colors.indigo} label="Drop" value={pool.to_location} styles={styles} /><Row icon="time" color={colors.muted} label="Departure" value={fmtWhen(pool.travel_datetime)} styles={styles} /><Row icon="people" color={available ? colors.success : colors.error} label="Seats" value={`${occupied}/${totalSeats} filled · ${available ? `${available} available` : "full"}`} styles={styles} />{pool.luggage ? <Row icon="briefcase" color={colors.muted} label="Luggage" value={pool.luggage} styles={styles} /> : null}</View>
 
-  return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <View style={styles.header}>
-        <Pressable testID="back-btn" onPress={() => router.back()} hitSlop={10}>
-          <Ionicons name="arrow-back" size={24} color={colors.onSurface} />
-        </Pressable>
-        <Text style={styles.headerTitle}>Pool Details</Text>
-        <View style={{ flexDirection: "row", gap: SPACING.md }}>
-          <Pressable testID="share-btn" onPress={share} hitSlop={10}>
-            <Ionicons name="share-outline" size={22} color={colors.onSurface} />
-          </Pressable>
-          {!mine && (
-            <Pressable testID="detail-more-btn" onPress={() => setShowReport(true)} hitSlop={10}>
-              <Ionicons name="ellipsis-vertical" size={22} color={colors.onSurface} />
-            </Pressable>
-          )}
-        </View>
-      </View>
+      {participant && <>
+        <Text style={styles.sectionTitle}>Live trip status</Text><View style={styles.statusGrid}>{[
+          ["getting_ready", "Getting ready", "sparkles-outline"], ["on_the_way", "On my way", "car-outline"], ["at_pickup", "At pickup", "location-outline"], ["running_late", "Running late", "time-outline"],
+        ].map(([value, label, icon]) => <Pressable key={value} disabled={!!busy} onPress={() => setMemberStatus(value)} style={[styles.statusAction, myStatus === value && styles.statusActionActive]}><Ionicons name={icon as any} size={17} color={myStatus === value ? "#fff" : colors.indigo} /><Text style={[styles.statusActionText, myStatus === value && { color: "#fff" }]}>{label}</Text></Pressable>)}</View>
 
-      <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 140 }}>
-        <View style={styles.ownerRow}>
-          <View style={styles.avatar}><Text style={{ color: colors.indigo, fontWeight: "800", fontSize: 18 }}>{pool.user_name?.[0]?.toUpperCase() || "U"}</Text></View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.ownerName}>{pool.user_name}{mine ? "  (you)" : ""}</Text>
-            <RatingBadge avg={pool.user_rating_avg} count={pool.user_rating_count} />
-            <UserBadges badges={pool.user_badges} />
-            {pool.user_college_id ? (
-              <Text style={styles.ownerRoll} testID="owner-roll-number">
-                {pool.user_college_id.roll_number} · {pool.user_college_id.school_name} · Batch {pool.user_college_id.batch_year}
-              </Text>
-            ) : null}
-          </View>
-          {pool.gender_preference === "same" && (
-            <View style={styles.badge}><Text style={styles.badgeText}>Same-gender</Text></View>
-          )}
+        <View style={styles.commandGrid}>
+          <View style={styles.commandCard}><View style={styles.commandTop}><Ionicons name="location" size={19} color={colors.saffron} /><Text style={styles.cardTitle}>Meeting point</Text>{mine && <Pressable onPress={() => setEditingMeeting((v) => !v)}><Ionicons name="create-outline" size={18} color={colors.indigo} /></Pressable>}</View>{editingMeeting ? <><TextInput value={meetingLabel} onChangeText={setMeetingLabel} placeholder="e.g. Main Gate" placeholderTextColor={colors.muted} style={styles.input} /><TextInput value={meetingNotes} onChangeText={setMeetingNotes} placeholder="Optional notes" placeholderTextColor={colors.muted} style={styles.input} /><Pressable onPress={saveMeeting} style={styles.smallBtn}><Text style={styles.smallBtnText}>{busy === "meeting" ? "Saving…" : "Save meeting point"}</Text></Pressable></> : <><Text style={styles.commandValue}>{pool.meeting_point?.label || "Not set yet"}</Text>{pool.meeting_point?.notes ? <Text style={styles.commandSub}>{pool.meeting_point.notes}</Text> : <Text style={styles.commandSub}>Keep everyone aligned on the exact pickup.</Text>}</>}</View>
+          <View style={styles.commandCard}><View style={styles.commandTop}><Ionicons name="cash" size={19} color={colors.success} /><Text style={styles.cardTitle}>Fare split</Text>{mine && <Pressable onPress={() => setEditingFare((v) => !v)}><Ionicons name="create-outline" size={18} color={colors.indigo} /></Pressable>}</View>{editingFare ? <><TextInput value={fareAmount} onChangeText={setFareAmount} keyboardType="numeric" placeholder="Estimated total fare" placeholderTextColor={colors.muted} style={styles.input} /><Pressable onPress={saveFare} style={styles.smallBtn}><Text style={styles.smallBtnText}>{busy === "fare" ? "Saving…" : "Update fare"}</Text></Pressable></> : <><Text style={styles.commandValue}>{pool.fare?.amount ? `₹${Number(pool.fare.amount).toFixed(0)} total` : "No fare added"}</Text><Text style={styles.commandSub}>{perPerson ? `≈ ₹${perPerson.toFixed(0)} per person with ${occupied} travelling` : "Add an estimate so everyone knows the likely split."}</Text></>}</View>
         </View>
 
-        <View style={styles.mapWrap}>
-          <PoolMapView pools={[pool]} />
-        </View>
+        <View style={styles.primaryActions}><Pressable onPress={openTripChat} style={styles.chatBtn}>{busy === "chat" ? <ActivityIndicator color="#fff" /> : <><Ionicons name="chatbubbles" size={18} color="#fff" /><Text style={styles.chatBtnText}>Trip chat</Text></>}</Pressable><Pressable onPress={share} style={styles.secondaryBtn}><Ionicons name="shield-checkmark-outline" size={18} color={colors.indigo} /><Text style={styles.secondaryBtnText}>Share trip</Text></Pressable></View>
 
-        <View style={styles.card}>
-          <Row icon="location" iconColor={colors.saffron} label="Pickup" value={pool.from_location} styles={styles} />
-          <Row icon="flag" iconColor={colors.indigo} label="Drop" value={pool.to_location} styles={styles} />
-          <Row icon="time" iconColor={colors.muted} label="Departs" value={fmtWhen(pool.travel_datetime)} styles={styles} />
-          <Row icon="people" iconColor={colors.muted} label="Companions" value={`+${pool.companions} already with them`} styles={styles} />
-          {pool.luggage ? <Row icon="briefcase" iconColor={colors.muted} label="Luggage" value={pool.luggage} styles={styles} /> : null}
-        </View>
+        {mine && <View style={styles.ownerControls}>{pool.trip_status !== "in_progress" && pool.trip_status !== "completed" && pool.trip_status !== "cancelled" ? <Pressable onPress={() => setGlobalStatus("in_progress")} style={styles.ownerBtn}><Ionicons name="play" size={15} color="#fff" /><Text style={styles.ownerBtnText}>Start trip</Text></Pressable> : null}{pool.trip_status === "in_progress" ? <Pressable onPress={() => setGlobalStatus("completed")} style={[styles.ownerBtn, { backgroundColor: colors.success }]}><Ionicons name="checkmark" size={16} color="#fff" /><Text style={styles.ownerBtnText}>Complete trip</Text></Pressable> : null}{pool.trip_status !== "completed" && pool.trip_status !== "cancelled" ? <Pressable onPress={() => Alert.alert("Cancel journey?", "This closes the trip for everyone.", [{ text: "Keep trip", style: "cancel" }, { text: "Cancel journey", style: "destructive", onPress: () => setGlobalStatus("cancelled") }])} style={styles.dangerBtn}><Text style={styles.dangerText}>Cancel journey</Text></Pressable> : null}</View>}
+      </>}
 
-        {pool.notes ? (
-          <View style={styles.notesCard}>
-            <Text style={styles.notesLabel}>Notes</Text>
-            <Text style={styles.notesText}>“{pool.notes}”</Text>
-          </View>
-        ) : null}
+      <Text style={styles.sectionTitle}>Travellers</Text><View style={styles.travellersCard}><Traveller name={pool.user_name} label="Trip owner" status={pool.member_statuses?.[pool.user_id]} colors={colors} styles={styles} />{travelers.map((t) => <Traveller key={t.user_id} name={t.name} label="Confirmed" status={pool.member_statuses?.[t.user_id]} colors={colors} styles={styles} />)}{travelers.length === 0 ? <Text style={styles.commandSub}>No confirmed co-travellers yet.</Text> : null}</View>
+      {pool.notes ? <View style={styles.notesCard}><Text style={styles.sectionLabel}>NOTES</Text><Text style={styles.notesText}>“{pool.notes}”</Text></View> : null}
+      <Pressable onPress={repeat} style={styles.repeatCard}><Ionicons name="repeat" size={20} color={colors.indigo} /><View style={{ flex: 1 }}><Text style={styles.cardTitle}>Repeat this route</Text><Text style={styles.commandSub}>Prefill a new journey with the same pickup and destination.</Text></View><Ionicons name="arrow-forward" size={18} color={colors.saffron} /></Pressable>
+    </ScrollView>
 
-        {travelers.length > 0 && (
-          <View style={styles.travelersCard}>
-            <Text style={styles.notesLabel}>Traveling Together ({travelers.length})</Text>
-            {travelers.map((t) => (
-              <View key={t.user_id} style={styles.travelerRow}>
-                <Ionicons name="car-sport" size={16} color={colors.success} />
-                <Text style={styles.travelerName}>{t.name}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-      </ScrollView>
-
-      {!mine && (
-        <View style={styles.footer}>
-          <Pressable
-            testID="detail-message-btn"
-            onPress={() => router.push({ pathname: "/chat/[userId]", params: { userId: pool.user_id, name: pool.user_name } })}
-            style={styles.messageBtn}
-          >
-            <Ionicons name="chatbubble" size={18} color={colors.indigo} />
-          </Pressable>
-
-          {pool.my_request_status === "accepted" ? (
-            <View style={[styles.requestBtn, { backgroundColor: colors.success }]}>
-              <Ionicons name="checkmark-circle" size={18} color="#fff" />
-              <Text style={styles.requestBtnText}>Confirmed for this ride</Text>
-            </View>
-          ) : pool.my_request_status === "pending" ? (
-            <View style={[styles.requestBtn, { backgroundColor: colors.cream }]}>
-              <Ionicons name="time-outline" size={18} color={colors.indigo} />
-              <Text style={[styles.requestBtnText, { color: colors.indigo }]}>Request sent</Text>
-            </View>
-          ) : (
-            <Pressable testID="detail-request-btn" onPress={sendRequest} disabled={requesting} style={[styles.requestBtn, { backgroundColor: colors.indigo }, requesting && { opacity: 0.6 }]}>
-              {requesting ? <ActivityIndicator color="#fff" /> : (
-                <>
-                  <Ionicons name="hand-left-outline" size={18} color="#fff" />
-                  <Text style={styles.requestBtnText}>{pool.my_request_status === "declined" ? "Request again" : "Request to join"}</Text>
-                </>
-              )}
-            </Pressable>
-          )}
-        </View>
-      )}
-
-      <ReportBlockModal
-        visible={showReport}
-        onClose={() => setShowReport(false)}
-        userId={pool.user_id}
-        userName={pool.user_name}
-        poolId={pool.pool_id}
-        onBlocked={() => router.back()}
-      />
-    </SafeAreaView>
-  );
+    {!mine && !participant && <View style={styles.footer}><Pressable onPress={() => router.push({ pathname: "/chat/[userId]", params: { userId: pool.user_id, name: pool.user_name } })} style={styles.messageBtn}><Ionicons name="chatbubble-outline" size={18} color={colors.indigo} /></Pressable>{pool.my_request_status === "accepted" ? <View style={[styles.requestBtn, { backgroundColor: colors.success }]}><Text style={styles.requestBtnText}>Confirmed</Text></View> : pool.my_request_status === "pending" ? <View style={[styles.requestBtn, styles.pendingBtn]}><Text style={styles.pendingText}>Request pending</Text></View> : pool.my_request_status === "waitlisted" ? <View style={[styles.requestBtn, styles.pendingBtn]}><Text style={styles.pendingText}>Waitlisted</Text></View> : <Pressable disabled={busy === "request"} onPress={request} style={styles.requestBtn}>{busy === "request" ? <ActivityIndicator color="#fff" /> : <Text style={styles.requestBtnText}>{available > 0 ? "Request to join" : "Join waitlist"}</Text>}</Pressable>}</View>}
+    <ReportBlockModal visible={showReport} onClose={() => setShowReport(false)} userId={pool.user_id} userName={pool.user_name} poolId={pool.pool_id} onBlocked={() => router.back()} />
+  </SafeAreaView>;
 }
 
-function Row({ icon, iconColor, label, value, styles }: { icon: any; iconColor: string; label: string; value: string; styles: any }) {
-  return (
-    <View style={styles.row}>
-      <Ionicons name={icon} size={18} color={iconColor} />
-      <View style={{ flex: 1 }}>
-        <Text style={styles.rowLabel}>{label}</Text>
-        <Text style={styles.rowValue}>{value}</Text>
-      </View>
-    </View>
-  );
-}
+function Row({ icon, color, label, value, styles }: any) { return <View style={styles.row}><Ionicons name={icon} size={18} color={color} /><View style={{ flex: 1 }}><Text style={styles.rowLabel}>{label}</Text><Text style={styles.rowValue}>{value}</Text></View></View>; }
+function Traveller({ name, label, status, colors, styles }: any) { return <View style={styles.travellerRow}><View style={styles.smallAvatar}><Text style={styles.smallAvatarText}>{name?.[0]?.toUpperCase() || "U"}</Text></View><View style={{ flex: 1 }}><Text style={styles.travellerName}>{name}</Text><Text style={styles.commandSub}>{label}</Text></View>{status ? <View style={styles.memberPill}><View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: colors.success }} /><Text style={styles.memberText}>{prettyStatus(status)}</Text></View> : null}</View>; }
 
 const makeStyles = (colors: any) => StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.surface },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.card },
-  headerTitle: { fontSize: FONT.lg, fontWeight: "800", color: colors.onSurface },
-  ownerRow: { flexDirection: "row", alignItems: "center", gap: SPACING.md, marginBottom: SPACING.lg },
-  ownerRoll: { fontSize: 11, color: colors.muted, fontWeight: "600", marginTop: 4 },
-  avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.cream, alignItems: "center", justifyContent: "center" },
-  ownerName: { fontSize: FONT.lg, fontWeight: "800", color: colors.onSurface, marginBottom: 2, fontFamily: FONT_DISPLAY },
-  badge: { backgroundColor: colors.indigo, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.pill },
-  badgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
-  mapWrap: { height: 220, borderRadius: RADIUS.lg, overflow: "hidden", marginBottom: SPACING.lg, borderWidth: 1, borderColor: colors.border },
-  card: { backgroundColor: colors.card, borderRadius: RADIUS.lg, padding: SPACING.lg, borderWidth: 1, borderColor: colors.border, gap: SPACING.md, marginBottom: SPACING.lg },
-  row: { flexDirection: "row", alignItems: "flex-start", gap: SPACING.md },
-  rowLabel: { fontSize: 11, fontWeight: "700", color: colors.muted, textTransform: "uppercase", letterSpacing: 0.5 },
-  rowValue: { fontSize: FONT.base, fontWeight: "600", color: colors.onSurface, marginTop: 2 },
-  notesCard: { backgroundColor: colors.card, borderRadius: RADIUS.lg, padding: SPACING.lg, borderWidth: 1, borderColor: colors.border, marginBottom: SPACING.lg },
-  notesLabel: { fontSize: 11, fontWeight: "700", color: colors.muted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 },
-  notesText: { color: colors.onSurface, fontStyle: "italic" },
-  travelersCard: { backgroundColor: colors.card, borderRadius: RADIUS.lg, padding: SPACING.lg, borderWidth: 1, borderColor: colors.success, marginBottom: SPACING.lg },
-  travelerRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 },
-  travelerName: { color: colors.onSurface, fontWeight: "600" },
-  footer: { flexDirection: "row", gap: SPACING.md, padding: SPACING.lg, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface },
-  messageBtn: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.indigo, backgroundColor: colors.card },
-  requestBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: RADIUS.pill, paddingVertical: 14 },
-  requestBtnText: { color: "#fff", fontWeight: "800", fontSize: FONT.base },
+  safe: { flex: 1, backgroundColor: colors.surface }, loading: { flex: 1, alignItems: "center", justifyContent: "center" },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.card }, headerTitle: { color: colors.onSurface, fontWeight: "900", fontSize: FONT.lg, fontFamily: FONT_DISPLAY }, headerActions: { flexDirection: "row", gap: 14, alignItems: "center" },
+  content: { width: "100%", maxWidth: 820, alignSelf: "center", padding: SPACING.lg, paddingBottom: 150 }, ownerRow: { flexDirection: "row", alignItems: "center", gap: 11, marginBottom: 15 }, avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.cream, alignItems: "center", justifyContent: "center" }, avatarText: { color: colors.indigo, fontSize: 18, fontWeight: "900" }, ownerName: { color: colors.onSurface, fontSize: 16, fontWeight: "900" }, statusPill: { backgroundColor: colors.surface2, borderRadius: 14, paddingHorizontal: 9, paddingVertical: 5 }, statusText: { color: colors.success, fontSize: 9, fontWeight: "900" },
+  mapWrap: { height: 240, borderRadius: RADIUS.lg, overflow: "hidden", borderWidth: 1, borderColor: colors.border, marginBottom: 14 }, routeCard: { backgroundColor: colors.card, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: colors.border, padding: 14, gap: 12, marginBottom: 20 }, row: { flexDirection: "row", gap: 11, alignItems: "flex-start" }, rowLabel: { color: colors.muted, fontSize: 9, fontWeight: "900", textTransform: "uppercase", letterSpacing: .6 }, rowValue: { color: colors.onSurface, fontSize: 12, fontWeight: "700", marginTop: 2 },
+  sectionTitle: { color: colors.onSurface, fontSize: 15, fontWeight: "900", marginBottom: 9, marginTop: 4 }, statusGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 18 }, statusAction: { flexGrow: 1, flexBasis: 150, minHeight: 44, borderRadius: 22, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, flexDirection: "row", gap: 7, alignItems: "center", justifyContent: "center", paddingHorizontal: 10 }, statusActionActive: { backgroundColor: colors.indigo, borderColor: colors.indigo }, statusActionText: { color: colors.onSurface, fontSize: 10, fontWeight: "800" },
+  commandGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 15 }, commandCard: { flexGrow: 1, flexBasis: 280, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: RADIUS.lg, padding: 14, gap: 8 }, commandTop: { flexDirection: "row", alignItems: "center", gap: 7 }, cardTitle: { color: colors.onSurface, fontSize: 12, fontWeight: "900", flex: 1 }, commandValue: { color: colors.onSurface, fontSize: 16, fontWeight: "900" }, commandSub: { color: colors.muted, fontSize: 10, lineHeight: 15 }, input: { backgroundColor: colors.surface2, borderRadius: 10, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 10, paddingVertical: 9, color: colors.onSurface, fontSize: 11 }, smallBtn: { backgroundColor: colors.indigo, borderRadius: 18, minHeight: 36, alignItems: "center", justifyContent: "center" }, smallBtnText: { color: "#fff", fontSize: 10, fontWeight: "900" },
+  primaryActions: { flexDirection: "row", gap: 9, marginBottom: 14 }, chatBtn: { flex: 1, minHeight: 48, borderRadius: 24, backgroundColor: colors.indigo, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7 }, chatBtnText: { color: "#fff", fontWeight: "900", fontSize: 11 }, secondaryBtn: { flex: 1, minHeight: 48, borderRadius: 24, borderWidth: 1, borderColor: colors.indigo, backgroundColor: colors.card, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 }, secondaryBtnText: { color: colors.indigo, fontWeight: "900", fontSize: 11 },
+  ownerControls: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 21 }, ownerBtn: { backgroundColor: colors.indigo, minHeight: 40, borderRadius: 20, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }, ownerBtnText: { color: "#fff", fontWeight: "900", fontSize: 10 }, dangerBtn: { minHeight: 40, borderRadius: 20, paddingHorizontal: 14, borderWidth: 1, borderColor: colors.error, alignItems: "center", justifyContent: "center" }, dangerText: { color: colors.error, fontWeight: "900", fontSize: 10 },
+  travellersCard: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: RADIUS.lg, padding: 12, marginBottom: 16, gap: 9 }, travellerRow: { flexDirection: "row", alignItems: "center", gap: 9 }, smallAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center" }, smallAvatarText: { color: colors.indigo, fontWeight: "900", fontSize: 12 }, travellerName: { color: colors.onSurface, fontSize: 11, fontWeight: "850" as any }, memberPill: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.surface2, borderRadius: 11, paddingHorizontal: 7, paddingVertical: 4 }, memberText: { color: colors.success, fontSize: 8, fontWeight: "900" },
+  notesCard: { backgroundColor: colors.card, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: colors.border, padding: 14, marginBottom: 12 }, sectionLabel: { color: colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: .8 }, notesText: { color: colors.onSurface, fontSize: 11, fontStyle: "italic", marginTop: 7 }, repeatCard: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: RADIUS.lg, padding: 14 },
+  footer: { flexDirection: "row", gap: 9, padding: SPACING.lg, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface }, messageBtn: { width: 48, height: 48, borderRadius: 24, borderWidth: 1, borderColor: colors.indigo, backgroundColor: colors.card, alignItems: "center", justifyContent: "center" }, requestBtn: { flex: 1, minHeight: 48, borderRadius: 24, backgroundColor: colors.indigo, alignItems: "center", justifyContent: "center" }, requestBtnText: { color: "#fff", fontSize: 11, fontWeight: "900" }, pendingBtn: { backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border }, pendingText: { color: colors.indigo, fontSize: 11, fontWeight: "900" },
 });
