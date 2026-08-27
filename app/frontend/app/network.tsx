@@ -1,0 +1,70 @@
+import React, { useCallback, useMemo, useState } from "react";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+
+import { api } from "@/src/api/client";
+import { useTheme } from "@/src/theme_context/ThemeContext";
+import { RADIUS, SPACING, FONT_DISPLAY } from "@/src/theme";
+
+type Reliability = { score: number; label: string; completed_trips: number; average_rating?: number | null; rating_count: number; response_rate?: number | null; cancellation_rate: number };
+
+export default function TravelNetworkScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams<{ userId?: string; name?: string }>();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const otherUserId = params.userId || null;
+  const [loading, setLoading] = useState(true);
+  const [reliability, setReliability] = useState<Reliability | null>(null);
+  const [history, setHistory] = useState<any[]>([]);
+  const [context, setContext] = useState<any>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      if (otherUserId) {
+        const [rel, ctx] = await Promise.all([api.userReliability(otherUserId), api.mutualContext(otherUserId)]);
+        setReliability(rel); setContext(ctx); setHistory([]);
+      } else {
+        const [rel, trips] = await Promise.all([api.myReliability(), api.travelHistory(60)]);
+        setReliability(rel); setHistory(trips || []); setContext(null);
+      }
+    } finally { setLoading(false); }
+  }, [otherUserId]);
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  return <SafeAreaView style={styles.safe} edges={["top"]}>
+    <View style={styles.header}><Pressable onPress={() => router.back()} style={styles.back}><Ionicons name="chevron-back" size={21} color={colors.onSurface} /></Pressable><View style={{ flex: 1 }}><Text style={styles.eyebrow}>{otherUserId ? "TRAVELLER CONTEXT" : "YOUR NETWORK"}</Text><Text style={styles.title}>{otherUserId ? params.name || "Traveller" : "Travel history & reliability"}</Text></View>{otherUserId ? <Pressable onPress={() => router.push({ pathname: "/chat/[userId]", params: { userId: otherUserId, name: params.name || "Traveller" } })} style={styles.chatBtn}><Ionicons name="chatbubble-outline" size={18} color={colors.indigo} /></Pressable> : null}</View>
+    {loading ? <View style={styles.loading}><ActivityIndicator color={colors.indigo} /><Text style={styles.muted}>Building travel context…</Text></View> : <ScrollView contentContainerStyle={styles.content}>
+      {reliability && <View style={styles.scoreCard}><View style={styles.scoreCircle}><Text style={styles.score}>{reliability.score}</Text><Text style={styles.scoreUnit}>/100</Text></View><View style={{ flex: 1 }}><Text style={styles.scoreLabel}>{reliability.label}</Text><Text style={styles.scoreSub}>Built from completed travel, ratings, request responses and cancellations — not an arbitrary badge.</Text></View></View>}
+      {reliability && <View style={styles.metricGrid}><Metric icon="car-outline" label="Completed" value={String(reliability.completed_trips)} colors={colors} styles={styles} /><Metric icon="star-outline" label="Rating" value={reliability.average_rating == null ? "New" : `${reliability.average_rating}/10`} colors={colors} styles={styles} /><Metric icon="flash-outline" label="Response" value={reliability.response_rate == null ? "—" : `${reliability.response_rate}%`} colors={colors} styles={styles} /><Metric icon="close-circle-outline" label="Cancellation" value={`${reliability.cancellation_rate}%`} colors={colors} styles={styles} /></View>}
+
+      {otherUserId ? <>
+        <Text style={styles.sectionTitle}>Why this person may feel familiar</Text>
+        <View style={styles.contextCard}>
+          {(context?.academic || []).map((item: string) => <Pill key={item} icon="school-outline" text={item} colors={colors} styles={styles} />)}
+          {context?.shared_trips > 0 ? <Pill icon="car-sport-outline" text={`${context.shared_trips} past trip${context.shared_trips === 1 ? "" : "s"} together`} colors={colors} styles={styles} /> : null}
+          {(context?.mutual_travellers || []).map((person: any) => <Pill key={person.user_id} icon="people-outline" text={`Both travelled with ${person.name}`} colors={colors} styles={styles} />)}
+          {!(context?.academic?.length || context?.shared_trips || context?.mutual_travellers?.length) ? <Text style={styles.muted}>No shared academic or travel context yet. Their reliability is based only on UniPool activity.</Text> : null}
+        </View>
+      </> : <>
+        <View style={styles.sectionRow}><Text style={styles.sectionTitle}>Past trips</Text><Text style={styles.muted}>{history.length} shown</Text></View>
+        {history.length === 0 ? <View style={styles.empty}><Ionicons name="trail-sign-outline" size={25} color={colors.indigo} /><Text style={styles.cardTitle}>Your travel history starts after completed rides</Text><Text style={styles.muted}>Trips are only counted once they are genuinely completed.</Text></View> : <View style={styles.stack}>{history.map((trip) => <Pressable key={trip.pool_id} onPress={() => router.push(`/pool/${trip.pool_id}` as any)} style={styles.tripCard}><View style={styles.tripTop}><View style={styles.tripIcon}><Ionicons name="navigate" size={15} color={colors.indigo} /></View><Text style={styles.tripDate}>{new Date(trip.travel_datetime).toLocaleString([], { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })}</Text></View><Text style={styles.route}>{trip.from_location} → {trip.to_location}</Text><View style={styles.tripBottom}><Text style={styles.muted}>{(trip.co_travellers || []).length ? `With ${(trip.co_travellers || []).map((p: any) => p.name?.split(" ")[0]).join(", ")}` : "Solo listing"}</Text><View style={styles.repeatPill}><Ionicons name="repeat" size={12} color={colors.saffron} /><Text style={styles.repeatText}>Repeat</Text></View></View></Pressable>)}</View>}
+      </>}
+    </ScrollView>}
+  </SafeAreaView>;
+}
+
+function Metric({ icon, label, value, colors, styles }: any) { return <View style={styles.metric}><Ionicons name={icon} size={17} color={colors.indigo} /><Text style={styles.metricValue}>{value}</Text><Text style={styles.metricLabel}>{label}</Text></View>; }
+function Pill({ icon, text, colors, styles }: any) { return <View style={styles.pill}><Ionicons name={icon} size={15} color={colors.success} /><Text style={styles.pillText}>{text}</Text></View>; }
+
+const makeStyles = (colors: any) => StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.surface }, header: { minHeight: 62, flexDirection: "row", alignItems: "center", gap: 11, paddingHorizontal: SPACING.lg, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.card }, back: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface2 }, chatBtn: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border }, eyebrow: { color: colors.saffron, fontSize: 8, fontWeight: "900", letterSpacing: 1 }, title: { color: colors.onSurface, fontSize: 16, fontWeight: "900", fontFamily: FONT_DISPLAY, marginTop: 2 },
+  loading: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 }, content: { width: "100%", maxWidth: 820, alignSelf: "center", padding: SPACING.lg, paddingBottom: 100 }, muted: { color: colors.muted, fontSize: 10, lineHeight: 15 },
+  scoreCard: { flexDirection: "row", gap: 16, alignItems: "center", backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 22, padding: 18, marginBottom: 10 }, scoreCircle: { width: 78, height: 78, borderRadius: 39, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface2, borderWidth: 3, borderColor: colors.success }, score: { color: colors.onSurface, fontSize: 27, fontWeight: "900" }, scoreUnit: { color: colors.muted, fontSize: 8, fontWeight: "800", marginTop: -3 }, scoreLabel: { color: colors.onSurface, fontSize: 18, fontWeight: "900" }, scoreSub: { color: colors.muted, fontSize: 10, lineHeight: 15, marginTop: 4 },
+  metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 24 }, metric: { flexGrow: 1, flexBasis: 140, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: RADIUS.lg, padding: 13, gap: 5 }, metricValue: { color: colors.onSurface, fontSize: 17, fontWeight: "900" }, metricLabel: { color: colors.muted, fontSize: 9, fontWeight: "800", textTransform: "uppercase" },
+  sectionRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 9 }, sectionTitle: { color: colors.onSurface, fontSize: 15, fontWeight: "900", marginBottom: 9 }, contextCard: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: RADIUS.lg, padding: 13, gap: 8 }, pill: { flexDirection: "row", alignItems: "center", gap: 7, padding: 9, borderRadius: 12, backgroundColor: colors.surface2 }, pillText: { color: colors.onSurface, fontSize: 11, fontWeight: "800" },
+  stack: { gap: 9 }, tripCard: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: RADIUS.lg, padding: 13 }, tripTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }, tripIcon: { width: 29, height: 29, borderRadius: 10, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center" }, tripDate: { color: colors.muted, fontSize: 9, fontWeight: "800" }, route: { color: colors.onSurface, fontSize: 13, fontWeight: "900", marginVertical: 11 }, tripBottom: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 }, repeatPill: { flexDirection: "row", alignItems: "center", gap: 4 }, repeatText: { color: colors.saffron, fontSize: 9, fontWeight: "900" }, empty: { minHeight: 150, alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: RADIUS.lg, padding: 20 }, cardTitle: { color: colors.onSurface, fontSize: 12, fontWeight: "900", textAlign: "center" },
+});
