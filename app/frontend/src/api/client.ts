@@ -1,4 +1,5 @@
 import { storage } from "@/src/utils/storage";
+import { answerLocalDailyChallenge, localDailyChallenge, localTriviaRound } from "@/src/data/travelTrivia";
 
 const BASE = process.env.EXPO_PUBLIC_API_BASE_URL;
 const TOKEN_KEY = "unipool.session_token";
@@ -67,9 +68,16 @@ export const api = {
 
   travelHistory: (limit = 50) => req(`/travel-history?${query({ limit })}`, {}, 15000), myReliability: () => req("/reliability/me", {}, 10000), userReliability: (userId: string) => req(`/reliability/${userId}`, {}, 10000), mutualContext: (userId: string) => req(`/mutual-context/${userId}`, {}, 10000),
   globalSearch: (q: string) => req(`/search/global?${query({ q })}`, {}, 5000), recordEvent: (event: string, context: Record<string, any> = {}) => mutate("/analytics/events", { method: "POST", body: JSON.stringify({ event, context }) }), productAnalytics: () => req("/analytics/product", {}, 10000),
-  dailyChallenge: () => req("/daily-challenge", {}, 60000), answerDailyChallenge: (challenge_id: string, answer: number) => mutate("/daily-challenge/answer", { method: "POST", body: JSON.stringify({ challenge_id, answer }) }),
 
-  trivia: (excludeIds: string[] = [], count = 8) => { const params = new URLSearchParams(); if (excludeIds.length) params.set("exclude", excludeIds.join(",")); params.set("count", String(count)); return req(`/games/trivia?${params.toString()}`); },
+  // Time-pass is deliberately local-first. These games are lightweight and
+  // should remain playable even when the mobility backend is cold or a newer
+  // game route has not reached production yet. The daily question is
+  // deterministic by UTC date, so everyone on the same frontend build sees
+  // the same challenge.
+  dailyChallenge: () => localDailyChallenge(),
+  answerDailyChallenge: (challenge_id: string, answer: number) => answerLocalDailyChallenge(challenge_id, answer),
+  trivia: (excludeIds: string[] = [], count = 8) => Promise.resolve(localTriviaRound(excludeIds, count)),
+
   adminStats: () => req("/admin/stats", {}, 10000), adminPools: () => req("/admin/pools", {}, 5000), adminDeletePool: (id: string) => mutate(`/admin/pools/${id}`, { method: "DELETE" }),
   sendMessage: (to_user_id: string, text: string, pool_id?: string) => mutate("/messages", { method: "POST", body: JSON.stringify({ to_user_id, text, pool_id }) }), getThread: (otherUserId: string) => req(`/messages/${otherUserId}`, {}, 2500), listConversations: () => req("/messages/conversations", {}, 5000), sendTyping: (to_user_id: string) => req("/messages/typing", { method: "POST", body: JSON.stringify({ to_user_id }) }), getTyping: (otherUserId: string) => req(`/messages/typing/${otherUserId}`), getPresence: (userId: string) => req(`/users/${userId}/presence`, {}, 3000),
   getVapidKey: () => req("/push/vapid-public-key", {}, 60000), pushSubscribe: (sub: { endpoint: string; keys: any }) => mutate("/push/subscribe", { method: "POST", body: JSON.stringify(sub) }), pushUnsubscribe: (endpoint: string) => mutate("/push/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint }) }),
