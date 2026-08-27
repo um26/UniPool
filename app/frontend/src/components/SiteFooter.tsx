@@ -21,9 +21,10 @@ export default function SiteFooter() {
 
   return <>
     <View style={[styles.footer, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
-      <View style={styles.left}><Text style={[styles.copy, { color: colors.muted }]}>Made with </Text><Ionicons name="heart" size={12} color={colors.error} /><Text style={[styles.copy, { color: colors.muted }]}> by BinaryBots</Text></View>
+      <Pressable accessibilityRole="link" accessibilityLabel={`Open BinaryBots on Instagram @${INSTAGRAM_HANDLE}`} onPress={() => Linking.openURL(INSTAGRAM_URL)} style={styles.left}>
+        <Text style={[styles.copy, { color: colors.muted }]}>Made with </Text><Ionicons name="heart" size={12} color={colors.error} /><Text style={[styles.copy, { color: colors.muted }]}> by BinaryBots</Text>
+      </Pressable>
       <View style={styles.links}>
-        <Pressable onPress={() => Linking.openURL(INSTAGRAM_URL)} style={styles.link}><Ionicons name="logo-instagram" size={14} color={colors.muted} /><Text style={[styles.linkText, { color: colors.muted }]}>Instagram</Text></Pressable>
         <Pressable onPress={() => Linking.openURL(`mailto:${CONTACT_EMAIL}?subject=UniPool%20contact`)} style={styles.link}><Ionicons name="mail-outline" size={14} color={colors.muted} /><Text style={[styles.linkText, { color: colors.muted }]}>Contact</Text></Pressable>
         <Pressable onPress={() => setReferOpen(true)} style={styles.link}><Ionicons name="person-add-outline" size={14} color={colors.muted} /><Text style={[styles.linkText, { color: colors.muted }]}>Refer a friend</Text></Pressable>
         {user ? <Pressable onPress={() => router.push("/settings" as any)} style={styles.link}><Ionicons name="shield-checkmark-outline" size={14} color={colors.muted} /><Text style={[styles.linkText, { color: colors.muted }]}>Privacy & safety</Text></Pressable> : null}
@@ -35,7 +36,7 @@ export default function SiteFooter() {
 
 const styles = StyleSheet.create({
   footer: { minHeight: 42, borderTopWidth: 1, paddingHorizontal: 22, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 },
-  left: { flexDirection: "row", alignItems: "center" },
+  left: { minHeight: 32, flexDirection: "row", alignItems: "center", paddingHorizontal: 2 },
   copy: { fontSize: 10 },
   links: { flexDirection: "row", alignItems: "center", gap: 16, flexWrap: "wrap", justifyContent: "flex-end" },
   link: { minHeight: 32, flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 4 },
