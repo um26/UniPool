@@ -36,39 +36,65 @@ export default function WebTopBar() {
   }, []);
 
   if (Platform.OS !== "web") return null;
-  const desktop = width >= 820;
-  const showActionText = width >= 710;
-  const showBrandText = width >= 470;
+  const desktop = width >= 900;
+  const showActionText = width >= 1120;
+  const showBrandText = width >= 520;
   const tap = (fn: () => void) => { Haptics.selectionAsync(); fn(); };
 
   return <>
     <View style={[styles.bar, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-      <Pressable onPress={() => router.replace("/(tabs)" as any)} style={styles.brand} accessibilityLabel="Go to UniPool home">
-        <View style={[styles.logo, { backgroundColor: colors.surface2, borderColor: colors.border }]}><Ionicons name="car-sport" size={17} color={colors.saffron} /></View>
+      <Pressable onPress={() => router.replace("/(tabs)" as any)} style={({ pressed }) => [styles.brand, pressed && styles.pressed]} accessibilityLabel="Go to UniPool home">
+        <View style={[styles.logo, { backgroundColor: colors.surface2, borderColor: colors.border }]}><Ionicons name="car-sport" size={19} color={colors.saffron} /></View>
         {showBrandText ? <Text style={[styles.brandText, { color: colors.onSurface }]}>UniPool</Text> : null}
       </Pressable>
 
       {desktop ? <View style={[styles.nav, { backgroundColor: colors.surface2, borderColor: colors.border }]}>
         {NAV.map((item) => {
           const active = pathname === item.match;
-          return <Pressable key={item.label} onPress={() => tap(() => router.replace(item.path as any))} style={[styles.navItem, active && { backgroundColor: colors.card, borderColor: colors.border }]} accessibilityState={{ selected: active }}>
-            <Ionicons name={item.icon} size={15} color={active ? colors.indigo : colors.muted} /><Text style={[styles.navText, { color: active ? colors.onSurface : colors.muted }]}>{item.label}</Text>
+          return <Pressable
+            key={item.label}
+            onPress={() => tap(() => router.replace(item.path as any))}
+            style={({ pressed }) => [styles.navItem, active && { backgroundColor: colors.card, borderColor: colors.border }, pressed && styles.pressed]}
+            accessibilityState={{ selected: active }}
+          >
+            <Ionicons name={item.icon} size={18} color={active ? colors.indigo : colors.muted} />
+            <Text style={[styles.navText, { color: active ? colors.onSurface : colors.muted }]}>{item.label}</Text>
           </Pressable>;
         })}
       </View> : <View style={{ flex: 1 }} />}
 
       <View style={styles.actions}>
-        <Pressable onPress={() => tap(() => setSearchOpen(true))} style={[styles.searchAction, { backgroundColor: colors.surface2, borderColor: colors.border }]} accessibilityLabel="Search UniPool">
-          <Ionicons name="search" size={17} color={colors.indigo} />{showActionText ? <Text style={[styles.actionText, { color: colors.onSurface }]}>Search</Text> : null}{desktop ? <Text style={[styles.shortcut, { color: colors.muted, borderColor: colors.border }]}>⌘K</Text> : null}
+        <Pressable
+          onPress={() => tap(() => setSearchOpen(true))}
+          style={({ pressed }) => [styles.searchAction, { backgroundColor: colors.surface2, borderColor: colors.border }, pressed && styles.pressed]}
+          accessibilityLabel="Search UniPool"
+          accessibilityHint="Keyboard shortcut Command K or Control K"
+        >
+          <Ionicons name="search" size={19} color={colors.indigo} />
+          {showActionText ? <Text style={[styles.actionText, { color: colors.onSurface }]}>Search</Text> : null}
         </Pressable>
-        <Pressable onPress={() => tap(() => router.push("/post-request" as any))} style={[styles.action, { backgroundColor: colors.surface2, borderColor: colors.border }]} accessibilityLabel="Post a trip">
-          <Ionicons name="add-circle-outline" size={17} color={colors.indigo} />{showActionText ? <Text style={[styles.actionText, { color: colors.onSurface }]}>Post trip</Text> : null}
+        <Pressable
+          onPress={() => tap(() => router.push("/post-request" as any))}
+          style={({ pressed }) => [styles.primaryAction, { backgroundColor: colors.indigo, borderColor: colors.indigo }, pressed && styles.pressed]}
+          accessibilityLabel="Post a trip"
+        >
+          <Ionicons name="add" size={20} color="#fff" />
+          {showActionText ? <Text style={styles.primaryActionText}>Post trip</Text> : null}
         </Pressable>
-        <Pressable onPress={() => tap(() => router.push("/(tabs)/games" as any))} style={[styles.action, { backgroundColor: colors.surface2, borderColor: colors.border }]} accessibilityLabel="Open time-pass games">
-          <Ionicons name="game-controller-outline" size={17} color={colors.saffron} />{showActionText ? <Text style={[styles.actionText, { color: colors.onSurface }]}>Time-pass</Text> : null}
+        <Pressable
+          onPress={() => tap(() => router.push("/(tabs)/games" as any))}
+          style={({ pressed }) => [styles.action, { backgroundColor: colors.surface2, borderColor: colors.border }, pressed && styles.pressed]}
+          accessibilityLabel="Open time-pass games"
+        >
+          <Ionicons name="game-controller-outline" size={19} color={colors.saffron} />
+          {showActionText ? <Text style={[styles.actionText, { color: colors.onSurface }]}>Time-pass</Text> : null}
         </Pressable>
-        <Pressable onPress={() => tap(toggleTheme)} style={[styles.iconAction, { backgroundColor: colors.surface2, borderColor: colors.border }]} accessibilityLabel={isDark ? "Switch to light theme" : "Switch to dark theme"}>
-          <Ionicons name={isDark ? "sunny-outline" : "moon-outline"} size={18} color={colors.indigo} />
+        <Pressable
+          onPress={() => tap(toggleTheme)}
+          style={({ pressed }) => [styles.iconAction, { backgroundColor: colors.surface2, borderColor: colors.border }, pressed && styles.pressed]}
+          accessibilityLabel={isDark ? "Switch to light theme" : "Switch to dark theme"}
+        >
+          <Ionicons name={isDark ? "sunny-outline" : "moon-outline"} size={20} color={colors.indigo} />
         </Pressable>
       </View>
     </View>
@@ -77,8 +103,75 @@ export default function WebTopBar() {
 }
 
 const styles = StyleSheet.create({
-  bar: { height: 54, width: "100%", flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 18, borderBottomWidth: StyleSheet.hairlineWidth, zIndex: 50 },
-  brand: { flexDirection: "row", alignItems: "center", gap: 9, minWidth: 44 }, logo: { width: 34, height: 34, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" }, brandText: { fontSize: 17, fontWeight: "900", letterSpacing: -0.2 },
-  nav: { flexDirection: "row", alignItems: "center", gap: 2, padding: 3, borderRadius: 19, borderWidth: 1, marginHorizontal: "auto" }, navItem: { height: 32, paddingHorizontal: 11, borderRadius: 16, borderWidth: 1, borderColor: "transparent", flexDirection: "row", alignItems: "center", gap: 5 }, navText: { fontSize: 11, fontWeight: "800" },
-  actions: { flexDirection: "row", alignItems: "center", gap: 7 }, action: { height: 36, minWidth: 36, paddingHorizontal: 10, borderRadius: 18, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }, searchAction: { height: 36, minWidth: 36, paddingHorizontal: 10, borderRadius: 18, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }, actionText: { fontSize: 11, fontWeight: "800" }, shortcut: { fontSize: 8, fontWeight: "800", borderWidth: 1, borderRadius: 6, paddingHorizontal: 4, paddingVertical: 2 }, iconAction: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  bar: {
+    height: 68,
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 18,
+    paddingHorizontal: 26,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    zIndex: 50,
+  },
+  brand: { flexDirection: "row", alignItems: "center", gap: 10, minWidth: 48 },
+  logo: { width: 40, height: 40, borderRadius: 13, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  brandText: { fontSize: 18, fontWeight: "900", letterSpacing: -0.25 },
+  nav: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    padding: 4,
+    borderRadius: 25,
+    borderWidth: 1,
+    marginHorizontal: "auto",
+  },
+  navItem: {
+    height: 42,
+    paddingHorizontal: 16,
+    borderRadius: 21,
+    borderWidth: 1,
+    borderColor: "transparent",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  navText: { fontSize: 13, fontWeight: "800" },
+  actions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  action: {
+    height: 42,
+    minWidth: 42,
+    paddingHorizontal: 13,
+    borderRadius: 21,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+  searchAction: {
+    height: 42,
+    minWidth: 42,
+    paddingHorizontal: 14,
+    borderRadius: 21,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+  primaryAction: {
+    height: 42,
+    minWidth: 42,
+    paddingHorizontal: 14,
+    borderRadius: 21,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+  actionText: { fontSize: 12, fontWeight: "800" },
+  primaryActionText: { color: "#fff", fontSize: 12, fontWeight: "900" },
+  iconAction: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.985 }] },
 });
