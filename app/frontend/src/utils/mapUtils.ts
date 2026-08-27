@@ -4,10 +4,51 @@ declare global {
   }
 }
 
+type Coordinates = { lat: number; lng: number };
+
+// Some travel shorthand is meaningful to UniPool users but too ambiguous for
+// public geocoders. Keep the small set of high-confidence transport aliases
+// deterministic so a ride map does not depend on Nominatim understanding an
+// acronym such as "RGIA".
+const KNOWN_LOCATION_ALIASES: Record<string, Coordinates> = {
+  // Rajiv Gandhi International Airport (HYD), Shamshabad, Hyderabad.
+  rgia: { lat: 17.2403, lng: 78.4294 },
+  "rgi airport": { lat: 17.2403, lng: 78.4294 },
+  "rajiv gandhi airport": { lat: 17.2403, lng: 78.4294 },
+  "rajiv gandhi international airport": { lat: 17.2403, lng: 78.4294 },
+  "hyderabad airport": { lat: 17.2403, lng: 78.4294 },
+  "hyderabad international airport": { lat: 17.2403, lng: 78.4294 },
+  "hyd airport": { lat: 17.2403, lng: 78.4294 },
+  "hyd rajiv gandhi international airport": { lat: 17.2403, lng: 78.4294 },
+};
+
+function locationKey(place: string): string {
+  return place
+    .trim()
+    .toLowerCase()
+    .replace(/[.,()]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function knownLocation(place: string): Coordinates | null {
+  const key = locationKey(place);
+  if (KNOWN_LOCATION_ALIASES[key]) return KNOWN_LOCATION_ALIASES[key];
+
+  // Be tolerant of labels such as "RGIA Airport" or
+  // "Rajiv Gandhi International Airport, Hyderabad" without treating a plain
+  // city name like Hyderabad as the airport.
+  if (/\brgia\b/.test(key)) return KNOWN_LOCATION_ALIASES.rgia;
+  if (/rajiv gandhi.*(?:international )?airport/.test(key)) return KNOWN_LOCATION_ALIASES.rgia;
+  if (/hyderabad.*(?:international )?airport/.test(key)) return KNOWN_LOCATION_ALIASES.rgia;
+
+  return null;
+}
+
 // Module-level so it persists across remounts within the session — avoids
 // re-hitting Nominatim (which asks for max ~1 request/sec) for locations
 // we've already resolved.
-const geocodeCache: Record<string, { lat: number; lng: number } | null> = {};
+const geocodeCache: Record<string, Coordinates | null> = {};
 let leafletLoadPromise: Promise<void> | null = null;
 
 export function loadLeaflet(): Promise<void> {
@@ -31,9 +72,17 @@ export function loadLeaflet(): Promise<void> {
   return leafletLoadPromise;
 }
 
-export async function geocode(place: string): Promise<{ lat: number; lng: number } | null> {
-  const key = place.trim().toLowerCase();
+export async function geocode(place: string): Promise<Coordinates | null> {
+  const key = locationKey(place);
+  if (!key) return null;
   if (key in geocodeCache) return geocodeCache[key];
+
+  const known = knownLocation(place);
+  if (known) {
+    geocodeCache[key] = known;
+    return known;
+  }
+
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(place + ", India")}`,
