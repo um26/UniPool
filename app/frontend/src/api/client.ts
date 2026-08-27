@@ -119,6 +119,14 @@ if (typeof document !== "undefined" && BASE) {
   } catch {}
 }
 
+function query(params: Record<string, string | number | undefined | null>) {
+  const q = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") q.set(key, String(value));
+  });
+  return q.toString();
+}
+
 export const api = {
   wakeBackend,
   googleSignIn: (id_token: string) => req("/auth/google", { method: "POST", body: JSON.stringify({ id_token }) }),
@@ -129,6 +137,7 @@ export const api = {
   me: () => req("/auth/me"),
   logout: () => mutate("/auth/logout", { method: "POST" }),
   updateProfile: (patch: any) => mutate("/profile", { method: "PATCH", body: JSON.stringify(patch) }),
+
   listPools: () => req("/pools", {}, 10000),
   routeHeatmap: () => req("/analytics/route-heatmap", {}, 30000),
   myPools: () => req("/pools/mine", {}, 10000),
@@ -138,6 +147,26 @@ export const api = {
   closePool: (id: string) => mutate(`/pools/${id}/close`, { method: "PATCH" }),
   reopenPool: (id: string) => mutate(`/pools/${id}/reopen`, { method: "PATCH" }),
   deletePool: (id: string) => mutate(`/pools/${id}`, { method: "DELETE" }),
+  getPool: (poolId: string) => req(`/pools/${poolId}`, {}, 8000),
+
+  searchLocations: (q = "", limit = 12) => req(`/locations?${query({ q, limit })}`, {}, 60000),
+  savedRoutes: () => req("/saved-routes", {}, 8000),
+  saveRoute: (body: any) => mutate("/saved-routes", { method: "POST", body: JSON.stringify(body) }),
+  deleteSavedRoute: (id: string) => mutate(`/saved-routes/${id}`, { method: "DELETE" }),
+  recurringRoutes: () => req("/recurring-routes", {}, 8000),
+  createRecurringRoute: (body: any) => mutate("/recurring-routes", { method: "POST", body: JSON.stringify(body) }),
+  updateRecurringRoute: (id: string, body: any) => mutate(`/recurring-routes/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteRecurringRoute: (id: string) => mutate(`/recurring-routes/${id}`, { method: "DELETE" }),
+  upcomingJourneys: () => req("/journeys/upcoming", {}, 5000),
+  setJourneyStatus: (poolId: string, status: string) => mutate(`/journeys/${poolId}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  setMeetingPoint: (poolId: string, body: any) => mutate(`/journeys/${poolId}/meeting-point`, { method: "PATCH", body: JSON.stringify(body) }),
+  setJourneyFare: (poolId: string, amount: number, currency = "INR") => mutate(`/journeys/${poolId}/fare`, { method: "PATCH", body: JSON.stringify({ amount, currency }) }),
+  repeatJourney: (poolId: string, travel_datetime: string) => mutate(`/journeys/${poolId}/repeat`, { method: "POST", body: JSON.stringify({ travel_datetime }) }),
+  duplicateJourneys: (from_location: string, to_location: string, travel_datetime: string) => req(`/journeys/duplicates?${query({ from_location, to_location, travel_datetime })}`),
+  routeInsights: () => req("/route-insights", {}, 30000),
+  travelDigest: () => req("/travel-digest", {}, 10000),
+  diagnostics: () => req("/diagnostics", {}, 5000),
+
   trivia: (excludeIds: string[] = [], count = 8) => {
     const params = new URLSearchParams();
     if (excludeIds.length) params.set("exclude", excludeIds.join(","));
@@ -172,7 +201,6 @@ export const api = {
   cancelRequest: (requestId: string) => mutate(`/requests/${requestId}`, { method: "DELETE" }),
   confirmedMatches: () => req("/matches/confirmed", {}, 8000),
   removeTraveler: (poolId: string, travelerUserId: string) => mutate(`/pools/${poolId}/travelers/${travelerUserId}`, { method: "DELETE" }),
-  getPool: (poolId: string) => req(`/pools/${poolId}`, {}, 8000),
   blockUser: (userId: string) => mutate(`/users/${userId}/block`, { method: "POST" }),
   unblockUser: (userId: string) => mutate(`/users/${userId}/block`, { method: "DELETE" }),
   listBlocked: () => req("/users/me/blocked", {}, 10000),
