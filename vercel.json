@@ -3,7 +3,7 @@
   "buildCommand": "cd app/frontend && npm install --legacy-peer-deps && npx expo export -p web",
   "outputDirectory": "app/frontend/dist",
   "installCommand": "echo 'handled in buildCommand'",
-  "ignoreCommand": "if [ -z \"$VERCEL_GIT_PREVIOUS_SHA\" ]; then exit 1; fi; git cat-file -e \"$VERCEL_GIT_PREVIOUS_SHA^{commit}\" 2>/dev/null || git fetch --quiet --depth=1 origin \"$VERCEL_GIT_PREVIOUS_SHA\" || exit 1; git diff --quiet \"$VERCEL_GIT_PREVIOUS_SHA\" HEAD -- app/frontend vercel.json",
+  "ignoreCommand": "bash scripts/vercel-ignore.sh",
   "git": {
     "deploymentEnabled": {
       "ci/*": false
