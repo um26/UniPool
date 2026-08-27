@@ -178,52 +178,26 @@ export default function ChatThread() {
           />
         )}
 
-        {text.trim().length === 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickReplies}>
+        {msgs.length === 0 && text.trim().length === 0 && !loading ? (
+          <ScrollView horizontal style={styles.quickRepliesScroll} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickReplies}>
             {QUICK_REPLIES.map((reply) => (
-              <Pressable
-                key={reply}
-                accessibilityLabel={`Use quick reply: ${reply}`}
-                onPress={() => setText(reply)}
-                style={styles.quickReply}
-              >
+              <Pressable key={reply} accessibilityLabel={`Use quick reply: ${reply}`} onPress={() => setText(reply)} style={styles.quickReply}>
                 <Text style={styles.quickReplyText}>{reply}</Text>
               </Pressable>
             ))}
           </ScrollView>
-        )}
+        ) : null}
 
         <View style={styles.inputRow}>
-          <TextInput
-            testID="chat-input"
-            value={text}
-            onChangeText={onChangeText}
-            placeholder="Type a message..."
-            placeholderTextColor={colors.muted}
-            style={styles.input}
-            multiline
-            maxLength={500}
-          />
-          <Pressable
-            accessibilityLabel="Send message"
-            testID="chat-send"
-            onPress={send}
-            disabled={sending || !text.trim()}
-            style={[styles.sendBtn, (!text.trim() || sending) && { opacity: 0.5 }]}
-          >
+          <TextInput testID="chat-input" value={text} onChangeText={onChangeText} placeholder="Type a message..." placeholderTextColor={colors.muted} style={styles.input} multiline maxLength={500} />
+          <Pressable accessibilityLabel="Send message" testID="chat-send" onPress={send} disabled={sending || !text.trim()} style={[styles.sendBtn, (!text.trim() || sending) && { opacity: 0.5 }]}>
             <Ionicons name="send" size={18} color="#fff" />
           </Pressable>
         </View>
         <Text style={styles.charHint}>{text.length > 420 ? `${text.length}/500` : "Keep it friendly — you're coordinating a ride."}</Text>
       </KeyboardAvoidingView>
 
-      <ReportBlockModal
-        visible={showReport}
-        onClose={() => setShowReport(false)}
-        userId={userId as string}
-        userName={(name as string) || "this user"}
-        onBlocked={() => router.back()}
-      />
+      <ReportBlockModal visible={showReport} onClose={() => setShowReport(false)} userId={userId as string} userName={(name as string) || "this user"} onBlocked={() => router.back()} />
     </SafeAreaView>
   );
 }
@@ -251,9 +225,10 @@ const makeStyles = (colors: any) => StyleSheet.create({
   emptyIcon: { width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface2, marginBottom: SPACING.md },
   emptyTitle: { color: colors.onSurface, fontSize: FONT.lg, fontWeight: "800" },
   emptyText: { color: colors.muted, marginTop: 6, textAlign: "center", lineHeight: 20 },
-  quickReplies: { gap: SPACING.sm, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm },
-  quickReply: { backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border, borderRadius: RADIUS.pill, paddingHorizontal: 13, paddingVertical: 9 },
-  quickReplyText: { color: colors.onSurface2, fontSize: 12, fontWeight: "600" },
+  quickRepliesScroll: { flexGrow: 0, maxHeight: 54 },
+  quickReplies: { gap: SPACING.sm, paddingHorizontal: SPACING.md, paddingVertical: 7, alignItems: "center" },
+  quickReply: { minHeight: 36, justifyContent: "center", backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border, borderRadius: RADIUS.pill, paddingHorizontal: 13, paddingVertical: 7 },
+  quickReplyText: { color: colors.onSurface2, fontSize: 11, fontWeight: "700" },
   inputRow: { flexDirection: "row", alignItems: "flex-end", gap: SPACING.sm, paddingHorizontal: SPACING.md, paddingTop: SPACING.sm, backgroundColor: colors.surface },
   input: { flex: 1, backgroundColor: colors.card, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14, paddingVertical: 10, maxHeight: 100, fontSize: FONT.base, color: colors.onSurface },
   sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.saffron, alignItems: "center", justifyContent: "center" },
