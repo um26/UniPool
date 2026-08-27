@@ -1,0 +1,54 @@
+import React, { useMemo, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import * as Haptics from "expo-haptics";
+
+import { useTheme } from "@/src/theme_context/ThemeContext";
+import { FONT_DISPLAY, RADIUS, SPACING } from "@/src/theme";
+
+const ITEMS = [
+  { clue: "Kaziranga · tea gardens · Brahmaputra", answer: "Assam", options: ["Assam", "Sikkim", "Meghalaya", "Tripura"] },
+  { clue: "Munnar · backwaters · Kochi", answer: "Kerala", options: ["Kerala", "Goa", "Karnataka", "Tamil Nadu"] },
+  { clue: "Thar Desert · Jaipur · Jaisalmer", answer: "Rajasthan", options: ["Gujarat", "Rajasthan", "Haryana", "Punjab"] },
+  { clue: "Rann of Kutch · Ahmedabad · Gir", answer: "Gujarat", options: ["Gujarat", "Maharashtra", "Rajasthan", "Madhya Pradesh"] },
+  { clue: "Hampi · Coorg · Bengaluru", answer: "Karnataka", options: ["Karnataka", "Telangana", "Tamil Nadu", "Kerala"] },
+  { clue: "Konark · Puri · Chilika Lake", answer: "Odisha", options: ["Odisha", "West Bengal", "Jharkhand", "Chhattisgarh"] },
+  { clue: "Darjeeling · Sundarbans · Kolkata", answer: "West Bengal", options: ["West Bengal", "Assam", "Bihar", "Odisha"] },
+  { clue: "Shillong · living root bridges", answer: "Meghalaya", options: ["Nagaland", "Meghalaya", "Mizoram", "Sikkim"] },
+  { clue: "Golden Temple · Amritsar", answer: "Punjab", options: ["Punjab", "Haryana", "Rajasthan", "Himachal Pradesh"] },
+  { clue: "Charminar · Hyderabad", answer: "Telangana", options: ["Telangana", "Andhra Pradesh", "Karnataka", "Maharashtra"] },
+  { clue: "Khajuraho · Sanchi · Bhopal", answer: "Madhya Pradesh", options: ["Madhya Pradesh", "Uttar Pradesh", "Rajasthan", "Bihar"] },
+  { clue: "Ooty · Madurai · Chennai", answer: "Tamil Nadu", options: ["Tamil Nadu", "Kerala", "Karnataka", "Andhra Pradesh"] },
+];
+
+function shuffled<T>(items: T[]) { return [...items].sort(() => Math.random() - .5); }
+
+export default function GuessState() {
+  const router = useRouter();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [round] = useState(() => shuffled(ITEMS).slice(0, 8));
+  const [index, setIndex] = useState(0);
+  const [score, setScore] = useState(0);
+  const [picked, setPicked] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const current = round[index];
+
+  const choose = (value: string) => {
+    if (picked) return;
+    setPicked(value);
+    const correct = value === current.answer;
+    if (correct) { setScore((n) => n + 1); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }
+    else Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    setTimeout(() => { if (index + 1 >= round.length) setDone(true); else { setIndex((n) => n + 1); setPicked(null); } }, 800);
+  };
+
+  return <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+    <View style={styles.header}><Pressable onPress={() => router.back()}><Ionicons name="chevron-back" size={24} color={colors.onSurface} /></Pressable><Text style={styles.progress}>{done ? "Complete" : `${index + 1} / ${round.length}`}</Text><Text style={styles.progress}>Score {score}</Text></View>
+    {done ? <View style={styles.center}><View style={styles.trophy}><Ionicons name="map" size={36} color={colors.saffron} /></View><Text style={styles.title}>You got {score} / {round.length}</Text><Text style={styles.sub}>India is a big map. Nice route knowledge.</Text><Pressable onPress={() => router.replace("/games/guess-state" as any)} style={styles.primary}><Text style={styles.primaryText}>Play again</Text></Pressable><Pressable onPress={() => router.back()} style={styles.ghost}><Text style={styles.ghostText}>Back</Text></Pressable></View> : <View style={styles.content}><Text style={styles.eyebrow}>GUESS THE STATE</Text><Text style={styles.clue}>{current.clue}</Text><Text style={styles.sub}>Which Indian state do these clues point to?</Text><View style={styles.options}>{shuffled(current.options).map((option) => { const correct = picked && option === current.answer; const wrong = picked === option && option !== current.answer; return <Pressable key={option} onPress={() => choose(option)} style={[styles.option, correct && styles.correct, wrong && styles.wrong]}><Text style={[styles.optionText, (correct || wrong) && { color: "#fff" }]}>{option}</Text>{correct ? <Ionicons name="checkmark-circle" size={20} color="#fff" /> : null}</Pressable>; })}</View></View>}
+  </SafeAreaView>;
+}
+
+const makeStyles = (colors: any) => StyleSheet.create({ safe: { flex: 1, backgroundColor: colors.surface }, header: { minHeight: 60, paddingHorizontal: SPACING.lg, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, progress: { color: colors.muted, fontSize: 11, fontWeight: "800" }, content: { flex: 1, width: "100%", maxWidth: 680, alignSelf: "center", justifyContent: "center", padding: SPACING.xl }, eyebrow: { color: colors.saffron, fontSize: 10, fontWeight: "900", letterSpacing: 1.2 }, clue: { color: colors.onSurface, fontFamily: FONT_DISPLAY, fontSize: 30, lineHeight: 38, fontWeight: "900", marginTop: 8 }, sub: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 7, textAlign: "center" }, options: { gap: 9, marginTop: 24 }, option: { minHeight: 58, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, optionText: { color: colors.onSurface, fontSize: 13, fontWeight: "800" }, correct: { backgroundColor: colors.success, borderColor: colors.success }, wrong: { backgroundColor: colors.error, borderColor: colors.error }, center: { flex: 1, width: "100%", maxWidth: 520, alignSelf: "center", alignItems: "center", justifyContent: "center", padding: SPACING.xl }, trophy: { width: 76, height: 76, borderRadius: 24, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" }, title: { color: colors.onSurface, fontFamily: FONT_DISPLAY, fontSize: 26, fontWeight: "900", marginTop: 16 }, primary: { width: "100%", minHeight: 48, borderRadius: 24, backgroundColor: colors.indigo, alignItems: "center", justifyContent: "center", marginTop: 24 }, primaryText: { color: "#fff", fontWeight: "900" }, ghost: { width: "100%", minHeight: 46, borderRadius: 23, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", marginTop: 8 }, ghostText: { color: colors.indigo, fontWeight: "900" } });
