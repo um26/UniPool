@@ -1,0 +1,15 @@
+{
+  "name": "UniPool — University Mobility",
+  "short_name": "UniPool",
+  "description": "Verified university ride matching, trip coordination and travel tools.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F8F7F3",
+  "theme_color": "#2447A8",
+  "orientation": "any",
+  "categories": ["travel", "social", "utilities"],
+  "icons": [
+    { "src": "/favicon.ico", "sizes": "any", "type": "image/x-icon", "purpose": "any" }
+  ]
+}
