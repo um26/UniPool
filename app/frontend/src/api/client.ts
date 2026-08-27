@@ -3,6 +3,7 @@ import { answerLocalDailyChallenge, localDailyChallenge, localTriviaRound } from
 
 const BASE = process.env.EXPO_PUBLIC_API_BASE_URL;
 const TOKEN_KEY = "unipool.session_token";
+export const FRONTEND_VERSION = "2.2.0";
 type CacheEntry = { at: number; data: any };
 let tokenMemory: string | null | undefined;
 let tokenLoad: Promise<string | null> | null = null;
@@ -18,6 +19,18 @@ export async function getToken(): Promise<string | null> {
 }
 export async function setToken(token: string | null) { tokenMemory = token; if (token) await storage.secureSet(TOKEN_KEY, token); else await storage.secureRemove(TOKEN_KEY); }
 function clearReadCache() { responseCache.clear(); }
+function currentRoute() { try { return typeof window !== "undefined" ? window.location.pathname : undefined; } catch { return undefined; } }
+
+async function sendClientError(payload: Record<string, any>, token?: string | null) {
+  if (!BASE || !token) return;
+  try {
+    await fetch(`${BASE}/api/client-errors`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ ...payload, app_version: FRONTEND_VERSION }),
+    });
+  } catch {}
+}
 
 async function req(path: string, opts: RequestInit = {}, cacheMs = 0) {
   if (!BASE) throw new Error("UniPool API is not configured");
@@ -31,10 +44,20 @@ async function req(path: string, opts: RequestInit = {}, cacheMs = 0) {
     const token = await getToken();
     const headers: Record<string, string> = { "Content-Type": "application/json", ...(opts.headers as Record<string, string>) };
     if (token) headers.Authorization = `Bearer ${token}`;
-    const res = await fetch(`${BASE}/api${path}`, { ...opts, headers });
+    let res: Response;
+    try {
+      res = await fetch(`${BASE}/api${path}`, { ...opts, headers });
+    } catch (networkError: any) {
+      if (path !== "/client-errors") void sendClientError({ name: "NetworkError", message: networkError?.message || "Network request failed", route: currentRoute(), endpoint: path, context: { method } }, token);
+      throw networkError;
+    }
     const text = await res.text(); let data: any = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = text; }
-    if (!res.ok) { const err: any = new Error(data?.detail || res.statusText); err.status = res.status; err.data = data; throw err; }
+    if (!res.ok) {
+      const err: any = new Error(data?.detail || res.statusText || `Request failed (${res.status})`); err.status = res.status; err.data = data;
+      if (path !== "/client-errors" && res.status !== 401) void sendClientError({ name: "ApiError", message: err.message, route: currentRoute(), endpoint: path, status: res.status, context: { method } }, token);
+      throw err;
+    }
     if (method === "GET" && cacheMs > 0) responseCache.set(cacheKey, { at: Date.now(), data });
     return data;
   })();
@@ -48,7 +71,7 @@ async function wakeBackend() {
   return wakePromise;
 }
 if (typeof document !== "undefined" && BASE) { try { const origin = new URL(BASE).origin; if (!document.querySelector(`link[data-unipool-preconnect="${origin}"]`)) { const link = document.createElement("link"); link.rel = "preconnect"; link.href = origin; link.setAttribute("data-unipool-preconnect", origin); document.head.appendChild(link); } } catch {} }
-function query(params: Record<string, string | number | undefined | null>) { const q = new URLSearchParams(); Object.entries(params).forEach(([key, value]) => { if (value !== undefined && value !== null && value !== "") q.set(key, String(value)); }); return q.toString(); }
+function query(params: Record<string, string | number | boolean | undefined | null>) { const q = new URLSearchParams(); Object.entries(params).forEach(([key, value]) => { if (value !== undefined && value !== null && value !== "") q.set(key, String(value)); }); return q.toString(); }
 
 export const api = {
   wakeBackend,
@@ -65,17 +88,26 @@ export const api = {
   savedRoutes: () => req("/saved-routes", {}, 8000), saveRoute: (body: any) => mutate("/saved-routes", { method: "POST", body: JSON.stringify(body) }), deleteSavedRoute: (id: string) => mutate(`/saved-routes/${id}`, { method: "DELETE" }),
   recurringRoutes: () => req("/recurring-routes", {}, 8000), createRecurringRoute: (body: any) => mutate("/recurring-routes", { method: "POST", body: JSON.stringify(body) }), updateRecurringRoute: (id: string, body: any) => mutate(`/recurring-routes/${id}`, { method: "PATCH", body: JSON.stringify(body) }), deleteRecurringRoute: (id: string) => mutate(`/recurring-routes/${id}`, { method: "DELETE" }),
   upcomingJourneys: () => req("/journeys/upcoming", {}, 5000), setJourneyStatus: (poolId: string, status: string) => mutate(`/journeys/${poolId}/status`, { method: "PATCH", body: JSON.stringify({ status }) }), setMeetingPoint: (poolId: string, body: any) => mutate(`/journeys/${poolId}/meeting-point`, { method: "PATCH", body: JSON.stringify(body) }), setJourneyFare: (poolId: string, amount: number, currency = "INR") => mutate(`/journeys/${poolId}/fare`, { method: "PATCH", body: JSON.stringify({ amount, currency }) }), repeatJourney: (poolId: string, travel_datetime: string) => mutate(`/journeys/${poolId}/repeat`, { method: "POST", body: JSON.stringify({ travel_datetime }) }), duplicateJourneys: (from_location: string, to_location: string, travel_datetime: string) => req(`/journeys/duplicates?${query({ from_location, to_location, travel_datetime })}`), routeInsights: () => req("/route-insights", {}, 30000), travelDigest: () => req("/travel-digest", {}, 10000), diagnostics: () => req("/diagnostics", {}, 5000),
+  cancelJourney: (poolId: string, reason: string, note?: string) => mutate(`/journeys/${poolId}/cancel-with-reason`, { method: "POST", body: JSON.stringify({ reason, note }) }),
+  reportNoShow: (poolId: string, reported_user_id: string, note?: string) => mutate(`/journeys/${poolId}/no-show`, { method: "POST", body: JSON.stringify({ reported_user_id, note }) }),
+
+  notifications: (unreadOnly = false, limit = 60) => req(`/notifications?${query({ unread_only: unreadOnly, limit })}`, {}, 4000),
+  readNotification: (id: string) => mutate(`/notifications/${id}/read`, { method: "PATCH" }),
+  readAllNotifications: () => mutate("/notifications/read-all", { method: "POST" }),
+  notificationPreferences: () => req("/notification-preferences", {}, 10000),
+  updateNotificationPreferences: (body: any) => mutate("/notification-preferences", { method: "PATCH", body: JSON.stringify(body) }),
+  pickupPoints: () => req("/pickup-points", {}, 10000),
+  savePickupPoint: (body: any) => mutate("/pickup-points", { method: "POST", body: JSON.stringify(body) }),
+  deletePickupPoint: (id: string) => mutate(`/pickup-points/${id}`, { method: "DELETE" }),
 
   travelHistory: (limit = 50) => req(`/travel-history?${query({ limit })}`, {}, 15000), myReliability: () => req("/reliability/me", {}, 10000), userReliability: (userId: string) => req(`/reliability/${userId}`, {}, 10000), mutualContext: (userId: string) => req(`/mutual-context/${userId}`, {}, 10000),
   globalSearch: (q: string) => req(`/search/global?${query({ q })}`, {}, 5000), recordEvent: (event: string, context: Record<string, any> = {}) => mutate("/analytics/events", { method: "POST", body: JSON.stringify({ event, context }) }), productAnalytics: () => req("/analytics/product", {}, 10000),
+  reportClientError: (body: any) => mutate("/client-errors", { method: "POST", body: JSON.stringify({ ...body, app_version: FRONTEND_VERSION }) }),
+  releaseDiagnostics: () => req(`/admin/release-diagnostics?${query({ frontend_version: FRONTEND_VERSION })}`, {}, 5000),
 
-  // Time-pass is deliberately local-first. These games are lightweight and
-  // should remain playable even when the mobility backend is cold or a newer
-  // game route has not reached production yet. The daily question is
-  // deterministic by UTC date, so everyone on the same frontend build sees
-  // the same challenge.
   dailyChallenge: () => localDailyChallenge(),
   answerDailyChallenge: (challenge_id: string, answer: number) => answerLocalDailyChallenge(challenge_id, answer),
+  dailyChallengeLeaderboard: () => req("/daily-challenge/leaderboard", {}, 30000).catch(() => []),
   trivia: (excludeIds: string[] = [], count = 8) => Promise.resolve(localTriviaRound(excludeIds, count)),
 
   adminStats: () => req("/admin/stats", {}, 10000), adminPools: () => req("/admin/pools", {}, 5000), adminDeletePool: (id: string) => mutate(`/admin/pools/${id}`, { method: "DELETE" }),
