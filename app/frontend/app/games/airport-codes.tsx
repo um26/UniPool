@@ -7,176 +7,22 @@ import * as Haptics from "expo-haptics";
 
 import { FONT, RADIUS, SPACING } from "@/src/theme";
 import { useTheme } from "@/src/theme_context/ThemeContext";
+import GameShareButton from "@/src/components/GameShareButton";
 
 type Airport = { code: string; city: string; airport: string };
 type Round = { prompt: string; answer: string; options: string[]; detail: string };
-
 const AIRPORTS: Airport[] = [
-  { code: "DEL", city: "Delhi", airport: "Indira Gandhi International Airport" },
-  { code: "BOM", city: "Mumbai", airport: "Chhatrapati Shivaji Maharaj International Airport" },
-  { code: "BLR", city: "Bengaluru", airport: "Kempegowda International Airport" },
-  { code: "HYD", city: "Hyderabad", airport: "Rajiv Gandhi International Airport" },
-  { code: "MAA", city: "Chennai", airport: "Chennai International Airport" },
-  { code: "CCU", city: "Kolkata", airport: "Netaji Subhas Chandra Bose International Airport" },
-  { code: "COK", city: "Kochi", airport: "Cochin International Airport" },
-  { code: "GOI", city: "Goa (Dabolim)", airport: "Dabolim Airport" },
-  { code: "GOX", city: "Goa (Mopa)", airport: "Manohar International Airport" },
-  { code: "AMD", city: "Ahmedabad", airport: "Sardar Vallabhbhai Patel International Airport" },
-  { code: "JAI", city: "Jaipur", airport: "Jaipur International Airport" },
-  { code: "LKO", city: "Lucknow", airport: "Chaudhary Charan Singh International Airport" },
-  { code: "ATQ", city: "Amritsar", airport: "Sri Guru Ram Dass Jee International Airport" },
-  { code: "GAU", city: "Guwahati", airport: "Lokpriya Gopinath Bordoloi International Airport" },
-  { code: "PNQ", city: "Pune", airport: "Pune Airport" },
-  { code: "TRV", city: "Thiruvananthapuram", airport: "Thiruvananthapuram International Airport" },
-  { code: "IXC", city: "Chandigarh", airport: "Chandigarh Airport" },
-  { code: "VNS", city: "Varanasi", airport: "Lal Bahadur Shastri International Airport" },
-  { code: "BBI", city: "Bhubaneswar", airport: "Biju Patnaik International Airport" },
-  { code: "PAT", city: "Patna", airport: "Jay Prakash Narayan Airport" },
-  { code: "SXR", city: "Srinagar", airport: "Srinagar Airport" },
-  { code: "IXL", city: "Leh", airport: "Kushok Bakula Rimpochee Airport" },
-  { code: "IDR", city: "Indore", airport: "Devi Ahilya Bai Holkar Airport" },
-  { code: "NAG", city: "Nagpur", airport: "Dr. Babasaheb Ambedkar International Airport" },
-  { code: "UDR", city: "Udaipur", airport: "Maharana Pratap Airport" },
-  { code: "JDH", city: "Jodhpur", airport: "Jodhpur Airport" },
-  { code: "IXR", city: "Ranchi", airport: "Birsa Munda Airport" },
-  { code: "IXB", city: "Siliguri", airport: "Bagdogra Airport" },
-  { code: "VTZ", city: "Visakhapatnam", airport: "Visakhapatnam Airport" },
-  { code: "IXZ", city: "Port Blair", airport: "Veer Savarkar International Airport" },
+  { code:"DEL",city:"Delhi",airport:"Indira Gandhi International Airport"},{code:"BOM",city:"Mumbai",airport:"Chhatrapati Shivaji Maharaj International Airport"},{code:"BLR",city:"Bengaluru",airport:"Kempegowda International Airport"},{code:"HYD",city:"Hyderabad",airport:"Rajiv Gandhi International Airport"},{code:"MAA",city:"Chennai",airport:"Chennai International Airport"},{code:"CCU",city:"Kolkata",airport:"Netaji Subhas Chandra Bose International Airport"},{code:"COK",city:"Kochi",airport:"Cochin International Airport"},{code:"GOI",city:"Goa (Dabolim)",airport:"Dabolim Airport"},{code:"GOX",city:"Goa (Mopa)",airport:"Manohar International Airport"},{code:"AMD",city:"Ahmedabad",airport:"Sardar Vallabhbhai Patel International Airport"},{code:"JAI",city:"Jaipur",airport:"Jaipur International Airport"},{code:"LKO",city:"Lucknow",airport:"Chaudhary Charan Singh International Airport"},{code:"ATQ",city:"Amritsar",airport:"Sri Guru Ram Dass Jee International Airport"},{code:"GAU",city:"Guwahati",airport:"Lokpriya Gopinath Bordoloi International Airport"},{code:"PNQ",city:"Pune",airport:"Pune Airport"},{code:"TRV",city:"Thiruvananthapuram",airport:"Thiruvananthapuram International Airport"},{code:"IXC",city:"Chandigarh",airport:"Chandigarh Airport"},{code:"VNS",city:"Varanasi",airport:"Lal Bahadur Shastri International Airport"},{code:"BBI",city:"Bhubaneswar",airport:"Biju Patnaik International Airport"},{code:"PAT",city:"Patna",airport:"Jay Prakash Narayan Airport"},{code:"SXR",city:"Srinagar",airport:"Srinagar Airport"},{code:"IXL",city:"Leh",airport:"Kushok Bakula Rimpochee Airport"},{code:"IDR",city:"Indore",airport:"Devi Ahilya Bai Holkar Airport"},{code:"NAG",city:"Nagpur",airport:"Dr. Babasaheb Ambedkar International Airport"},{code:"UDR",city:"Udaipur",airport:"Maharana Pratap Airport"},{code:"JDH",city:"Jodhpur",airport:"Jodhpur Airport"},{code:"IXR",city:"Ranchi",airport:"Birsa Munda Airport"},{code:"IXB",city:"Siliguri",airport:"Bagdogra Airport"},{code:"VTZ",city:"Visakhapatnam",airport:"Visakhapatnam Airport"},{code:"IXZ",city:"Port Blair",airport:"Veer Savarkar International Airport"},
 ];
+const TOTAL_ROUNDS=8;
+function shuffled<T>(items:T[]){return [...items].sort(()=>Math.random()-.5);}
+function buildRounds():Round[]{return shuffled(AIRPORTS).slice(0,TOTAL_ROUNDS).map((airport,index)=>{const codeToCity=index%2===0;const distractors=shuffled(AIRPORTS.filter(i=>i.code!==airport.code)).slice(0,3);return codeToCity?{prompt:`${airport.code} belongs to which city?`,answer:airport.city,options:shuffled([airport.city,...distractors.map(i=>i.city)]),detail:`${airport.code} · ${airport.airport}`}:{prompt:`What is the airport code for ${airport.city}?`,answer:airport.code,options:shuffled([airport.code,...distractors.map(i=>i.code)]),detail:`${airport.code} · ${airport.airport}`};});}
 
-const TOTAL_ROUNDS = 8;
-
-function shuffled<T>(items: T[]) {
-  return [...items].sort(() => Math.random() - 0.5);
+export default function AirportCodes(){
+  const router=useRouter();const{colors}=useTheme();const styles=useMemo(()=>makeStyles(colors),[colors]);const[rounds,setRounds]=useState<Round[]>(()=>buildRounds());const[index,setIndex]=useState(0);const[picked,setPicked]=useState<string|null>(null);const[score,setScore]=useState(0);const[done,setDone]=useState(false);const current=rounds[index];
+  const choose=(option:string)=>{if(picked)return;setPicked(option);const correct=option===current.answer;if(correct){setScore(v=>v+1);Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);}else Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);setTimeout(()=>{if(index+1>=rounds.length)setDone(true);else{setIndex(v=>v+1);setPicked(null);}},1000);};
+  const restart=()=>{setRounds(buildRounds());setIndex(0);setPicked(null);setScore(0);setDone(false);};
+  if(done)return <SafeAreaView style={styles.safe}><View style={styles.doneWrap}><View style={styles.doneIcon}><Ionicons name="airplane" size={40} color={colors.indigo}/></View><Text style={styles.doneTitle}>{score} / {rounds.length}</Text><Text style={styles.doneSub}>{score>=7?"Airport pro. Boarding gate found.":score>=5?"Solid airport-code game.":"A few more trips and you'll know these by heart."}</Text><GameShareButton game="Airport Codes" result={`I scored ${score}/${rounds.length}`}/><Pressable onPress={restart} style={styles.primary}><Text style={styles.primaryText}>New round</Text></Pressable><Pressable onPress={()=>router.back()} style={styles.secondary}><Text style={styles.secondaryText}>Back to Time-pass</Text></Pressable></View></SafeAreaView>;
+  return <SafeAreaView style={styles.safe}><View style={styles.header}><Pressable onPress={()=>router.back()} hitSlop={12}><Ionicons name="chevron-back" size={24} color={colors.onSurface}/></Pressable><Text style={styles.progress}>{index+1} / {rounds.length}</Text><Text style={styles.progress}>Score {score}</Text></View><View style={styles.codeCard}><View style={styles.tagRow}><Ionicons name="airplane-outline" size={16} color={colors.saffron}/><Text style={styles.tag}>AIRPORT CODES</Text></View><Text style={styles.question}>{current.prompt}</Text></View><View style={styles.options}>{current.options.map(option=>{const correct=picked!==null&&option===current.answer;const wrong=picked===option&&option!==current.answer;return <Pressable key={option} onPress={()=>choose(option)} style={[styles.option,correct&&styles.correct,wrong&&styles.wrong]}><Text style={[styles.optionText,(correct||wrong)&&{color:"#fff"}]}>{option}</Text>{correct&&<Ionicons name="checkmark-circle" size={20} color="#fff"/>}{wrong&&<Ionicons name="close-circle" size={20} color="#fff"/>}</Pressable>;})}</View>{picked&&<Text style={styles.detail}>{current.detail}</Text>}</SafeAreaView>;
 }
-
-function buildRounds(): Round[] {
-  const selected = shuffled(AIRPORTS).slice(0, TOTAL_ROUNDS);
-  return selected.map((airport, index) => {
-    const codeToCity = index % 2 === 0;
-    const distractors = shuffled(AIRPORTS.filter((item) => item.code !== airport.code)).slice(0, 3);
-    if (codeToCity) {
-      return {
-        prompt: `${airport.code} belongs to which city?`,
-        answer: airport.city,
-        options: shuffled([airport.city, ...distractors.map((item) => item.city)]),
-        detail: `${airport.code} · ${airport.airport}`,
-      };
-    }
-    return {
-      prompt: `What is the airport code for ${airport.city}?`,
-      answer: airport.code,
-      options: shuffled([airport.code, ...distractors.map((item) => item.code)]),
-      detail: `${airport.code} · ${airport.airport}`,
-    };
-  });
-}
-
-export default function AirportCodes() {
-  const router = useRouter();
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [rounds, setRounds] = useState<Round[]>(() => buildRounds());
-  const [index, setIndex] = useState(0);
-  const [picked, setPicked] = useState<string | null>(null);
-  const [score, setScore] = useState(0);
-  const [done, setDone] = useState(false);
-
-  const current = rounds[index];
-
-  const choose = (option: string) => {
-    if (picked) return;
-    setPicked(option);
-    const correct = option === current.answer;
-    if (correct) {
-      setScore((value) => value + 1);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } else {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    }
-    setTimeout(() => {
-      if (index + 1 >= rounds.length) setDone(true);
-      else {
-        setIndex((value) => value + 1);
-        setPicked(null);
-      }
-    }, 1000);
-  };
-
-  const restart = () => {
-    setRounds(buildRounds());
-    setIndex(0);
-    setPicked(null);
-    setScore(0);
-    setDone(false);
-  };
-
-  if (done) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.doneWrap}>
-          <View style={styles.doneIcon}><Ionicons name="airplane" size={40} color={colors.indigo} /></View>
-          <Text style={styles.doneTitle}>{score} / {rounds.length}</Text>
-          <Text style={styles.doneSub}>{score >= 7 ? "Airport pro. Boarding gate found." : score >= 5 ? "Solid airport-code game." : "A few more trips and you'll know these by heart."}</Text>
-          <Pressable onPress={restart} style={styles.primary}><Text style={styles.primaryText}>New round</Text></Pressable>
-          <Pressable onPress={() => router.back()} style={styles.secondary}><Text style={styles.secondaryText}>Back to Time-pass</Text></Pressable>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}><Ionicons name="chevron-back" size={24} color={colors.onSurface} /></Pressable>
-        <Text style={styles.progress}>{index + 1} / {rounds.length}</Text>
-        <Text style={styles.progress}>Score {score}</Text>
-      </View>
-
-      <View style={styles.codeCard}>
-        <View style={styles.tagRow}><Ionicons name="airplane-outline" size={16} color={colors.saffron} /><Text style={styles.tag}>AIRPORT CODES</Text></View>
-        <Text style={styles.question}>{current.prompt}</Text>
-      </View>
-
-      <View style={styles.options}>
-        {current.options.map((option) => {
-          const correct = picked !== null && option === current.answer;
-          const wrong = picked === option && option !== current.answer;
-          return (
-            <Pressable key={option} onPress={() => choose(option)} style={[styles.option, correct && styles.correct, wrong && styles.wrong]}>
-              <Text style={[styles.optionText, (correct || wrong) && { color: "#fff" }]}>{option}</Text>
-              {correct && <Ionicons name="checkmark-circle" size={20} color="#fff" />}
-              {wrong && <Ionicons name="close-circle" size={20} color="#fff" />}
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {picked && <Text style={styles.detail}>{current.detail}</Text>}
-    </SafeAreaView>
-  );
-}
-
-const makeStyles = (colors: any) => StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.surface },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: SPACING.lg },
-  progress: { color: colors.muted, fontWeight: "800", fontSize: 12 },
-  codeCard: { marginHorizontal: SPACING.lg, borderRadius: RADIUS.xl, padding: SPACING.xl, backgroundColor: colors.indigo, minHeight: 180, justifyContent: "center" },
-  tagRow: { flexDirection: "row", alignItems: "center", gap: 7 },
-  tag: { color: colors.saffron, fontWeight: "900", letterSpacing: 1.1, fontSize: 11 },
-  question: { color: "#fff", fontSize: FONT["2xl"], fontWeight: "900", lineHeight: 32, marginTop: 12 },
-  options: { padding: SPACING.lg, gap: 10 },
-  option: { minHeight: 58, borderRadius: RADIUS.md, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
-  optionText: { color: colors.onSurface, fontSize: FONT.base, fontWeight: "700", flex: 1 },
-  correct: { backgroundColor: colors.success, borderColor: colors.success },
-  wrong: { backgroundColor: colors.error, borderColor: colors.error },
-  detail: { textAlign: "center", paddingHorizontal: SPACING.lg, color: colors.muted, fontSize: 12, fontWeight: "600" },
-  doneWrap: { flex: 1, justifyContent: "center", alignItems: "center", padding: SPACING.xl },
-  doneIcon: { width: 78, height: 78, borderRadius: 39, backgroundColor: colors.surface2, alignItems: "center", justifyContent: "center" },
-  doneTitle: { color: colors.onSurface, fontSize: 36, fontWeight: "900", marginTop: 18 },
-  doneSub: { color: colors.muted, textAlign: "center", maxWidth: 380, lineHeight: 20, marginTop: 6, marginBottom: 22 },
-  primary: { width: "100%", maxWidth: 400, backgroundColor: colors.indigo, borderRadius: RADIUS.pill, paddingVertical: 14, alignItems: "center" },
-  primaryText: { color: "#fff", fontWeight: "900" },
-  secondary: { width: "100%", maxWidth: 400, borderWidth: 1, borderColor: colors.border, borderRadius: RADIUS.pill, paddingVertical: 14, alignItems: "center", marginTop: 10 },
-  secondaryText: { color: colors.onSurface, fontWeight: "800" },
-});
+const makeStyles=(colors:any)=>StyleSheet.create({safe:{flex:1,backgroundColor:colors.surface},header:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",padding:SPACING.lg},progress:{color:colors.muted,fontWeight:"800",fontSize:12},codeCard:{marginHorizontal:SPACING.lg,borderRadius:RADIUS.xl,padding:SPACING.xl,backgroundColor:colors.indigo,minHeight:180,justifyContent:"center"},tagRow:{flexDirection:"row",alignItems:"center",gap:7},tag:{color:colors.saffron,fontWeight:"900",letterSpacing:1.1,fontSize:11},question:{color:"#fff",fontSize:FONT["2xl"],fontWeight:"900",lineHeight:32,marginTop:12},options:{padding:SPACING.lg,gap:10},option:{minHeight:58,borderRadius:RADIUS.md,backgroundColor:colors.card,borderWidth:1,borderColor:colors.border,paddingHorizontal:16,flexDirection:"row",alignItems:"center",justifyContent:"space-between",gap:12},optionText:{color:colors.onSurface,fontSize:FONT.base,fontWeight:"700",flex:1},correct:{backgroundColor:colors.success,borderColor:colors.success},wrong:{backgroundColor:colors.error,borderColor:colors.error},detail:{textAlign:"center",paddingHorizontal:SPACING.lg,color:colors.muted,fontSize:12,fontWeight:"600"},doneWrap:{flex:1,justifyContent:"center",alignItems:"center",padding:SPACING.xl,gap:10},doneIcon:{width:78,height:78,borderRadius:39,backgroundColor:colors.surface2,alignItems:"center",justifyContent:"center"},doneTitle:{color:colors.onSurface,fontSize:36,fontWeight:"900",marginTop:8},doneSub:{color:colors.muted,textAlign:"center",maxWidth:380,lineHeight:20,marginTop:-2,marginBottom:8},primary:{width:"100%",maxWidth:400,backgroundColor:colors.indigo,borderRadius:RADIUS.pill,paddingVertical:14,alignItems:"center",marginTop:6},primaryText:{color:"#fff",fontWeight:"900"},secondary:{width:"100%",maxWidth:400,borderWidth:1,borderColor:colors.border,borderRadius:RADIUS.pill,paddingVertical:14,alignItems:"center"},secondaryText:{color:colors.onSurface,fontWeight:"800"}});
