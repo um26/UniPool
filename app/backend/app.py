@@ -22,6 +22,7 @@ from routes import (
     matches_router,
     messages_router,
     mobility_router,
+    network_router,
     pools_router,
     profile_router,
     requests_router,
@@ -31,7 +32,7 @@ from routes import (
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("unipool")
 
-API_VERSION = "2.0.0"
+API_VERSION = "2.1.0"
 
 app = FastAPI(
     title="UniPool API",
@@ -58,6 +59,7 @@ for router in (
     matches_router,
     users_router,
     mobility_router,
+    network_router,
     compat_router,
 ):
     app.include_router(router, prefix="/api")
@@ -65,12 +67,7 @@ for router in (
 
 @app.get("/")
 async def root():
-    return {
-        "app": "UniPool",
-        "status": "ok",
-        "version": API_VERSION,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
+    return {"app": "UniPool", "status": "ok", "version": API_VERSION, "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 @app.get("/health")
@@ -81,34 +78,30 @@ async def health():
     except Exception:
         database = "degraded"
     return {
-        "app": "UniPool",
-        "status": "ok" if database == "ok" else "degraded",
-        "database": database,
-        "version": API_VERSION,
-        "mobility_version": "2.0",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "app": "UniPool", "status": "ok" if database == "ok" else "degraded", "database": database,
+        "version": API_VERSION, "mobility_version": "2.1", "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
 def _explicit_seed_admin(email: str, username: str, password: str) -> bool:
     if not (email and username and password):
         return False
-    return (email, username, password) != (
-        "admin@unipool.app",
-        "admin",
-        "securepassword123",
-    )
+    return (email, username, password) != ("admin@unipool.app", "admin", "securepassword123")
 
 
-async def _recurring_materializer_loop():
-    """Keep weekly recurring templates materialized without requiring a page visit."""
-    from services.mobility_service import materialize_due_recurring_routes
+async def _mobility_maintenance_loop():
+    """Run idempotent trip maintenance while the backend is awake."""
+    from services.mobility_service import materialize_due_recurring_routes, send_departure_reminders
+    recurring_tick = 0
     while True:
         try:
-            await materialize_due_recurring_routes()
+            await send_departure_reminders()
+            if recurring_tick % 6 == 0:
+                await materialize_due_recurring_routes()
         except Exception as exc:
-            logger.warning("Recurring journey materializer failed: %s", exc)
-        await asyncio.sleep(3600)
+            logger.warning("Mobility maintenance failed: %s", exc)
+        recurring_tick += 1
+        await asyncio.sleep(600)
 
 
 @app.on_event("startup")
@@ -144,34 +137,31 @@ async def startup_event():
         await db.saved_routes.create_index([("route_key", 1), ("alerts_enabled", 1)])
         await db.recurring_routes.create_index("template_id", unique=True)
         await db.recurring_routes.create_index([("user_id", 1), ("active", 1)])
+        await db.product_events.create_index([("event", 1), ("created_at", -1)])
+        await db.product_events.create_index([("user_id", 1), ("created_at", -1)])
+        await db.daily_challenges.create_index([("user_id", 1), ("challenge_id", 1)], unique=True)
 
         from config.settings import SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD, SEED_ADMIN_USERNAME
         from helpers.auth_helper import _hash_password
-
         if _explicit_seed_admin(SEED_ADMIN_EMAIL, SEED_ADMIN_USERNAME, SEED_ADMIN_PASSWORD):
             existing_admin = await db.users.find_one(
-                {"$or": [{"username": SEED_ADMIN_USERNAME}, {"email": SEED_ADMIN_EMAIL.lower()}]},
-                {"_id": 0},
+                {"$or": [{"username": SEED_ADMIN_USERNAME}, {"email": SEED_ADMIN_EMAIL.lower()}]}, {"_id": 0}
             )
             if not existing_admin:
                 admin_user_id = f"user_{__import__('uuid').uuid4().hex[:12]}"
                 await db.users.insert_one({
-                    "user_id": admin_user_id,
-                    "email": SEED_ADMIN_EMAIL.lower(),
-                    "username": SEED_ADMIN_USERNAME,
-                    "name": "UniPool Admin",
-                    "picture": None,
-                    "password_hash": _hash_password(SEED_ADMIN_PASSWORD),
-                    "gender": None,
-                    "phone": None,
-                    "is_admin_override": True,
-                    "created_at": datetime.now(timezone.utc),
-                    "last_login": None,
+                    "user_id": admin_user_id, "email": SEED_ADMIN_EMAIL.lower(), "username": SEED_ADMIN_USERNAME,
+                    "name": "UniPool Admin", "picture": None, "password_hash": _hash_password(SEED_ADMIN_PASSWORD),
+                    "gender": None, "phone": None, "is_admin_override": True, "created_at": datetime.now(timezone.utc), "last_login": None,
                 })
         else:
             logger.warning("Admin seed skipped: configure explicit credentials instead of the historical demo defaults.")
 
-        asyncio.create_task(_recurring_materializer_loop())
+        from services.mobility_service import backfill_canonical_pools
+        backfilled = await backfill_canonical_pools()
+        if backfilled:
+            logger.info("Backfilled canonical mobility data for %s pools", backfilled)
+        asyncio.create_task(_mobility_maintenance_loop())
         logger.info("UniPool database indexes ready")
     except Exception as exc:
         logger.exception("UniPool startup initialization failed: %s", exc)
