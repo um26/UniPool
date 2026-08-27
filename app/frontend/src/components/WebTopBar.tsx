@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { usePathname, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 
+import { api } from "@/src/api/client";
 import { useTheme } from "@/src/theme_context/ThemeContext";
 import GlobalSearchPalette from "@/src/components/GlobalSearchPalette";
 
@@ -21,6 +22,7 @@ export default function WebTopBar() {
   const { width } = useWindowDimensions();
   const { colors, isDark, toggleTheme } = useTheme();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [unread, setUnread] = useState(0);
 
   useEffect(() => {
     if (Platform.OS !== "web" || typeof window === "undefined") return;
@@ -35,9 +37,26 @@ export default function WebTopBar() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    let alive = true;
+    const refresh = async () => {
+      try {
+        if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+        const data = await api.notifications(true, 1);
+        if (alive) setUnread(Number(data.unread || 0));
+      } catch { if (alive) setUnread(0); }
+    };
+    refresh();
+    const timer = setInterval(refresh, 30000);
+    const visible = () => refresh();
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", visible);
+    return () => { alive = false; clearInterval(timer); if (typeof document !== "undefined") document.removeEventListener("visibilitychange", visible); };
+  }, [pathname]);
+
   if (Platform.OS !== "web") return null;
   const desktop = width >= 900;
-  const showActionText = width >= 1120;
+  const showActionText = width >= 1180;
   const showBrandText = width >= 520;
   const tap = (fn: () => void) => { Haptics.selectionAsync(); fn(); };
 
@@ -51,12 +70,7 @@ export default function WebTopBar() {
       {desktop ? <View style={[styles.nav, { backgroundColor: colors.surface2, borderColor: colors.border }]}>
         {NAV.map((item) => {
           const active = pathname === item.match;
-          return <Pressable
-            key={item.label}
-            onPress={() => tap(() => router.replace(item.path as any))}
-            style={({ pressed }) => [styles.navItem, active && { backgroundColor: colors.card, borderColor: colors.border }, pressed && styles.pressed]}
-            accessibilityState={{ selected: active }}
-          >
+          return <Pressable key={item.label} onPress={() => tap(() => router.replace(item.path as any))} style={({ pressed }) => [styles.navItem, active && { backgroundColor: colors.card, borderColor: colors.border }, pressed && styles.pressed]} accessibilityState={{ selected: active }} accessibilityLabel={item.label}>
             <Ionicons name={item.icon} size={18} color={active ? colors.indigo : colors.muted} />
             <Text style={[styles.navText, { color: active ? colors.onSurface : colors.muted }]}>{item.label}</Text>
           </Pressable>;
@@ -64,36 +78,25 @@ export default function WebTopBar() {
       </View> : <View style={{ flex: 1 }} />}
 
       <View style={styles.actions}>
-        <Pressable
-          onPress={() => tap(() => setSearchOpen(true))}
-          style={({ pressed }) => [styles.searchAction, { backgroundColor: colors.surface2, borderColor: colors.border }, pressed && styles.pressed]}
-          accessibilityLabel="Search UniPool"
-          accessibilityHint="Keyboard shortcut Command K or Control K"
-        >
+        <Pressable onPress={() => tap(() => setSearchOpen(true))} style={({ pressed }) => [styles.searchAction, { backgroundColor: colors.surface2, borderColor: colors.border }, pressed && styles.pressed]} accessibilityLabel="Search UniPool" accessibilityHint="Keyboard shortcut Command K or Control K">
           <Ionicons name="search" size={19} color={colors.indigo} />
           {showActionText ? <Text style={[styles.actionText, { color: colors.onSurface }]}>Search</Text> : null}
         </Pressable>
-        <Pressable
-          onPress={() => tap(() => router.push("/post-request" as any))}
-          style={({ pressed }) => [styles.primaryAction, { backgroundColor: colors.indigo, borderColor: colors.indigo }, pressed && styles.pressed]}
-          accessibilityLabel="Post a trip"
-        >
+        <Pressable onPress={() => tap(() => router.push("/post-request" as any))} style={({ pressed }) => [styles.primaryAction, { backgroundColor: colors.indigo, borderColor: colors.indigo }, pressed && styles.pressed]} accessibilityLabel="Post a trip">
           <Ionicons name="add" size={20} color="#fff" />
           {showActionText ? <Text style={styles.primaryActionText}>Post trip</Text> : null}
         </Pressable>
-        <Pressable
-          onPress={() => tap(() => router.push("/(tabs)/games" as any))}
-          style={({ pressed }) => [styles.action, { backgroundColor: colors.surface2, borderColor: colors.border }, pressed && styles.pressed]}
-          accessibilityLabel="Open time-pass games"
-        >
-          <Ionicons name="game-controller-outline" size={19} color={colors.saffron} />
-          {showActionText ? <Text style={[styles.actionText, { color: colors.onSurface }]}>Time-pass</Text> : null}
+        <Pressable onPress={() => tap(() => router.push("/notifications" as any))} style={({ pressed }) => [styles.iconAction, { backgroundColor: colors.surface2, borderColor: colors.border }, pressed && styles.pressed]} accessibilityLabel={`${unread || "No"} unread notifications`}>
+          <Ionicons name={unread ? "notifications" : "notifications-outline"} size={20} color={unread ? colors.saffron : colors.indigo} />
+          {unread ? <View style={[styles.badge, { backgroundColor: colors.error }]}><Text style={styles.badgeText}>{unread > 9 ? "9+" : unread}</Text></View> : null}
         </Pressable>
-        <Pressable
-          onPress={() => tap(toggleTheme)}
-          style={({ pressed }) => [styles.iconAction, { backgroundColor: colors.surface2, borderColor: colors.border }, pressed && styles.pressed]}
-          accessibilityLabel={isDark ? "Switch to light theme" : "Switch to dark theme"}
-        >
+        <Pressable onPress={() => tap(() => router.push("/(tabs)/games" as any))} style={({ pressed }) => [styles.iconAction, { backgroundColor: colors.surface2, borderColor: colors.border }, pressed && styles.pressed]} accessibilityLabel="Open time-pass games">
+          <Ionicons name="game-controller-outline" size={19} color={colors.saffron} />
+        </Pressable>
+        <Pressable onPress={() => tap(() => router.push("/settings" as any))} style={({ pressed }) => [styles.iconAction, { backgroundColor: colors.surface2, borderColor: colors.border }, pressed && styles.pressed]} accessibilityLabel="Open settings">
+          <Ionicons name="settings-outline" size={20} color={colors.indigo} />
+        </Pressable>
+        <Pressable onPress={() => tap(toggleTheme)} style={({ pressed }) => [styles.iconAction, { backgroundColor: colors.surface2, borderColor: colors.border }, pressed && styles.pressed]} accessibilityLabel={isDark ? "Switch to light theme" : "Switch to dark theme"}>
           <Ionicons name={isDark ? "sunny-outline" : "moon-outline"} size={20} color={colors.indigo} />
         </Pressable>
       </View>
@@ -103,75 +106,8 @@ export default function WebTopBar() {
 }
 
 const styles = StyleSheet.create({
-  bar: {
-    height: 68,
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 18,
-    paddingHorizontal: 26,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    zIndex: 50,
-  },
-  brand: { flexDirection: "row", alignItems: "center", gap: 10, minWidth: 48 },
-  logo: { width: 40, height: 40, borderRadius: 13, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  brandText: { fontSize: 18, fontWeight: "900", letterSpacing: -0.25 },
-  nav: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    padding: 4,
-    borderRadius: 25,
-    borderWidth: 1,
-    marginHorizontal: "auto",
-  },
-  navItem: {
-    height: 42,
-    paddingHorizontal: 16,
-    borderRadius: 21,
-    borderWidth: 1,
-    borderColor: "transparent",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-  },
-  navText: { fontSize: 13, fontWeight: "800" },
-  actions: { flexDirection: "row", alignItems: "center", gap: 8 },
-  action: {
-    height: 42,
-    minWidth: 42,
-    paddingHorizontal: 13,
-    borderRadius: 21,
-    borderWidth: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-  },
-  searchAction: {
-    height: 42,
-    minWidth: 42,
-    paddingHorizontal: 14,
-    borderRadius: 21,
-    borderWidth: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-  },
-  primaryAction: {
-    height: 42,
-    minWidth: 42,
-    paddingHorizontal: 14,
-    borderRadius: 21,
-    borderWidth: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-  },
-  actionText: { fontSize: 12, fontWeight: "800" },
-  primaryActionText: { color: "#fff", fontSize: 12, fontWeight: "900" },
-  iconAction: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  pressed: { opacity: 0.72, transform: [{ scale: 0.985 }] },
+  bar: { height: 68, width: "100%", flexDirection: "row", alignItems: "center", gap: 18, paddingHorizontal: 26, borderBottomWidth: StyleSheet.hairlineWidth, zIndex: 50 },
+  brand: { flexDirection: "row", alignItems: "center", gap: 10, minWidth: 48 }, logo: { width: 40, height: 40, borderRadius: 13, borderWidth: 1, alignItems: "center", justifyContent: "center" }, brandText: { fontSize: 18, fontWeight: "900", letterSpacing: -0.25 },
+  nav: { flexDirection: "row", alignItems: "center", gap: 4, padding: 4, borderRadius: 25, borderWidth: 1, marginHorizontal: "auto" }, navItem: { height: 42, paddingHorizontal: 16, borderRadius: 21, borderWidth: 1, borderColor: "transparent", flexDirection: "row", alignItems: "center", gap: 7 }, navText: { fontSize: 13, fontWeight: "800" },
+  actions: { flexDirection: "row", alignItems: "center", gap: 7 }, searchAction: { height: 42, minWidth: 42, paddingHorizontal: 14, borderRadius: 21, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 }, primaryAction: { height: 42, minWidth: 42, paddingHorizontal: 14, borderRadius: 21, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 }, actionText: { fontSize: 12, fontWeight: "800" }, primaryActionText: { color: "#fff", fontSize: 12, fontWeight: "900" }, iconAction: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, alignItems: "center", justifyContent: "center", position: "relative" }, badge: { position: "absolute", minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 3, right: -3, top: -3, alignItems: "center", justifyContent: "center" }, badgeText: { color: "#fff", fontSize: 8, fontWeight: "900" }, pressed: { opacity: 0.72, transform: [{ scale: 0.985 }] },
 });
