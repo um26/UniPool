@@ -35,6 +35,7 @@ export default function GuessState() {
   const [picked, setPicked] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const current = round[index];
+  const optionOrder = useMemo(() => current ? shuffled(current.options) : [], [current]);
 
   const choose = (value: string) => {
     if (picked) return;
@@ -46,8 +47,8 @@ export default function GuessState() {
   };
 
   return <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-    <View style={styles.header}><Pressable onPress={() => router.back()}><Ionicons name="chevron-back" size={24} color={colors.onSurface} /></Pressable><Text style={styles.progress}>{done ? "Complete" : `${index + 1} / ${round.length}`}</Text><Text style={styles.progress}>Score {score}</Text></View>
-    {done ? <View style={styles.center}><View style={styles.trophy}><Ionicons name="map" size={36} color={colors.saffron} /></View><Text style={styles.title}>You got {score} / {round.length}</Text><Text style={styles.sub}>India is a big map. Nice route knowledge.</Text><Pressable onPress={() => router.replace("/games/guess-state" as any)} style={styles.primary}><Text style={styles.primaryText}>Play again</Text></Pressable><Pressable onPress={() => router.back()} style={styles.ghost}><Text style={styles.ghostText}>Back</Text></Pressable></View> : <View style={styles.content}><Text style={styles.eyebrow}>GUESS THE STATE</Text><Text style={styles.clue}>{current.clue}</Text><Text style={styles.sub}>Which Indian state do these clues point to?</Text><View style={styles.options}>{shuffled(current.options).map((option) => { const correct = picked && option === current.answer; const wrong = picked === option && option !== current.answer; return <Pressable key={option} onPress={() => choose(option)} style={[styles.option, correct && styles.correct, wrong && styles.wrong]}><Text style={[styles.optionText, (correct || wrong) && { color: "#fff" }]}>{option}</Text>{correct ? <Ionicons name="checkmark-circle" size={20} color="#fff" /> : null}</Pressable>; })}</View></View>}
+    <View style={styles.header}><Pressable onPress={() => router.back()} accessibilityLabel="Go back"><Ionicons name="chevron-back" size={24} color={colors.onSurface} /></Pressable><Text style={styles.progress}>{done ? "Complete" : `${index + 1} / ${round.length}`}</Text><Text style={styles.progress}>Score {score}</Text></View>
+    {done ? <View style={styles.center}><View style={styles.trophy}><Ionicons name="map" size={36} color={colors.saffron} /></View><Text style={styles.title}>You got {score} / {round.length}</Text><Text style={styles.sub}>India is a big map. Nice route knowledge.</Text><Pressable onPress={() => router.replace("/games/guess-state" as any)} style={styles.primary}><Text style={styles.primaryText}>Play again</Text></Pressable><Pressable onPress={() => router.back()} style={styles.ghost}><Text style={styles.ghostText}>Back</Text></Pressable></View> : <View style={styles.content}><Text style={styles.eyebrow}>GUESS THE STATE</Text><Text style={styles.clue}>{current.clue}</Text><Text style={styles.sub}>Which Indian state do these clues point to?</Text><View style={styles.options}>{optionOrder.map((option) => { const correct = picked && option === current.answer; const wrong = picked === option && option !== current.answer; return <Pressable key={option} accessibilityRole="button" accessibilityState={{ disabled: !!picked }} onPress={() => choose(option)} style={[styles.option, correct && styles.correct, wrong && styles.wrong]}><Text style={[styles.optionText, (correct || wrong) && { color: "#fff" }]}>{option}</Text>{correct ? <Ionicons name="checkmark-circle" size={20} color="#fff" /> : null}</Pressable>; })}</View></View>}
   </SafeAreaView>;
 }
 
