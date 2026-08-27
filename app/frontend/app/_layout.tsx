@@ -26,7 +26,7 @@ function AuthGate() {
     if (loading) return;
     const inTabs = segments[0] === "(tabs)";
     if (!user && inTabs) router.replace("/");
-    if (user && !inTabs && segments[0] !== "post-request" && segments[0] !== "games" && segments[0] !== "chat" && segments[0] !== "pool" && segments[0] !== "heatmap" && segments[0] !== "trip-receipt") {
+    if (user && !inTabs && segments[0] !== "post-request" && segments[0] !== "games" && segments[0] !== "chat" && segments[0] !== "pool" && segments[0] !== "heatmap" && segments[0] !== "trip-receipt" && segments[0] !== "network") {
       router.replace("/(tabs)");
     }
   }, [user, loading, segments, router]);
@@ -45,9 +45,11 @@ function AuthGate() {
         <Stack.Screen name="games/airport-codes" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="games/destination-detective" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="games/travel-reveal" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="games/daily-challenge" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="chat/[userId]" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="chat/group/[conversationId]" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="pool/[poolId]" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="network" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="heatmap" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="trip-receipt/[poolId]" options={{ animation: "slide_from_bottom" }} />
       </Stack>
