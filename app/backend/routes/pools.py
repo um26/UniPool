@@ -19,6 +19,7 @@ from config.database import db
 from models.pool import PoolRequestCreate, PoolRequestUpdate, PoolResponse
 from models.response import BaseResponse
 from services.match_service import materialize_matches_for_pool, smart_matches
+from services.mobility_service import canonical_pool_fields, notify_saved_route_watchers, seats_summary
 from services.pool_service import close_pool, create_pool, delete_pool, get_pool, list_pools, my_pools, reopen_pool
 
 logger = logging.getLogger("unipool.routes.pools")
@@ -52,13 +53,18 @@ def _validate_patch(existing: dict, updates: dict) -> dict:
     if "gender_preference" in clean and clean["gender_preference"] not in {"any", "same"}:
         raise ValueError("Invalid gender preference")
     if "companions" in clean:
-        try:
-            companions = int(clean["companions"])
-        except (TypeError, ValueError):
-            raise ValueError("Companions must be a number")
-        if not 0 <= companions <= 6:
+        clean["companions"] = int(clean["companions"])
+        if not 0 <= clean["companions"] <= 6:
             raise ValueError("Companions must be between 0 and 6")
-        clean["companions"] = companions
+    if "total_seats" in clean:
+        clean["total_seats"] = int(clean["total_seats"])
+        if not 1 <= clean["total_seats"] <= 8:
+            raise ValueError("Seats must be between 1 and 8")
+    companions = int(clean.get("companions", existing.get("companions", 0)))
+    total_seats = int(clean.get("total_seats", existing.get("total_seats", 4)))
+    confirmed = len(existing.get("confirmed_travelers") or [])
+    if 1 + companions + confirmed > total_seats:
+        raise ValueError("Seat capacity cannot be lower than the travellers already on this ride")
     if "notes" in clean and clean["notes"] is not None:
         clean["notes"] = str(clean["notes"]).strip()[:240] or None
     if "luggage" in clean and clean["luggage"] is not None:
@@ -68,6 +74,11 @@ def _validate_patch(existing: dict, updates: dict) -> dict:
         if travel <= datetime.now(timezone.utc):
             raise ValueError("Departure time must be in the future")
         clean["travel_datetime"] = travel
+    if "from_location" in clean or "to_location" in clean:
+        clean.update(canonical_pool_fields(
+            clean.get("from_location", existing["from_location"]),
+            clean.get("to_location", existing["to_location"]),
+        ))
     clean["updated_at"] = datetime.now(timezone.utc)
     return clean
 
@@ -83,8 +94,19 @@ async def create_pool_endpoint(body: PoolRequestCreate, authorization: Optional[
         if _aware(body.travel_datetime) <= datetime.now(timezone.utc):
             raise HTTPException(status_code=400, detail="Departure time must be in the future")
         created = await create_pool(user, body)
+        v2 = {
+            **canonical_pool_fields(body.from_location, body.to_location),
+            "total_seats": body.total_seats,
+            "trip_status": "planning",
+            "member_statuses": {},
+            "updated_at": datetime.now(timezone.utc),
+        }
+        await db.pools.update_one({"pool_id": created["pool_id"]}, {"$set": v2})
+        created.update(v2)
         asyncio.create_task(materialize_matches_for_pool(created))
-        return created
+        asyncio.create_task(notify_saved_route_watchers(created))
+        enriched = await get_pool(created["pool_id"], user["user_id"])
+        return enriched or created
     except HTTPException:
         raise
     except Exception as e:
@@ -164,6 +186,8 @@ async def update_pool_endpoint(pool_id: str, body: PoolRequestUpdate, authorizat
         if not updated:
             raise HTTPException(status_code=404, detail="Pool not found")
         asyncio.create_task(materialize_matches_for_pool(updated))
+        if "from_location" in raw or "to_location" in raw or "travel_datetime" in raw:
+            asyncio.create_task(notify_saved_route_watchers(updated))
         return updated
     except HTTPException:
         raise
@@ -226,6 +250,9 @@ async def reopen_pool_endpoint(pool_id: str, authorization: Optional[str] = Head
         if _aware(pool["travel_datetime"]) <= datetime.now(timezone.utc):
             await close_pool(pool_id, user["user_id"])
             raise HTTPException(status_code=400, detail="Past journeys cannot be reopened")
+        phase = "confirmed" if pool.get("confirmed_travelers") else "planning"
+        await db.pools.update_one({"pool_id": pool_id}, {"$set": {"trip_status": phase, "updated_at": datetime.now(timezone.utc)}})
+        pool["trip_status"] = phase
         return pool
     except HTTPException:
         raise
@@ -242,10 +269,17 @@ async def delete_pool_endpoint(pool_id: str, authorization: Optional[str] = Head
         user = await get_current_user(authorization)
         if not user:
             raise HTTPException(status_code=401, detail="Invalid or expired session")
+        existing = await db.pools.find_one({"pool_id": pool_id, "user_id": user["user_id"]}, {"_id": 0})
+        if not existing:
+            raise HTTPException(status_code=404, detail="Pool not found or not authorized")
         success = await delete_pool(pool_id, user["user_id"])
         if not success:
             raise HTTPException(status_code=404, detail="Pool not found or not authorized")
         await db.join_requests.delete_many({"pool_id": pool_id})
+        conversation_id = existing.get("trip_conversation_id")
+        if conversation_id:
+            await db.messages.delete_many({"conversation_id": conversation_id})
+            await db.conversations.delete_one({"conversation_id": conversation_id})
         return BaseResponse()
     except HTTPException:
         raise
