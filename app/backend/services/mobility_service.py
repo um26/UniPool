@@ -9,6 +9,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from config.database import db
 from config.locations import canonical_location, route_key
+from config.settings import IST
 from helpers.push_helper import send_push
 
 
@@ -64,14 +65,9 @@ def seats_summary(pool: Dict[str, Any]) -> Dict[str, int]:
 
 
 async def notify_saved_route_watchers(pool: Dict[str, Any]) -> None:
-    """Notify users who explicitly subscribed to this route.
-
-    The owner is excluded. Alerts can optionally include a time-of-day window.
-    """
     key = pool.get("route_key") or route_key(pool.get("from_location", ""), pool.get("to_location", ""))
     watchers = await db.saved_routes.find(
-        {"route_key": key, "alerts_enabled": True, "user_id": {"$ne": pool.get("user_id")}},
-        {"_id": 0},
+        {"route_key": key, "alerts_enabled": True, "user_id": {"$ne": pool.get("user_id")}}, {"_id": 0}
     ).to_list(500)
     if not watchers:
         return
@@ -82,14 +78,15 @@ async def notify_saved_route_watchers(pool: Dict[str, Any]) -> None:
         preferred_hour = watcher.get("preferred_hour")
         window = int(watcher.get("time_window_minutes") or 180)
         if preferred_hour is not None:
-            target = departure.replace(hour=int(preferred_hour), minute=int(watcher.get("preferred_minute") or 0))
-            if abs((departure - target).total_seconds()) > window * 60:
+            local_departure = departure.astimezone(IST)
+            target = local_departure.replace(hour=int(preferred_hour), minute=int(watcher.get("preferred_minute") or 0))
+            if abs((local_departure - target).total_seconds()) > window * 60:
                 continue
         uid = watcher.get("user_id")
         if not uid:
             continue
         title = "New ride on a saved route"
-        body = f"{pool.get('from_location_canonical') or pool.get('from_location')} → {pool.get('to_location_canonical') or pool.get('to_location')} · {departure.astimezone().strftime('%d %b, %I:%M %p')}"
+        body = f"{pool.get('from_location_canonical') or pool.get('from_location')} → {pool.get('to_location_canonical') or pool.get('to_location')} · {departure.astimezone(IST).strftime('%d %b, %I:%M %p')}"
         tasks.append(send_push(uid, title, body, f"/pool/{pool['pool_id']}"))
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -104,18 +101,68 @@ async def notify_trip_members(pool: Dict[str, Any], title: str, body: str, url: 
     await asyncio.gather(*(send_push(uid, title, body, url or f"/pool/{pool['pool_id']}") for uid in ids), return_exceptions=True)
 
 
+async def backfill_canonical_pools(limit: int = 5000) -> int:
+    """Give historical pools the same canonical route identity as new pools."""
+    pools = await db.pools.find(
+        {"$or": [{"route_key": {"$exists": False}}, {"route_key": None}]},
+        {"_id": 0, "pool_id": 1, "from_location": 1, "to_location": 1, "total_seats": 1, "trip_status": 1},
+    ).limit(limit).to_list(limit)
+    updated = 0
+    for pool in pools:
+        if not pool.get("from_location") or not pool.get("to_location"):
+            continue
+        fields = canonical_pool_fields(pool["from_location"], pool["to_location"])
+        fields.setdefault("total_seats", int(pool.get("total_seats") or 4))
+        fields.setdefault("trip_status", pool.get("trip_status") or "planning")
+        result = await db.pools.update_one({"pool_id": pool["pool_id"]}, {"$set": fields})
+        updated += result.modified_count
+    return updated
+
+
+async def send_departure_reminders() -> int:
+    """Send idempotent 60-minute and 15-minute reminders for real shared trips."""
+    now = now_utc()
+    pools = await db.pools.find(
+        {
+            "status": "open",
+            "trip_status": {"$nin": ["completed", "cancelled"]},
+            "travel_datetime": {"$gte": now + timedelta(minutes=8), "$lte": now + timedelta(minutes=72)},
+        },
+        {"_id": 0},
+    ).to_list(1000)
+    sent = 0
+    for pool in pools:
+        if not pool.get("confirmed_travelers"):
+            continue
+        minutes = (aware(pool["travel_datetime"]) - now).total_seconds() / 60
+        reminder = "60m" if 50 <= minutes <= 72 else "15m" if 8 <= minutes <= 22 else None
+        if not reminder:
+            continue
+        result = await db.pools.update_one(
+            {"pool_id": pool["pool_id"], "reminders_sent": {"$ne": reminder}},
+            {"$addToSet": {"reminders_sent": reminder}},
+        )
+        if not result.modified_count:
+            continue
+        if reminder == "60m":
+            title = "Trip leaves in about an hour"
+            body = f"{pool['from_location']} → {pool['to_location']}. Check the meeting point and trip chat."
+        else:
+            title = "Leaving in about 15 minutes"
+            body = f"{pool['from_location']} → {pool['to_location']}. Time to coordinate pickup."
+        await notify_trip_members(pool, title, body)
+        sent += 1
+    return sent
+
+
 async def materialize_recurring_template(template: Dict[str, Any], force: bool = False) -> Optional[Dict[str, Any]]:
-    """Create the next pool for a recurring template if it has not been materialized."""
     if not template.get("active", True):
         return None
     now = now_utc()
     day = int(template.get("weekday", 0)) % 7
     days_ahead = (day - now.weekday()) % 7
     target = (now + timedelta(days=days_ahead)).replace(
-        hour=int(template.get("hour", 9)),
-        minute=int(template.get("minute", 0)),
-        second=0,
-        microsecond=0,
+        hour=int(template.get("hour", 9)), minute=int(template.get("minute", 0)), second=0, microsecond=0,
     )
     if target <= now + timedelta(minutes=10):
         target += timedelta(days=7)
@@ -133,26 +180,11 @@ async def materialize_recurring_template(template: Dict[str, Any], force: bool =
         return None
     canonical = canonical_pool_fields(template["from_location"], template["to_location"])
     pool = {
-        "pool_id": f"pool_{uuid.uuid4().hex[:12]}",
-        "user_id": owner["user_id"],
-        "user_name": owner.get("name") or "Traveller",
-        "user_email": owner["email"],
-        "user_gender": owner.get("gender"),
-        "from_location": template["from_location"],
-        "to_location": template["to_location"],
-        "travel_datetime": target,
-        "gender_preference": template.get("gender_preference", "any"),
-        "companions": int(template.get("companions") or 0),
-        "total_seats": int(template.get("total_seats") or 4),
-        "luggage": template.get("luggage"),
-        "notes": template.get("notes"),
-        "trip_mode": False,
-        "trip_status": "planning",
-        "status": "open",
-        "created_at": now,
-        "confirmed_travelers": [],
-        "recurring_template_id": template_id,
-        **canonical,
+        "pool_id": f"pool_{uuid.uuid4().hex[:12]}", "user_id": owner["user_id"], "user_name": owner.get("name") or "Traveller",
+        "user_email": owner["email"], "user_gender": owner.get("gender"), "from_location": template["from_location"], "to_location": template["to_location"],
+        "travel_datetime": target, "gender_preference": template.get("gender_preference", "any"), "companions": int(template.get("companions") or 0),
+        "total_seats": int(template.get("total_seats") or 4), "luggage": template.get("luggage"), "notes": template.get("notes"), "trip_mode": False,
+        "trip_status": "planning", "status": "open", "created_at": now, "confirmed_travelers": [], "recurring_template_id": template_id, **canonical,
     }
     await db.pools.insert_one(pool)
     pool.pop("_id", None)
