@@ -17,7 +17,6 @@ import FloatingChatLauncher from "@/src/components/FloatingChatLauncher";
 LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
 applyPremiumFontDefaults();
-
 const PROTECTED_ROOTS = new Set(["post-request", "games", "chat", "pool", "heatmap", "trip-receipt", "network", "settings", "notifications"]);
 
 function AuthGate() {
@@ -25,7 +24,6 @@ function AuthGate() {
   const { colors } = useTheme();
   const segments = useSegments();
   const router = useRouter();
-
   useEffect(() => {
     if (loading) return;
     const inTabs = segments[0] === "(tabs)";
@@ -33,9 +31,7 @@ function AuthGate() {
     if (!user && (inTabs || PROTECTED_ROOTS.has(root))) router.replace("/");
     if (user && !inTabs && !PROTECTED_ROOTS.has(root)) router.replace("/(tabs)");
   }, [user, loading, segments, router]);
-
   if (loading) return <AnimatedSplash />;
-
   return <View style={{ flex: 1, backgroundColor: colors.surface }}>
     {user ? <WebTopBar /> : null}
     <View style={{ flex: 1 }}>
@@ -61,7 +57,7 @@ function AuthGate() {
         <Stack.Screen name="trip-receipt/[poolId]" options={{ animation: "slide_from_bottom" }} />
       </Stack>
     </View>
-    <SiteFooter />
+    {user ? <SiteFooter /> : null}
     {user ? <FloatingChatLauncher /> : null}
   </View>;
 }
