@@ -16,6 +16,8 @@ LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
 applyPremiumFontDefaults();
 
+const PROTECTED_ROOTS = new Set(["post-request", "games", "chat", "pool", "heatmap", "trip-receipt", "network", "settings", "notifications"]);
+
 function AuthGate() {
   const { user, loading } = useAuth();
   const { colors } = useTheme();
@@ -25,10 +27,9 @@ function AuthGate() {
   useEffect(() => {
     if (loading) return;
     const inTabs = segments[0] === "(tabs)";
-    if (!user && inTabs) router.replace("/");
-    if (user && !inTabs && segments[0] !== "post-request" && segments[0] !== "games" && segments[0] !== "chat" && segments[0] !== "pool" && segments[0] !== "heatmap" && segments[0] !== "trip-receipt" && segments[0] !== "network") {
-      router.replace("/(tabs)");
-    }
+    const root = String(segments[0] || "");
+    if (!user && (inTabs || PROTECTED_ROOTS.has(root))) router.replace("/");
+    if (user && !inTabs && !PROTECTED_ROOTS.has(root)) router.replace("/(tabs)");
   }, [user, loading, segments, router]);
 
   if (loading) return <AnimatedSplash />;
@@ -36,16 +37,20 @@ function AuthGate() {
   return <View style={{ flex: 1, backgroundColor: colors.surface }}>
     {user ? <WebTopBar /> : null}
     <View style={{ flex: 1 }}>
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface } }}>
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface }, animation: "fade_from_bottom" }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="post-request" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+        <Stack.Screen name="settings" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="notifications" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="games/trivia" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="games/word-scramble" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="games/airport-codes" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="games/destination-detective" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="games/travel-reveal" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="games/daily-challenge" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="games/guess-state" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="games/station-codes" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="chat/[userId]" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="chat/group/[conversationId]" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="pool/[poolId]" options={{ animation: "slide_from_right" }} />
