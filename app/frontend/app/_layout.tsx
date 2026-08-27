@@ -11,6 +11,8 @@ import { ThemeProvider, useTheme } from "@/src/theme_context/ThemeContext";
 import { applyPremiumFontDefaults } from "@/src/utils/setupFonts";
 import AnimatedSplash from "@/src/components/AnimatedSplash";
 import WebTopBar from "@/src/components/WebTopBar";
+import SiteFooter from "@/src/components/SiteFooter";
+import FloatingChatLauncher from "@/src/components/FloatingChatLauncher";
 
 LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
@@ -59,6 +61,8 @@ function AuthGate() {
         <Stack.Screen name="trip-receipt/[poolId]" options={{ animation: "slide_from_bottom" }} />
       </Stack>
     </View>
+    <SiteFooter />
+    {user ? <FloatingChatLauncher /> : null}
   </View>;
 }
 
