@@ -39,3 +39,4 @@ jobs:
           cache-dependency-path: app/frontend/package-lock.json
       - run: npm ci
       - run: npx tsc --noEmit
+      - run: npx expo export -p web
