@@ -76,6 +76,16 @@ export default function GamesHub() {
           </View>
         </View>
 
+        <Pressable testID="game-daily-challenge-card" onPress={() => open("/games/daily-challenge")} style={styles.dailyCard}>
+          <View style={styles.dailyIcon}><Ionicons name="sparkles" size={23} color={colors.saffron} /></View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.dailyTag}>DAILY CHALLENGE</Text>
+            <Text style={styles.dailyTitle}>One question. One shot. Every day.</Text>
+            <Text style={styles.dailySub}>A shared UniPool travel challenge with a correct-answer streak.</Text>
+          </View>
+          <Ionicons name="arrow-forward-circle" size={24} color={colors.indigo} />
+        </Pressable>
+
         <Pressable testID={GAMES[0].testID} onPress={() => open(GAMES[0].route)} style={styles.heroCard}>
           <LinearGradient
             colors={isDark ? ["#17233A", "#252B46", "#5C421F"] : [colors.indigo, "#4657C8", colors.saffron]}
@@ -121,6 +131,11 @@ const makeStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   eyebrow: { color: colors.saffron, fontSize: 10, fontWeight: "900", letterSpacing: 1.2 },
   title: { fontSize: FONT["2xl"], fontWeight: "900", color: colors.onSurface, fontFamily: FONT_DISPLAY, marginTop: 3 },
   sub: { color: colors.muted, fontSize: 13, marginTop: 4 },
+  dailyCard: { minHeight: 112, flexDirection: "row", alignItems: "center", gap: 13, backgroundColor: isDark ? colors.surface2 : colors.cream, borderWidth: 1, borderColor: colors.border, borderRadius: RADIUS.lg, padding: 15, marginBottom: 14 },
+  dailyIcon: { width: 46, height: 46, borderRadius: 15, backgroundColor: colors.card, alignItems: "center", justifyContent: "center" },
+  dailyTag: { color: colors.saffron, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  dailyTitle: { color: colors.onSurface, fontSize: 15, fontWeight: "900", marginTop: 3 },
+  dailySub: { color: colors.muted, fontSize: 10, lineHeight: 15, marginTop: 3 },
   heroCard: { minHeight: 245, borderRadius: RADIUS.xl, overflow: "hidden", padding: 22, justifyContent: "flex-end", marginBottom: 14 },
   heroIcon: { width: 50, height: 50, borderRadius: 16, backgroundColor: "rgba(255,255,255,.14)", alignItems: "center", justifyContent: "center", marginBottom: 18 },
   heroTag: { color: "rgba(255,255,255,.76)", fontSize: 10, fontWeight: "900", letterSpacing: 1 },
