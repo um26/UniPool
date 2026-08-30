@@ -32,6 +32,7 @@ export const utilityApi = {
   },
   searchDirectory: (q: string) => request(`/directory?q=${encodeURIComponent(q)}`),
   inviteCircleByEmail: (circle_id: string, email: string) => request("/circle-invites", { method: "POST", body: JSON.stringify({ circle_id, email }) }),
+  sendCircleInvite: (circle_id: string, email: string) => request("/circle-invites", { method: "POST", body: JSON.stringify({ circle_id, email, send_direct: true }) }),
   relations: () => request("/relations"),
   restrictUser: (userId: string) => request(`/relations/${encodeURIComponent(userId)}/restrict`, { method: "POST" }),
   unrestrictUser: (userId: string) => request(`/relations/${encodeURIComponent(userId)}/restrict`, { method: "DELETE" }),
