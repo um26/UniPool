@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 
 import { api } from "@/src/api/client";
+import { peopleApi } from "@/src/api/people";
 import { useTheme } from "@/src/theme_context/ThemeContext";
 import { FONT_DISPLAY, RADIUS, SPACING } from "@/src/theme";
 
@@ -16,6 +17,7 @@ type Note = {
   action_url?: string;
   read_at?: string | null;
   created_at: string;
+  source?: "supabase" | "legacy";
 };
 
 const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -27,8 +29,24 @@ const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   rating: "star-outline",
   digest: "calendar-outline",
   games: "game-controller-outline",
+  circle: "wallet-outline",
+  people: "people-circle-outline",
   general: "sparkles-outline",
 };
+
+function categoryFor(type?: string) {
+  const value = String(type || "general").toLowerCase();
+  if (value.includes("route")) return "saved_route";
+  if (value.includes("trip") || value.includes("journey") || value.includes("waitlist")) return "trip";
+  if (value.includes("chat") || value.includes("message")) return "chat";
+  if (value.includes("request")) return "request";
+  if (value.includes("match")) return "match";
+  if (value.includes("rating") || value.includes("feedback")) return "rating";
+  if (value.includes("game") || value.includes("streak")) return "games";
+  if (value.includes("circle") || value.includes("expense") || value.includes("settle")) return "circle";
+  if (value.includes("people") || value.includes("contact")) return "people";
+  return value in ICONS ? value : "general";
+}
 
 function relativeTime(value: string) {
   const diff = Math.max(0, Date.now() - new Date(value).getTime());
@@ -57,12 +75,30 @@ export default function NotificationsScreen() {
     else setRefreshing(true);
     setError(null);
     try {
-      const data = await api.notifications(false, 80);
-      setItems(data.items || []);
-      setUnread(Number(data.unread || 0));
+      const rows = await peopleApi.notifications(80);
+      const normalized: Note[] = (rows || []).map((note) => ({
+        notification_id: note.id,
+        title: note.title,
+        body: note.body,
+        category: categoryFor(note.type),
+        action_url: note.route || undefined,
+        read_at: note.read_at,
+        created_at: note.created_at,
+        source: "supabase",
+      }));
+      setItems(normalized);
+      setUnread(normalized.filter((note) => !note.read_at).length);
       loaded.current = true;
-    } catch (e: any) {
-      setError(e?.message || "Couldn't refresh notifications.");
+    } catch {
+      try {
+        const data = await api.notifications(false, 80);
+        const normalized: Note[] = (data.items || []).map((note: any) => ({ ...note, category: categoryFor(note.category), source: "legacy" }));
+        setItems(normalized);
+        setUnread(Number(data.unread || normalized.filter((note) => !note.read_at).length));
+        loaded.current = true;
+      } catch (e: any) {
+        setError(e?.message || "Couldn't refresh notifications.");
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -75,7 +111,8 @@ export default function NotificationsScreen() {
     if (!note.read_at) {
       setItems((prev) => prev.map((n) => n.notification_id === note.notification_id ? { ...n, read_at: new Date().toISOString() } : n));
       setUnread((n) => Math.max(0, n - 1));
-      api.readNotification(note.notification_id).catch(() => {});
+      if (note.source === "legacy") api.readNotification(note.notification_id).catch(() => {});
+      else peopleApi.readNotification(note.notification_id).catch(() => {});
     }
     if (note.action_url) router.push(note.action_url as any);
   };
@@ -83,7 +120,11 @@ export default function NotificationsScreen() {
   const readAll = async () => {
     setItems((prev) => prev.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() })));
     setUnread(0);
-    try { await api.readAllNotifications(); } catch { load(true); }
+    try {
+      const usesLegacy = items.some((note) => note.source === "legacy");
+      if (usesLegacy) await api.readAllNotifications();
+      else await peopleApi.readAllNotifications();
+    } catch { load(true); }
   };
 
   return <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
@@ -100,7 +141,7 @@ export default function NotificationsScreen() {
       {error ? <Pressable onPress={() => load(true)} style={styles.errorCard}><Ionicons name="refresh" size={19} color={colors.indigo} /><Text style={styles.errorText}>{error} Tap to retry.</Text></Pressable> : null}
       <View style={styles.summary}>
         <View><Text style={styles.summaryNum}>{unread}</Text><Text style={styles.summaryLabel}>unread</Text></View>
-        <Text style={styles.summaryCopy}>Matches, ride requests, trip updates and chats land here even when browser push is disabled.</Text>
+        <Text style={styles.summaryCopy}>Matches, ride alerts, trip updates, Circle activity and chats can land here without waiting for the legacy travel backend.</Text>
       </View>
       {items.length === 0 ? <View style={styles.empty}><Ionicons name="notifications-off-outline" size={32} color={colors.muted} /><Text style={styles.emptyTitle}>You're caught up</Text><Text style={styles.muted}>New UniPool activity will appear here.</Text></View> : <View style={styles.stack}>
         {items.map((note) => {
