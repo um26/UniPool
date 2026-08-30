@@ -42,6 +42,7 @@ function AuthGate() {
         <Stack.Screen name="settings" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="notifications" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="circles/index" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="circles/personal" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="circles/[groupId]" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="games/trivia" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="games/word-scramble" options={{ animation: "slide_from_right" }} />
