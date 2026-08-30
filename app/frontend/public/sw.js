@@ -1,5 +1,15 @@
-const CACHE = "unipool-shell-v2.2.0";
-const SHELL = ["/", "/manifest.webmanifest", "/favicon.ico"];
+const CACHE = "unipool-shell-v2.3.0";
+const SHELL = [
+  "/",
+  "/campus",
+  "/people",
+  "/circles",
+  "/circles/personal",
+  "/notifications",
+  "/safety",
+  "/manifest.webmanifest",
+  "/favicon.ico",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).catch(() => undefined));
@@ -18,7 +28,14 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
 
   if (req.mode === "navigate") {
-    event.respondWith(fetch(req).then((res) => { const copy = res.clone(); caches.open(CACHE).then((cache) => cache.put("/", copy)); return res; }).catch(() => caches.match("/").then((cached) => cached || Response.error())));
+    event.respondWith(fetch(req).then((res) => {
+      const copy = res.clone();
+      caches.open(CACHE).then((cache) => Promise.all([cache.put(url.pathname, copy), cache.put("/", res.clone())]));
+      return res;
+    }).catch(async () => {
+      const exact = await caches.match(url.pathname);
+      return exact || await caches.match("/") || Response.error();
+    }));
     return;
   }
 
