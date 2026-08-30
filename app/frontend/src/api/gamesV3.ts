@@ -25,7 +25,7 @@ async function request(path: string, options: RequestInit = {}) {
 
 export const gamesV3Api = {
   summary: () => request("/summary"),
-  leaderboard: (game?: string) => request(`/leaderboard${game ? `?game=${encodeURIComponent(game)}` : ""}`),
+  leaderboard: (game?: string, period: "week" | "all" = "week") => request(`/leaderboard?period=${period}${game ? `&game=${encodeURIComponent(game)}` : ""}`),
   record: (gameKey: string, score: number, completed = true) => request("/progress", { method: "POST", body: JSON.stringify({ game_key: gameKey, score, completed }) }),
 };
 
