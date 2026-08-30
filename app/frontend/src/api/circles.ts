@@ -12,11 +12,33 @@ async function request(path: string, options: RequestInit = {}) {
   const text = await response.text();
   let data: any = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
-  if (!response.ok) throw new Error(data?.detail || response.statusText || `Request failed (${response.status})`);
+  if (!response.ok) {
+    const error: any = new Error(data?.detail || response.statusText || `Request failed (${response.status})`);
+    error.status = response.status;
+    error.data = data;
+    throw error;
+  }
   return data;
 }
 
+async function capability() {
+  if (!BASE) return { available: false, version: null, status: "unconfigured" };
+  try {
+    const response = await fetch(`${BASE}/health`, { cache: "no-store" });
+    const data = response.ok ? await response.json() : null;
+    return {
+      available: Boolean(response.ok && data?.circles_version),
+      version: data?.circles_version || null,
+      backend_version: data?.version || null,
+      status: data?.status || (response.ok ? "ok" : "degraded"),
+    };
+  } catch {
+    return { available: false, version: null, status: "offline" };
+  }
+}
+
 export const circlesApi = {
+  capability,
   dashboard: () => request("/expense-dashboard"),
   list: () => request("/expense-groups"),
   get: (groupId: string) => request(`/expense-groups/${groupId}`),
@@ -26,4 +48,10 @@ export const circlesApi = {
   addExpense: (groupId: string, body: any) => request(`/expense-groups/${groupId}/expenses`, { method: "POST", body: JSON.stringify(body) }),
   deleteExpense: (groupId: string, expenseId: string) => request(`/expense-groups/${groupId}/expenses/${expenseId}`, { method: "DELETE" }),
   settle: (groupId: string, body: any) => request(`/expense-groups/${groupId}/settlements`, { method: "POST", body: JSON.stringify(body) }),
+
+  personalDashboard: (month?: string) => request(`/personal-finance/dashboard${month ? `?month=${encodeURIComponent(month)}` : ""}`),
+  personalTransactions: (month?: string, limit = 100) => request(`/personal-transactions?limit=${limit}${month ? `&month=${encodeURIComponent(month)}` : ""}`),
+  addPersonalTransaction: (body: any) => request("/personal-transactions", { method: "POST", body: JSON.stringify(body) }),
+  updatePersonalTransaction: (transactionId: string, body: any) => request(`/personal-transactions/${transactionId}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deletePersonalTransaction: (transactionId: string) => request(`/personal-transactions/${transactionId}`, { method: "DELETE" }),
 };
