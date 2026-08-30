@@ -26,14 +26,15 @@ function AuthGate() {
   const { user, loading } = useAuth();
   const { colors } = useTheme();
   const segments = useSegments();
+  const parts = segments as unknown as string[];
   const router = useRouter();
-  const root = String(segments[0] || "");
+  const root = String(parts[0] || "");
   const isPublic = PUBLIC_ROOTS.has(root);
-  const onHome = segments[0] === "(tabs)" && (!segments[1] || String(segments[1]) === "index");
+  const onHome = parts[0] === "(tabs)" && (!parts[1] || parts[1] === "index");
 
   useEffect(() => {
     if (loading) return;
-    const inTabs = segments[0] === "(tabs)";
+    const inTabs = parts[0] === "(tabs)";
     if (!user && (inTabs || PROTECTED_ROOTS.has(root))) router.replace("/");
     if (user && !inTabs && !PROTECTED_ROOTS.has(root) && !isPublic) router.replace("/(tabs)");
   }, [user, loading, segments, router, root, isPublic]);
