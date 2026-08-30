@@ -19,6 +19,7 @@ from routes import (
     auth_router,
     compat_router,
     experience_router,
+    expenses_router,
     games_router,
     matches_router,
     messages_router,
@@ -33,7 +34,7 @@ from routes import (
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("unipool")
 
-API_VERSION = "2.2.0"
+API_VERSION = "2.3.0"
 
 app = FastAPI(
     title="UniPool API",
@@ -61,6 +62,7 @@ for router in (
     users_router,
     mobility_router,
     network_router,
+    expenses_router,
     experience_router,
     compat_router,
 ):
@@ -81,7 +83,7 @@ async def health():
         database = "degraded"
     return {
         "app": "UniPool", "status": "ok" if database == "ok" else "degraded", "database": database,
-        "version": API_VERSION, "mobility_version": "2.2", "timestamp": datetime.now(timezone.utc).isoformat(),
+        "version": API_VERSION, "mobility_version": "2.2", "circles_version": "1.0", "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -150,6 +152,14 @@ async def startup_event():
         await db.pickup_points.create_index([("user_id", 1), ("normalized_label", 1)], unique=True)
         await db.client_errors.create_index([("created_at", -1)])
         await db.client_errors.create_index([("app_version", 1), ("status", 1)])
+        await db.expense_groups.create_index("group_id", unique=True)
+        await db.expense_groups.create_index("invite_code", unique=True)
+        await db.expense_groups.create_index([("member_ids", 1), ("updated_at", -1)])
+        await db.expenses.create_index("expense_id", unique=True)
+        await db.expenses.create_index([("group_id", 1), ("created_at", -1)])
+        await db.expense_settlements.create_index("settlement_id", unique=True)
+        await db.expense_settlements.create_index([("group_id", 1), ("created_at", -1)])
+        await db.expense_activity.create_index([("group_id", 1), ("created_at", -1)])
 
         from config.settings import SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD, SEED_ADMIN_USERNAME
         from helpers.auth_helper import _hash_password
