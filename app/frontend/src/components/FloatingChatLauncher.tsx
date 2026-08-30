@@ -3,12 +3,14 @@ import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, useWindowDime
 import { Ionicons } from "@expo/vector-icons";
 import { usePathname, useRouter } from "expo-router";
 import { api } from "@/src/api/client";
+import { sharedApi } from "@/src/api/shared";
 import { RADIUS, SPACING } from "@/src/theme";
 import { useTheme } from "@/src/theme_context/ThemeContext";
 import SocialShareSheet, { SharePayload } from "@/src/components/SocialShareSheet";
 
-type Convo = { kind: "direct" | "group"; other_user_id?: string; conversation_id?: string; name: string; last_message: string; unread: number; members_count?: number };
+type Convo = { kind: "direct" | "group"; other_user_id?: string; conversation_id?: string; name: string; last_message: string; unread: number; members_count?: number; last_at?: string };
 const HOME = "https://uni-pool-ruddy.vercel.app";
+const convoKey = (item: Convo) => item.kind === "group" ? `group-${item.conversation_id}` : `direct-${item.other_user_id}`;
 
 export default function FloatingChatLauncher() {
   const { width } = useWindowDimensions();
@@ -29,7 +31,13 @@ export default function FloatingChatLauncher() {
 
   const load = async () => {
     setLoading(true);
-    try { setItems((await api.listConversations()).slice(0, 5)); } catch {} finally { setLoading(false); }
+    try {
+      const [sharedResult, legacyResult] = await Promise.allSettled([sharedApi.listConversations(), api.listConversations()]);
+      const merged = new Map<string, Convo>();
+      if (legacyResult.status === "fulfilled") for (const item of legacyResult.value || []) merged.set(convoKey(item), item);
+      if (sharedResult.status === "fulfilled") for (const item of sharedResult.value || []) if (item.kind === "direct") merged.set(convoKey(item), item);
+      setItems([...merged.values()].sort((a, b) => new Date(b.last_at || 0).getTime() - new Date(a.last_at || 0).getTime()).slice(0, 5));
+    } catch {} finally { setLoading(false); }
   };
 
   useEffect(() => { if (!visible) return; const timer = setTimeout(load, 900); return () => clearTimeout(timer); }, [visible]);
@@ -59,11 +67,11 @@ export default function FloatingChatLauncher() {
   return <View pointerEvents="box-none" style={styles.layer}>
     {open ? <View style={styles.panel}>
       <View style={styles.panelHead}><View><Text style={styles.title}>Quick chats</Text><Text style={styles.sub}>Recent ride conversations</Text></View><Pressable onPress={() => setOpen(false)} hitSlop={10}><Ionicons name="close" size={18} color={colors.muted} /></Pressable></View>
-      {loading && items.length === 0 ? <View style={styles.loading}><ActivityIndicator color={colors.indigo} /></View> : items.length ? items.map((item) => <Pressable key={item.kind === "group" ? item.conversation_id : item.other_user_id} onPress={() => openConversation(item)} style={styles.row}>
+      {loading && items.length === 0 ? <View style={styles.loading}><ActivityIndicator color={colors.indigo} /></View> : items.length ? items.map((item) => <Pressable key={convoKey(item)} onPress={() => openConversation(item)} style={styles.row}>
         <View style={styles.avatar}><Ionicons name={item.kind === "group" ? "people" : "person"} size={16} color={colors.indigo} /></View>
         <View style={{ flex: 1, minWidth: 0 }}><Text style={styles.name} numberOfLines={1}>{item.name}</Text><Text style={styles.preview} numberOfLines={1}>{item.last_message || (item.kind === "group" ? "Trip chat" : "Start a conversation")}</Text></View>
         {item.unread > 0 ? <View style={styles.badge}><Text style={styles.badgeText}>{item.unread}</Text></View> : <Ionicons name="chevron-forward" size={15} color={colors.muted} />}
-      </Pressable>) : <View style={styles.empty}><Text style={styles.emptyText}>No chats yet. Matching or accepting a ride creates one automatically.</Text></View>}
+      </Pressable>) : <View style={styles.empty}><Text style={styles.emptyText}>No chats yet. Your direct and trip conversations will stay here.</Text></View>}
       <Pressable onPress={() => { setOpen(false); router.push("/(tabs)/messages" as any); }} style={styles.all}><Text style={styles.allText}>View all chats</Text><Ionicons name="arrow-forward" size={14} color={colors.indigo} /></Pressable>
     </View> : null}
     <View style={styles.fabStack}>
