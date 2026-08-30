@@ -14,6 +14,7 @@ from .mobility import router as mobility_router
 from .network import router as network_router
 from .experience import router as experience_router
 from .expenses import router as expenses_router
+from .personal_finance import router as personal_finance_router
 
 __all__ = [
     "auth_router",
@@ -30,4 +31,5 @@ __all__ = [
     "network_router",
     "experience_router",
     "expenses_router",
+    "personal_finance_router",
 ]
