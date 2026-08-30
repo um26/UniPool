@@ -14,6 +14,7 @@ import WebTopBar from "@/src/components/WebTopBar";
 import SiteFooter from "@/src/components/SiteFooter";
 import FloatingChatLauncher from "@/src/components/FloatingChatLauncher";
 import PolicyConsentGate from "@/src/components/PolicyConsentGate";
+import CampusUtilityStrip from "@/src/components/CampusUtilityStrip";
 
 LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
@@ -28,6 +29,7 @@ function AuthGate() {
   const router = useRouter();
   const root = String(segments[0] || "");
   const isPublic = PUBLIC_ROOTS.has(root);
+  const onHome = segments[0] === "(tabs)" && (!segments[1] || String(segments[1]) === "index");
 
   useEffect(() => {
     if (loading) return;
@@ -39,6 +41,7 @@ function AuthGate() {
   if (loading) return <AnimatedSplash />;
   const shell = <View style={{ flex: 1, backgroundColor: colors.surface }}>
     {user ? <WebTopBar /> : null}
+    {user && onHome ? <CampusUtilityStrip /> : null}
     <View style={{ flex: 1 }}><Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface }, animation: "fade_from_bottom" }}>
       <Stack.Screen name="index" /><Stack.Screen name="(tabs)" />
       <Stack.Screen name="terms" options={{ animation: "slide_from_right" }} /><Stack.Screen name="privacy" options={{ animation: "slide_from_right" }} /><Stack.Screen name="faq" options={{ animation: "slide_from_right" }} /><Stack.Screen name="community-guidelines" options={{ animation: "slide_from_right" }} />
