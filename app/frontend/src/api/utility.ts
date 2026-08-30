@@ -37,5 +37,11 @@ export const utilityApi = {
   restrictUser: (userId: string) => request(`/relations/${encodeURIComponent(userId)}/restrict`, { method: "POST" }),
   unrestrictUser: (userId: string) => request(`/relations/${encodeURIComponent(userId)}/restrict`, { method: "DELETE" }),
   recordPolicyConsent: (source = "signup") => request("/policy-consent", { method: "POST", body: JSON.stringify({ terms_version: POLICY_VERSION, privacy_version: POLICY_VERSION, source }) }),
-  policyConsent: () => request("/policy-consent"),
+  policyConsent: async () => {
+    const data = await request("/policy-consent");
+    return {
+      ...(data || {}),
+      accepted: Boolean(data && data.terms_version === POLICY_VERSION && data.privacy_version === POLICY_VERSION),
+    };
+  },
 };
