@@ -13,12 +13,13 @@ import AnimatedSplash from "@/src/components/AnimatedSplash";
 import WebTopBar from "@/src/components/WebTopBar";
 import SiteFooter from "@/src/components/SiteFooter";
 import FloatingChatLauncher from "@/src/components/FloatingChatLauncher";
+import ContextToolsLauncher from "@/src/components/ContextToolsLauncher";
 import ConsentGate from "@/src/components/ConsentGate";
 
 LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
 applyPremiumFontDefaults();
-const PROTECTED_ROOTS = new Set(["post-request", "games", "chat", "pool", "heatmap", "trip-receipt", "network", "settings", "notifications", "circles", "people"]);
+const PROTECTED_ROOTS = new Set(["post-request", "games", "chat", "pool", "trip-tools", "heatmap", "trip-receipt", "network", "settings", "notifications", "circles", "people"]);
 const PUBLIC_ROOTS = new Set(["terms", "privacy", "faq", "community-guidelines"]);
 
 function AuthGate() {
@@ -36,11 +37,11 @@ function AuthGate() {
       <Stack.Screen name="index" /><Stack.Screen name="(tabs)" />
       <Stack.Screen name="terms" options={{ animation: "slide_from_right" }} /><Stack.Screen name="privacy" options={{ animation: "slide_from_right" }} /><Stack.Screen name="faq" options={{ animation: "slide_from_right" }} /><Stack.Screen name="community-guidelines" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="post-request" options={{ presentation: "modal", animation: "slide_from_bottom" }} /><Stack.Screen name="settings" options={{ animation: "slide_from_right" }} /><Stack.Screen name="notifications" options={{ animation: "slide_from_right" }} /><Stack.Screen name="people" options={{ animation: "slide_from_right" }} />
-      <Stack.Screen name="circles/index" options={{ animation: "slide_from_right" }} /><Stack.Screen name="circles/personal" options={{ animation: "slide_from_right" }} /><Stack.Screen name="circles/[groupId]" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="circles/index" options={{ animation: "slide_from_right" }} /><Stack.Screen name="circles/personal" options={{ animation: "slide_from_right" }} /><Stack.Screen name="circles/[groupId]" options={{ animation: "slide_from_right" }} /><Stack.Screen name="circles/[groupId]/tools" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="games/trivia" options={{ animation: "slide_from_right" }} /><Stack.Screen name="games/word-scramble" options={{ animation: "slide_from_right" }} /><Stack.Screen name="games/airport-codes" options={{ animation: "slide_from_right" }} /><Stack.Screen name="games/destination-detective" options={{ animation: "slide_from_right" }} /><Stack.Screen name="games/travel-reveal" options={{ animation: "slide_from_right" }} /><Stack.Screen name="games/daily-challenge" options={{ animation: "slide_from_right" }} /><Stack.Screen name="games/guess-state" options={{ animation: "slide_from_right" }} /><Stack.Screen name="games/station-codes" options={{ animation: "slide_from_right" }} />
-      <Stack.Screen name="chat/[userId]" options={{ animation: "slide_from_right" }} /><Stack.Screen name="chat/group/[conversationId]" options={{ animation: "slide_from_right" }} /><Stack.Screen name="pool/[poolId]" options={{ animation: "slide_from_right" }} /><Stack.Screen name="network" options={{ animation: "slide_from_right" }} /><Stack.Screen name="heatmap" options={{ animation: "slide_from_right" }} /><Stack.Screen name="trip-receipt/[poolId]" options={{ animation: "slide_from_bottom" }} />
+      <Stack.Screen name="chat/[userId]" options={{ animation: "slide_from_right" }} /><Stack.Screen name="chat/group/[conversationId]" options={{ animation: "slide_from_right" }} /><Stack.Screen name="pool/[poolId]" options={{ animation: "slide_from_right" }} /><Stack.Screen name="trip-tools/[poolId]" options={{ animation: "slide_from_right" }} /><Stack.Screen name="network" options={{ animation: "slide_from_right" }} /><Stack.Screen name="heatmap" options={{ animation: "slide_from_right" }} /><Stack.Screen name="trip-receipt/[poolId]" options={{ animation: "slide_from_bottom" }} />
     </Stack></View>
-    {user ? <SiteFooter /> : null}{user ? <FloatingChatLauncher /> : null}{user ? <ConsentGate /> : null}
+    {user ? <SiteFooter /> : null}{user ? <FloatingChatLauncher /> : null}{user ? <ContextToolsLauncher /> : null}{user ? <ConsentGate /> : null}
   </View>;
 }
 
