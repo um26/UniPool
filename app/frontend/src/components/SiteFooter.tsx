@@ -24,6 +24,7 @@ export default function SiteFooter() {
         <Text style={[styles.copy, { color: colors.muted }]}>Made with </Text><Ionicons name="heart" size={12} color={colors.error} /><Text style={[styles.copy, { color: colors.muted }]}> by BinaryBots</Text>
       </Pressable>
       <View style={styles.links}>
+        <Pressable onPress={() => nav("/people")} style={styles.link}><Ionicons name="people-outline" size={14} color={colors.muted} /><Text style={[styles.linkText, { color: colors.muted }]}>People</Text></Pressable>
         <Pressable onPress={() => nav("/terms")} style={styles.link}><Text style={[styles.linkText, { color: colors.muted }]}>Terms</Text></Pressable>
         <Pressable onPress={() => nav("/privacy")} style={styles.link}><Text style={[styles.linkText, { color: colors.muted }]}>Privacy</Text></Pressable>
         <Pressable onPress={() => nav("/faq")} style={styles.link}><Text style={[styles.linkText, { color: colors.muted }]}>FAQ</Text></Pressable>
