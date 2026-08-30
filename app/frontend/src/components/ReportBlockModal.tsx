@@ -2,162 +2,36 @@ import React, { useState, useMemo } from "react";
 import { View, Text, StyleSheet, Modal, Pressable, TextInput, ActivityIndicator, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-
 import { SPACING, RADIUS, FONT, FONT_DISPLAY } from "@/src/theme";
 import { useTheme } from "@/src/theme_context/ThemeContext";
 import { api } from "@/src/api/client";
+import { utilityApi } from "@/src/api/utility";
 
-const REASONS = [
-  { id: "no-show", label: "No-show" },
-  { id: "unsafe", label: "Unsafe behaviour" },
-  { id: "harassment", label: "Harassment" },
-  { id: "spam", label: "Spam / fake pool" },
-  { id: "other", label: "Other" },
-];
+const REASONS = [{ id: "no-show", label: "No-show" },{ id: "unsafe", label: "Unsafe behaviour" },{ id: "harassment", label: "Harassment" },{ id: "spam", label: "Spam / fake pool" },{ id: "other", label: "Other" }];
 
-export default function ReportBlockModal({
-  visible, onClose, userId, userName, poolId, onBlocked,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  userId: string;
-  userName: string;
-  poolId?: string;
-  onBlocked?: () => void;
-}) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [reason, setReason] = useState<string | null>(null);
-  const [details, setDetails] = useState("");
-  const [submittingReport, setSubmittingReport] = useState(false);
-  const [blocking, setBlocking] = useState(false);
-  const [reported, setReported] = useState(false);
-
+export default function ReportBlockModal({ visible, onClose, userId, userName, poolId, onBlocked }: { visible: boolean; onClose: () => void; userId: string; userName: string; poolId?: string; onBlocked?: () => void }) {
+  const { colors } = useTheme(); const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [reason, setReason] = useState<string | null>(null); const [details, setDetails] = useState(""); const [submittingReport, setSubmittingReport] = useState(false); const [blocking, setBlocking] = useState(false); const [restricting, setRestricting] = useState(false); const [reported, setReported] = useState(false);
   const reset = () => { setReason(null); setDetails(""); setReported(false); };
+  const submitReport = async () => { if (!reason) return Alert.alert("Pick a reason", "Please select why you're reporting this user."); setSubmittingReport(true); try { await api.submitReport(userId, reason, details.trim() || undefined, poolId); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); setReported(true); } catch (e: any) { Alert.alert("Couldn't submit report", e.message || "Try again"); } finally { setSubmittingReport(false); } };
+  const restrict = () => Alert.alert(`Restrict ${userName.split(" ")[0]}?`, "Their direct chat will be kept out of your normal chat inbox and Quick Chats. You can undo this any time in Settings.", [{ text: "Cancel", style: "cancel" }, { text: "Restrict", onPress: async () => { setRestricting(true); try { await utilityApi.restrictUser(userId); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); reset(); onClose(); } catch (e: any) { Alert.alert("Couldn't restrict", e.message || "Try again"); } finally { setRestricting(false); } } }]);
+  const block = () => Alert.alert(`Block ${userName.split(" ")[0]}?`, "You won't see their pools anymore, and they won't be able to message or request to join yours. You can unblock them from Settings.", [{ text: "Cancel", style: "cancel" }, { text: "Block", style: "destructive", onPress: async () => { setBlocking(true); try { await api.blockUser(userId); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); onBlocked?.(); reset(); onClose(); } catch (e: any) { Alert.alert("Couldn't block", e.message || "Try again"); } finally { setBlocking(false); } } }]);
 
-  const submitReport = async () => {
-    if (!reason) return Alert.alert("Pick a reason", "Please select why you're reporting this user.");
-    setSubmittingReport(true);
-    try {
-      await api.submitReport(userId, reason, details.trim() || undefined, poolId);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setReported(true);
-    } catch (e: any) {
-      Alert.alert("Couldn't submit report", e.message || "Try again");
-    } finally {
-      setSubmittingReport(false);
-    }
-  };
-
-  const block = () => {
-    Alert.alert(
-      `Block ${userName.split(" ")[0]}?`,
-      "You won't see their pools anymore, and they won't be able to message or request to join yours. You can unblock them any time from your profile.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Block", style: "destructive", onPress: async () => {
-            setBlocking(true);
-            try {
-              await api.blockUser(userId);
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              onBlocked?.();
-              reset();
-              onClose();
-            } catch (e: any) {
-              Alert.alert("Couldn't block", e.message || "Try again");
-            } finally {
-              setBlocking(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  return (
-    <Modal visible={visible} animationType="fade" transparent onRequestClose={() => { reset(); onClose(); }}>
-      <View style={styles.backdrop}>
-        <View style={styles.card}>
-          <Pressable testID="report-close" onPress={() => { reset(); onClose(); }} style={styles.closeBtn} hitSlop={12}>
-            <Ionicons name="close" size={22} color={colors.onSurface} />
-          </Pressable>
-
-          <Ionicons name="shield-outline" size={44} color={colors.error} />
-          <Text style={styles.title}>Report {userName.split(" ")[0]}</Text>
-
-          {reported ? (
-            <View style={{ alignItems: "center", paddingVertical: SPACING.lg }}>
-              <Ionicons name="checkmark-circle" size={40} color={colors.success} />
-              <Text style={styles.sub}>Thanks — our team will review this.</Text>
-              <Pressable testID="report-done" onPress={() => { reset(); onClose(); }} style={[styles.submitBtn, { marginTop: SPACING.lg }]}>
-                <Text style={styles.submitText}>Done</Text>
-              </Pressable>
-            </View>
-          ) : (
-            <>
-              <Text style={styles.sub}>Let us know what happened. Reports are confidential.</Text>
-
-              <View style={styles.reasonsWrap}>
-                {REASONS.map((r) => (
-                  <Pressable
-                    key={r.id}
-                    testID={`reason-${r.id}`}
-                    onPress={() => { setReason(r.id); Haptics.selectionAsync(); }}
-                    style={[styles.reasonChip, reason === r.id && styles.reasonChipActive]}
-                  >
-                    <Text style={[styles.reasonText, reason === r.id && styles.reasonTextActive]}>{r.label}</Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              <TextInput
-                testID="report-details"
-                value={details}
-                onChangeText={setDetails}
-                placeholder="Optional details"
-                placeholderTextColor={colors.muted}
-                style={styles.input}
-                multiline
-              />
-
-              <Pressable testID="report-submit" onPress={submitReport} disabled={submittingReport} style={[styles.submitBtn, submittingReport && { opacity: 0.6 }]}>
-                {submittingReport ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Submit report</Text>}
-              </Pressable>
-
-              <View style={styles.divider} />
-
-              <Pressable testID="block-user-btn" onPress={block} disabled={blocking} style={[styles.blockBtn, blocking && { opacity: 0.6 }]}>
-                {blocking ? <ActivityIndicator color={colors.error} /> : (
-                  <>
-                    <Ionicons name="ban-outline" size={18} color={colors.error} />
-                    <Text style={styles.blockText}>Block this user</Text>
-                  </>
-                )}
-              </Pressable>
-            </>
-          )}
-        </View>
-      </View>
-    </Modal>
-  );
+  return <Modal visible={visible} animationType="fade" transparent onRequestClose={() => { reset(); onClose(); }}><View style={styles.backdrop}><View style={styles.card}>
+    <Pressable testID="report-close" onPress={() => { reset(); onClose(); }} style={styles.closeBtn} hitSlop={12}><Ionicons name="close" size={22} color={colors.onSurface} /></Pressable>
+    <Ionicons name="shield-outline" size={44} color={colors.error} /><Text style={styles.title}>Safety & privacy</Text><Text style={styles.person}>{userName}</Text>
+    {reported ? <View style={{ alignItems: "center", paddingVertical: SPACING.lg }}><Ionicons name="checkmark-circle" size={40} color={colors.success} /><Text style={styles.sub}>Thanks — our team will review this.</Text><Pressable onPress={() => { reset(); onClose(); }} style={[styles.submitBtn, { marginTop: SPACING.lg }]}><Text style={styles.submitText}>Done</Text></Pressable></View> : <>
+      <Text style={styles.sub}>Report serious issues, restrict a conversation, or block this user.</Text>
+      <View style={styles.reasonsWrap}>{REASONS.map((r) => <Pressable key={r.id} onPress={() => { setReason(r.id); Haptics.selectionAsync(); }} style={[styles.reasonChip, reason === r.id && styles.reasonChipActive]}><Text style={[styles.reasonText, reason === r.id && styles.reasonTextActive]}>{r.label}</Text></Pressable>)}</View>
+      <TextInput value={details} onChangeText={setDetails} placeholder="Optional report details" placeholderTextColor={colors.muted} style={styles.input} multiline />
+      <Pressable onPress={submitReport} disabled={submittingReport} style={[styles.submitBtn, submittingReport && { opacity: .6 }]}>{submittingReport ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Submit report</Text>}</Pressable>
+      <View style={styles.divider} />
+      <Pressable onPress={restrict} disabled={restricting} style={[styles.restrictBtn, restricting && { opacity: .6 }]}>{restricting ? <ActivityIndicator color={colors.indigo} /> : <><Ionicons name="eye-off-outline" size={18} color={colors.indigo} /><View style={{ flex: 1 }}><Text style={styles.restrictText}>Restrict this user</Text><Text style={styles.restrictSub}>Hide their direct chat from your normal inbox.</Text></View></>}</Pressable>
+      <Pressable onPress={block} disabled={blocking} style={[styles.blockBtn, blocking && { opacity: .6 }]}>{blocking ? <ActivityIndicator color={colors.error} /> : <><Ionicons name="ban-outline" size={18} color={colors.error} /><Text style={styles.blockText}>Block this user</Text></>}</Pressable>
+    </>}
+  </View></View></Modal>;
 }
 
 const makeStyles = (colors: any) => StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(20,20,25,0.6)", alignItems: "center", justifyContent: "center", padding: SPACING.xl },
-  card: { backgroundColor: "#fff", borderRadius: RADIUS.lg, padding: SPACING.xl, width: "100%", maxWidth: 400, alignItems: "center" },
-  closeBtn: { position: "absolute", top: SPACING.md, right: SPACING.md },
-  title: { fontSize: FONT.xl, fontWeight: "800", color: colors.onSurface, marginTop: SPACING.sm, fontFamily: FONT_DISPLAY },
-  sub: { color: colors.muted, textAlign: "center", marginTop: 4, marginBottom: SPACING.lg },
-  reasonsWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: SPACING.md, justifyContent: "center" },
-  reasonChip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: RADIUS.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-  reasonChipActive: { backgroundColor: colors.error, borderColor: colors.error },
-  reasonText: { fontSize: 13, fontWeight: "700", color: colors.onSurface },
-  reasonTextActive: { color: "#fff" },
-  input: { alignSelf: "stretch", backgroundColor: colors.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: colors.border, padding: SPACING.md, minHeight: 60, textAlignVertical: "top", color: colors.onSurface, marginBottom: SPACING.lg },
-  submitBtn: { alignSelf: "stretch", backgroundColor: colors.error, borderRadius: RADIUS.pill, paddingVertical: 14, alignItems: "center" },
-  submitText: { color: "#fff", fontWeight: "800", fontSize: FONT.lg },
-  divider: { alignSelf: "stretch", height: 1, backgroundColor: colors.border, marginVertical: SPACING.lg },
-  blockBtn: { alignSelf: "stretch", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderWidth: 1, borderColor: colors.error, borderRadius: RADIUS.pill, paddingVertical: 12 },
-  blockText: { color: colors.error, fontWeight: "700" },
+  backdrop: { flex: 1, backgroundColor: "rgba(20,20,25,0.65)", alignItems: "center", justifyContent: "center", padding: SPACING.xl }, card: { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: RADIUS.lg, padding: SPACING.xl, width: "100%", maxWidth: 420, alignItems: "center" }, closeBtn: { position: "absolute", top: SPACING.md, right: SPACING.md }, title: { fontSize: FONT.xl, fontWeight: "800", color: colors.onSurface, marginTop: SPACING.sm, fontFamily: FONT_DISPLAY }, person: { color: colors.onSurface2, fontSize: 12, fontWeight: "800", marginTop: 2 }, sub: { color: colors.muted, textAlign: "center", marginTop: 4, marginBottom: SPACING.lg }, reasonsWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: SPACING.md, justifyContent: "center" }, reasonChip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: RADIUS.pill, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border }, reasonChipActive: { backgroundColor: colors.error, borderColor: colors.error }, reasonText: { fontSize: 13, fontWeight: "700", color: colors.onSurface }, reasonTextActive: { color: "#fff" }, input: { alignSelf: "stretch", backgroundColor: colors.surface2, borderRadius: RADIUS.md, borderWidth: 1, borderColor: colors.border, padding: SPACING.md, minHeight: 60, textAlignVertical: "top", color: colors.onSurface, marginBottom: SPACING.lg }, submitBtn: { alignSelf: "stretch", backgroundColor: colors.error, borderRadius: RADIUS.pill, paddingVertical: 13, alignItems: "center" }, submitText: { color: "#fff", fontWeight: "800", fontSize: FONT.base }, divider: { alignSelf: "stretch", height: 1, backgroundColor: colors.border, marginVertical: SPACING.lg }, restrictBtn: { alignSelf: "stretch", flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface2, borderRadius: RADIUS.lg, padding: 12, marginBottom: 9 }, restrictText: { color: colors.indigo, fontWeight: "800", fontSize: 12 }, restrictSub: { color: colors.muted, fontSize: 9, marginTop: 2 }, blockBtn: { alignSelf: "stretch", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderWidth: 1, borderColor: colors.error, borderRadius: RADIUS.pill, paddingVertical: 12 }, blockText: { color: colors.error, fontWeight: "700" },
 });
