@@ -25,6 +25,7 @@ from routes import (
     messages_router,
     mobility_router,
     network_router,
+    personal_finance_router,
     pools_router,
     profile_router,
     requests_router,
@@ -34,7 +35,7 @@ from routes import (
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("unipool")
 
-API_VERSION = "2.3.0"
+API_VERSION = "2.3.1"
 
 app = FastAPI(
     title="UniPool API",
@@ -63,6 +64,7 @@ for router in (
     mobility_router,
     network_router,
     expenses_router,
+    personal_finance_router,
     experience_router,
     compat_router,
 ):
@@ -83,7 +85,7 @@ async def health():
         database = "degraded"
     return {
         "app": "UniPool", "status": "ok" if database == "ok" else "degraded", "database": database,
-        "version": API_VERSION, "mobility_version": "2.2", "circles_version": "1.0", "timestamp": datetime.now(timezone.utc).isoformat(),
+        "version": API_VERSION, "mobility_version": "2.2", "circles_version": "1.1", "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -133,6 +135,7 @@ async def startup_event():
         await db.messages.create_index("message_id", unique=True)
         await db.messages.create_index([("from_user_id", 1), ("created_at", 1)])
         await db.messages.create_index([("conversation_id", 1), ("created_at", 1)])
+        await db.messages.create_index([("to_user_id", 1), ("read", 1), ("created_at", -1)])
         await db.conversations.create_index("conversation_id", unique=True)
         await db.conversations.create_index([("type", 1), ("route_key", 1), ("travel_datetime", 1)])
         await db.push_subscriptions.create_index("endpoint", unique=True)
@@ -160,6 +163,9 @@ async def startup_event():
         await db.expense_settlements.create_index("settlement_id", unique=True)
         await db.expense_settlements.create_index([("group_id", 1), ("created_at", -1)])
         await db.expense_activity.create_index([("group_id", 1), ("created_at", -1)])
+        await db.personal_transactions.create_index("transaction_id", unique=True)
+        await db.personal_transactions.create_index([("user_id", 1), ("occurred_at", -1)])
+        await db.personal_transactions.create_index([("user_id", 1), ("kind", 1), ("occurred_at", -1)])
 
         from config.settings import SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD, SEED_ADMIN_USERNAME
         from helpers.auth_helper import _hash_password
