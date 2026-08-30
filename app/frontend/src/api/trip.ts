@@ -50,6 +50,18 @@ export type TripLiveMember = {
   updated_at?: string;
 };
 
+export type TripPoll = {
+  id: string;
+  pool_id: string;
+  created_by: string;
+  question: string;
+  options: string[];
+  counts: number[];
+  my_vote?: number | null;
+  closes_at?: string | null;
+  created_at?: string;
+};
+
 export const tripApi = {
   health: async () => {
     const response = await fetch(`${TRIP_BASE}/health`, { cache: "no-store" });
@@ -61,6 +73,9 @@ export const tripApi = {
   live: (poolId: string) => tripRequest(`/trips/${encodeURIComponent(poolId)}/live`) as Promise<TripLiveMember[]>,
   updateLive: (poolId: string, body: { status: string; latitude?: number; longitude?: number; share_minutes?: number }) => tripRequest(`/trips/${encodeURIComponent(poolId)}/live`, { method: "POST", body: JSON.stringify(body) }) as Promise<TripLiveMember>,
   stopLiveLocation: (poolId: string) => tripRequest(`/trips/${encodeURIComponent(poolId)}/live`, { method: "DELETE" }),
+  polls: (poolId: string) => tripRequest(`/trips/${encodeURIComponent(poolId)}/polls`) as Promise<TripPoll[]>,
+  addPoll: (poolId: string, question: string, options: string[]) => tripRequest(`/trips/${encodeURIComponent(poolId)}/polls`, { method: "POST", body: JSON.stringify({ question, options }) }) as Promise<TripPoll>,
+  votePoll: (pollId: string, optionIndex: number) => tripRequest(`/polls/${encodeURIComponent(pollId)}/vote`, { method: "POST", body: JSON.stringify({ option_index: optionIndex }) }),
 };
 
 export { TRIP_BASE };
