@@ -4,6 +4,12 @@
   "outputDirectory": "app/frontend/dist",
   "installCommand": "echo 'handled in buildCommand'",
   "ignoreCommand": "bash scripts/vercel-ignore.sh",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
   "git": {
     "deploymentEnabled": {
       "ci/*": false
