@@ -25,6 +25,7 @@ export default function SiteFooter() {
         <Text style={[styles.copy, { color: colors.muted }]}>Made with </Text><Ionicons name="heart" size={12} color={colors.error} /><Text style={[styles.copy, { color: colors.muted }]}> by BinaryBots</Text>
       </Pressable>
       <View style={styles.links}>
+        {user ? <Pressable onPress={() => router.push("/circles" as any)} style={styles.link}><Ionicons name="wallet-outline" size={14} color={colors.saffron} /><Text style={[styles.linkText, { color: colors.muted }]}>Circles</Text></Pressable> : null}
         <Pressable onPress={() => Linking.openURL(`mailto:${CONTACT_EMAIL}?subject=UniPool%20contact`)} style={styles.link}><Ionicons name="mail-outline" size={14} color={colors.muted} /><Text style={[styles.linkText, { color: colors.muted }]}>Contact</Text></Pressable>
         <Pressable onPress={() => setReferOpen(true)} style={styles.link}><Ionicons name="person-add-outline" size={14} color={colors.muted} /><Text style={[styles.linkText, { color: colors.muted }]}>Refer a friend</Text></Pressable>
         {user ? <Pressable onPress={() => router.push("/settings" as any)} style={styles.link}><Ionicons name="shield-checkmark-outline" size={14} color={colors.muted} /><Text style={[styles.linkText, { color: colors.muted }]}>Privacy & safety</Text></Pressable> : null}
