@@ -61,6 +61,11 @@ export const tripV3Api = {
   votePoll: (pollId: string, option_index: number) => edge("unipool-trip", `/polls/${encodeURIComponent(pollId)}/vote`, { method: "POST", body: { option_index } }),
 };
 
+export const routeAlertsApi = {
+  health: () => edge("unipool-route-alerts", "/health"),
+  sync: () => edge("unipool-route-alerts", "/sync", { method: "POST" }),
+};
+
 export const circlePlusApi = {
   health: () => edge("unipool-circle-plus", "/health"),
   recurring: (circleId: string) => edge("unipool-circle-plus", `/circles/${encodeURIComponent(circleId)}/recurring`),
