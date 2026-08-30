@@ -13,8 +13,9 @@ export default function BrandFooter({ light = false }: { light?: boolean }) {
   const { colors } = useTheme(); const pathname = usePathname(); const router = useRouter();
   const color = light ? "rgba(255,236,194,0.85)" : colors.muted; const onProfile = pathname.includes("profile");
   if (onProfile) return <View style={styles.wrap}><View style={styles.profileLinks}>
+    <ProfileLink icon="people-outline" iconColor={colors.indigo} title="People" sub="Find students by name, email, branch or batch" onPress={() => router.push("/people" as any)} colors={colors} styles={styles} />
     <ProfileLink icon="wallet-outline" iconColor={colors.saffron} title="Circles" sub="Shared expenses and personal money" onPress={() => router.push("/circles" as any)} colors={colors} styles={styles} />
-    <ProfileLink icon="game-controller-outline" iconColor={colors.indigo} title="Time-pass" sub="Travel trivia and quick games" onPress={() => router.push("/(tabs)/games" as any)} colors={colors} styles={styles} />
+    <ProfileLink icon="game-controller-outline" iconColor={colors.indigo} title="Time-pass" sub="Travel trivia, XP and quick games" onPress={() => router.push("/(tabs)/games" as any)} colors={colors} styles={styles} />
     <ProfileLink icon="git-network-outline" iconColor={colors.indigo} title="Travel Network" sub="Reliability, completed rides and history" onPress={() => router.push("/network" as any)} colors={colors} styles={styles} />
     <ProfileLink icon="settings-outline" iconColor={colors.saffron} title="Settings" sub="Notifications, appearance, privacy and help" onPress={() => router.push("/settings" as any)} colors={colors} styles={styles} />
   </View></View>;
