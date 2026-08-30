@@ -1,8 +1,8 @@
-const CACHE = "unipool-shell-v2.2.0";
-const SHELL = ["/", "/manifest.webmanifest", "/favicon.ico"];
+const CACHE = "unipool-shell-v3.0.0";
+const SHELL = ["/", "/manifest.json", "/manifest.webmanifest", "/favicon.ico"];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).catch(() => undefined));
+  event.waitUntil(caches.open(CACHE).then((cache) => Promise.allSettled(SHELL.map((url) => cache.add(url)))).catch(() => undefined));
   self.skipWaiting();
 });
 
@@ -18,12 +18,19 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
 
   if (req.mode === "navigate") {
-    event.respondWith(fetch(req).then((res) => { const copy = res.clone(); caches.open(CACHE).then((cache) => cache.put("/", copy)); return res; }).catch(() => caches.match("/").then((cached) => cached || Response.error())));
+    event.respondWith(fetch(req).then((res) => {
+      const copy = res.clone();
+      caches.open(CACHE).then((cache) => cache.put("/", copy));
+      return res;
+    }).catch(() => caches.match("/").then((cached) => cached || Response.error())));
     return;
   }
 
   event.respondWith(caches.match(req).then((cached) => {
-    const fresh = fetch(req).then((res) => { if (res.ok) caches.open(CACHE).then((cache) => cache.put(req, res.clone())); return res; }).catch(() => cached);
+    const fresh = fetch(req).then((res) => {
+      if (res.ok && ["script", "style", "font", "image"].includes(req.destination)) caches.open(CACHE).then((cache) => cache.put(req, res.clone()));
+      return res;
+    }).catch(() => cached);
     return cached || fresh;
   }));
 });
