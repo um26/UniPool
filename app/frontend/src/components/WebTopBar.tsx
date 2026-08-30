@@ -27,10 +27,7 @@ export default function WebTopBar() {
   useEffect(() => {
     if (Platform.OS !== "web" || typeof window === "undefined") return;
     const onKey = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setSearchOpen(true);
-      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setSearchOpen(true); }
       if (event.key === "Escape") setSearchOpen(false);
     };
     window.addEventListener("keydown", onKey);
@@ -68,37 +65,16 @@ export default function WebTopBar() {
       </Pressable>
 
       {desktop ? <View style={[styles.nav, { backgroundColor: colors.surface2, borderColor: colors.border }]}>
-        {NAV.map((item) => {
-          const active = pathname === item.match;
-          return <Pressable key={item.label} onPress={() => tap(() => router.replace(item.path as any))} style={({ pressed }) => [styles.navItem, active && { backgroundColor: colors.card, borderColor: colors.border }, pressed && styles.pressed]} accessibilityState={{ selected: active }} accessibilityLabel={item.label}>
-            <Ionicons name={item.icon} size={18} color={active ? colors.indigo : colors.muted} />
-            <Text style={[styles.navText, { color: active ? colors.onSurface : colors.muted }]}>{item.label}</Text>
-          </Pressable>;
-        })}
+        {NAV.map((item) => { const active = pathname === item.match; return <Pressable key={item.label} onPress={() => tap(() => router.replace(item.path as any))} style={({ pressed }) => [styles.navItem, active && { backgroundColor: colors.card, borderColor: colors.border }, pressed && styles.pressed]} accessibilityState={{ selected: active }} accessibilityLabel={item.label}><Ionicons name={item.icon} size={18} color={active ? colors.indigo : colors.muted} /><Text style={[styles.navText, { color: active ? colors.onSurface : colors.muted }]}>{item.label}</Text></Pressable>; })}
       </View> : <View style={{ flex: 1 }} />}
 
       <View style={styles.actions}>
-        <Pressable onPress={() => tap(() => setSearchOpen(true))} style={({ pressed }) => [styles.searchAction, { backgroundColor: colors.surface2, borderColor: colors.border }, pressed && styles.pressed]} accessibilityLabel="Search UniPool" accessibilityHint="Keyboard shortcut Command K or Control K">
-          <Ionicons name="search" size={19} color={colors.indigo} />
-          {showActionText ? <Text style={[styles.actionText, { color: colors.onSurface }]}>Search</Text> : null}
-        </Pressable>
-        <Pressable onPress={() => tap(() => router.push("/post-request" as any))} style={({ pressed }) => [styles.primaryAction, { backgroundColor: colors.indigo, borderColor: colors.indigo }, pressed && styles.pressed]} accessibilityLabel="Post a trip">
-          <Ionicons name="add" size={20} color="#fff" />
-          {showActionText ? <Text style={styles.primaryActionText}>Post trip</Text> : null}
-        </Pressable>
-        <Pressable onPress={() => tap(() => router.push("/notifications" as any))} style={({ pressed }) => [styles.iconAction, { backgroundColor: colors.surface2, borderColor: colors.border }, pressed && styles.pressed]} accessibilityLabel={`${unread || "No"} unread notifications`}>
-          <Ionicons name={unread ? "notifications" : "notifications-outline"} size={20} color={unread ? colors.saffron : colors.indigo} />
-          {unread ? <View style={[styles.badge, { backgroundColor: colors.error }]}><Text style={styles.badgeText}>{unread > 9 ? "9+" : unread}</Text></View> : null}
-        </Pressable>
-        <Pressable onPress={() => tap(() => router.push("/(tabs)/games" as any))} style={({ pressed }) => [styles.iconAction, { backgroundColor: colors.surface2, borderColor: colors.border }, pressed && styles.pressed]} accessibilityLabel="Open time-pass games">
-          <Ionicons name="game-controller-outline" size={19} color={colors.saffron} />
-        </Pressable>
-        <Pressable onPress={() => tap(() => router.push("/settings" as any))} style={({ pressed }) => [styles.iconAction, { backgroundColor: colors.surface2, borderColor: colors.border }, pressed && styles.pressed]} accessibilityLabel="Open settings">
-          <Ionicons name="settings-outline" size={20} color={colors.indigo} />
-        </Pressable>
-        <Pressable onPress={() => tap(toggleTheme)} style={({ pressed }) => [styles.iconAction, { backgroundColor: colors.surface2, borderColor: colors.border }, pressed && styles.pressed]} accessibilityLabel={isDark ? "Switch to light theme" : "Switch to dark theme"}>
-          <Ionicons name={isDark ? "sunny-outline" : "moon-outline"} size={20} color={colors.indigo} />
-        </Pressable>
+        <Pressable onPress={() => tap(() => setSearchOpen(true))} style={({ pressed }) => [styles.searchAction, { backgroundColor: colors.surface2, borderColor: colors.border }, pressed && styles.pressed]} accessibilityLabel="Search UniPool"><Ionicons name="search" size={19} color={colors.indigo} />{showActionText ? <Text style={[styles.actionText, { color: colors.onSurface }]}>Search</Text> : null}</Pressable>
+        <Pressable onPress={() => tap(() => router.push("/post-request" as any))} style={({ pressed }) => [styles.primaryAction, { backgroundColor: colors.indigo, borderColor: colors.indigo }, pressed && styles.pressed]} accessibilityLabel="Post a trip"><Ionicons name="add" size={20} color="#fff" />{showActionText ? <Text style={styles.primaryActionText}>Post trip</Text> : null}</Pressable>
+        <Pressable onPress={() => tap(() => router.push("/notifications" as any))} style={({ pressed }) => [styles.iconAction, { backgroundColor: colors.surface2, borderColor: colors.border }, pressed && styles.pressed]} accessibilityLabel={`${unread || "No"} unread notifications`}><Ionicons name={unread ? "notifications" : "notifications-outline"} size={20} color={unread ? colors.saffron : colors.indigo} />{unread ? <View style={[styles.badge, { backgroundColor: colors.error }]}><Text style={styles.badgeText}>{unread > 9 ? "9+" : unread}</Text></View> : null}</Pressable>
+        <Pressable onPress={() => tap(() => router.push("/circles" as any))} style={({ pressed }) => [styles.iconAction, { backgroundColor: colors.surface2, borderColor: colors.border }, pressed && styles.pressed]} accessibilityLabel="Open Circles and shared expenses"><Ionicons name="wallet-outline" size={19} color={colors.saffron} /></Pressable>
+        <Pressable onPress={() => tap(() => router.push("/settings" as any))} style={({ pressed }) => [styles.iconAction, { backgroundColor: colors.surface2, borderColor: colors.border }, pressed && styles.pressed]} accessibilityLabel="Open settings"><Ionicons name="settings-outline" size={20} color={colors.indigo} /></Pressable>
+        <Pressable onPress={() => tap(toggleTheme)} style={({ pressed }) => [styles.iconAction, { backgroundColor: colors.surface2, borderColor: colors.border }, pressed && styles.pressed]} accessibilityLabel={isDark ? "Switch to light theme" : "Switch to dark theme"}><Ionicons name={isDark ? "sunny-outline" : "moon-outline"} size={20} color={colors.indigo} /></Pressable>
       </View>
     </View>
     <GlobalSearchPalette visible={searchOpen} onClose={() => setSearchOpen(false)} />
