@@ -1,15 +1,24 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { RADIUS } from "@/src/theme";
 import { useTheme } from "@/src/theme_context/ThemeContext";
 import SocialShareSheet from "@/src/components/SocialShareSheet";
+import { recordGameResult } from "@/src/utils/gameProgress";
 
 export default function GameShareButton({ game, result }: { game: string; result: string }) {
   const { colors } = useTheme();
   const [open, setOpen] = useState(false);
+  const recorded = useRef(false);
   const url = "https://uni-pool-ruddy.vercel.app/games";
   const text = `${result} on ${game} in UniPool Time-pass. Think you can beat me?`;
+
+  useEffect(() => {
+    if (recorded.current) return;
+    recorded.current = true;
+    recordGameResult(game, result).catch(() => {});
+  }, [game, result]);
+
   return <>
     <Pressable onPress={() => setOpen(true)} style={[styles.button, { borderColor: colors.border, backgroundColor: colors.surface2 }]} accessibilityLabel={`Share ${game} result`}>
       <Ionicons name="share-social-outline" size={16} color={colors.indigo} />
