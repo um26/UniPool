@@ -5,7 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { SPACING, RADIUS, FONT } from "@/src/theme";
 import { useTheme } from "@/src/theme_context/ThemeContext";
-import { api } from "@/src/api/client";
+import { sharedApi } from "@/src/api/shared";
 import { useAuth } from "@/src/auth/AuthContext";
 import ReportBlockModal from "@/src/components/ReportBlockModal";
 
@@ -35,14 +35,14 @@ export default function ChatThread() {
   const load = useCallback(async (silent = false) => {
     if (!userId) return;
     if (!silent) setLoading(true);
-    try { const incoming = await api.getThread(userId); setMsgs(incoming); if (!silent) setError(null); }
+    try { const incoming = await sharedApi.getThread(userId); setMsgs(incoming); if (!silent) setError(null); }
     catch (e: any) { if (!silent) setError(e?.message || "Couldn't load this conversation"); }
     finally { if (!silent) setLoading(false); }
   }, [userId]);
 
   const pollTypingAndPresence = useCallback(async () => {
     if (!userId) return;
-    try { const [t, p] = await Promise.all([api.getTyping(userId), api.getPresence(userId)]); setOtherTyping(Boolean(t.typing)); setPresence(p); } catch {}
+    try { const [t, p] = await Promise.all([sharedApi.getTyping(userId), sharedApi.getPresence(userId)]); setOtherTyping(Boolean(t.typing)); setPresence(p); } catch {}
   }, [userId]);
 
   useFocusEffect(useCallback(() => {
@@ -55,7 +55,7 @@ export default function ChatThread() {
   const onChangeText = (value: string) => {
     setText(value); setError(null);
     const now = Date.now();
-    if (userId && value.trim() && now - lastTypingPingRef.current > 1800) { lastTypingPingRef.current = now; api.sendTyping(userId).catch(() => {}); }
+    if (userId && value.trim() && now - lastTypingPingRef.current > 1800) { lastTypingPingRef.current = now; sharedApi.sendTyping(userId).catch(() => {}); }
   };
 
   const send = async () => {
@@ -66,7 +66,7 @@ export default function ChatThread() {
     setSending(true); setText(""); setError(null); setMsgs((prev) => [...prev, optimistic]);
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 40);
     try {
-      const sent = await api.sendMessage(userId, value);
+      const sent = await sharedApi.sendMessage(userId, value);
       setMsgs((prev) => prev.map((m) => m.message_id === localId ? sent : m));
       setTimeout(() => load(true), 300);
     } catch (e: any) {
