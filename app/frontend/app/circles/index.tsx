@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -62,7 +62,7 @@ export default function CirclesScreen() {
   const spent = Number(dashboard?.spent_paise || 0);
   const owe = Number(dashboard?.owe_paise || 0);
   const owed = Number(dashboard?.owed_to_me_paise || 0);
-  const spendable = Math.max(0, budget - spent - owe);
+  const spendable = Math.max(0, budget - spent);
 
   return <SafeAreaView style={styles.safe} edges={["top"]}><ScrollView contentContainerStyle={styles.page}>
     <View style={styles.header}><Pressable onPress={() => router.back()} style={styles.iconBtn}><Ionicons name="chevron-back" size={20} color={colors.onSurface} /></Pressable><View style={{ flex: 1 }}><Text style={styles.eyebrow}>MONEY · CIRCLES</Text><Text style={styles.title}>College money, without the chaos</Text><Text style={styles.sub}>Track shared expenses, settle friends and simplify a whole group without changing the original expense history.</Text></View></View>
@@ -74,7 +74,7 @@ export default function CirclesScreen() {
         <Metric label="You are owed" value={money(owed)} icon="arrow-down-circle-outline" colors={colors} styles={styles} good={owed > 0} />
       </View>
 
-      <View style={styles.budgetCard}><View style={styles.budgetTop}><View><Text style={styles.eyebrow}>WHAT CAN I SPEND?</Text><Text style={styles.budgetValue}>{budget ? money(spendable) : "Set a monthly budget"}</Text></View><Pressable onPress={() => { setBudgetText(budget ? String(budget / 100) : ""); setEditingBudget((v) => !v); }} style={styles.editBtn}><Ionicons name="create-outline" size={16} color={colors.indigo} /><Text style={styles.editText}>{budget ? "Edit" : "Set budget"}</Text></Pressable></View>{budget ? <Text style={styles.muted}>Budget {money(budget)} − recorded spend {money(spent)} − money you owe {money(owe)}. Money friends owe you stays separate.</Text> : <Text style={styles.muted}>Set a personal monthly discretionary budget. UniPool keeps this separate from group balances.</Text>}{editingBudget ? <View style={styles.inline}><TextInput value={budgetText} onChangeText={setBudgetText} keyboardType="decimal-pad" placeholder="Monthly budget in ₹" placeholderTextColor={colors.muted} style={styles.input} /><Pressable onPress={saveBudget} style={styles.smallPrimary}><Text style={styles.smallPrimaryText}>Save</Text></Pressable></View> : null}</View>
+      <View style={styles.budgetCard}><View style={styles.budgetTop}><View><Text style={styles.eyebrow}>WHAT CAN I SPEND?</Text><Text style={styles.budgetValue}>{budget ? money(spendable) : "Set a monthly budget"}</Text></View><Pressable onPress={() => { setBudgetText(budget ? String(budget / 100) : ""); setEditingBudget((v) => !v); }} style={styles.editBtn}><Ionicons name="create-outline" size={16} color={colors.indigo} /><Text style={styles.editText}>{budget ? "Edit" : "Set budget"}</Text></Pressable></View>{budget ? <Text style={styles.muted}>Budget {money(budget)} − your recorded share of this month's expenses {money(spent)}. Outstanding debt ({money(owe)}) and money friends owe you ({money(owed)}) stay visible separately instead of being double-counted.</Text> : <Text style={styles.muted}>Set a personal monthly discretionary budget. UniPool keeps this separate from group balances.</Text>}{editingBudget ? <View style={styles.inline}><TextInput value={budgetText} onChangeText={setBudgetText} keyboardType="decimal-pad" placeholder="Monthly budget in ₹" placeholderTextColor={colors.muted} style={styles.input} /><Pressable onPress={saveBudget} style={styles.smallPrimary}><Text style={styles.smallPrimaryText}>Save</Text></Pressable></View> : null}</View>
 
       <View style={styles.sectionHead}><View><Text style={styles.sectionTitle}>Your Circles</Text><Text style={styles.muted}>Hostel, flat, project team, fest, trip or just your friend group.</Text></View><View style={styles.actions}><Pressable onPress={() => setMode(mode === "join" ? "none" : "join")} style={styles.secondary}><Text style={styles.secondaryText}>Join</Text></Pressable><Pressable onPress={() => setMode(mode === "create" ? "none" : "create")} style={styles.primary}><Ionicons name="add" size={17} color="#fff" /><Text style={styles.primaryText}>New Circle</Text></Pressable></View></View>
 
