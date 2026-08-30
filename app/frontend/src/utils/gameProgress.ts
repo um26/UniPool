@@ -1,4 +1,5 @@
 import { storage } from "@/src/utils/storage";
+import { gamesV3Api } from "@/src/api/gamesV3";
 
 const KEY = "unipool.games.progress.v1";
 export type GameProfile = { xp: number; level: number; gamesPlayed: number; currentStreak: number; bestStreak: number; perfectRounds: number; lastPlayedDate: string | null; recent: { game: string; result: string; xp: number; at: string }[] };
@@ -10,8 +11,18 @@ function dayKey(date = new Date()) {
 }
 function previousDay(key: string) { const d = new Date(`${key}T12:00:00+05:30`); d.setDate(d.getDate() - 1); return dayKey(d); }
 function parse(raw: any): GameProfile { try { const data = typeof raw === "string" ? JSON.parse(raw) : raw; return data && typeof data === "object" ? { ...EMPTY, ...data, recent: Array.isArray(data.recent) ? data.recent : [] } : { ...EMPTY }; } catch { return { ...EMPTY }; } }
+function gameKey(game: string) { return game.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "time-pass"; }
 
-export async function getGameProfile(): Promise<GameProfile> { return parse(await storage.secureGet(KEY, "")); }
+export async function getGameProfile(): Promise<GameProfile> {
+  const local = parse(await storage.secureGet(KEY, ""));
+  try {
+    const remote = await gamesV3Api.summary();
+    if (remote && Number(remote.total_xp || 0) >= local.xp) {
+      return { ...local, xp: Number(remote.total_xp || local.xp), level: Number(remote.level || local.level) };
+    }
+  } catch {}
+  return local;
+}
 
 export async function recordGameResult(game: string, result: string): Promise<GameProfile> {
   const profile = await getGameProfile();
@@ -36,5 +47,6 @@ export async function recordGameResult(game: string, result: string): Promise<Ga
     recent: [{ game, result, xp: earned, at: new Date().toISOString() }, ...profile.recent].slice(0, 12),
   };
   await storage.secureSet(KEY, JSON.stringify(next));
+  gamesV3Api.record(gameKey(game), score, true).catch(() => {});
   return next;
 }

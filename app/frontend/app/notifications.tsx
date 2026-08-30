@@ -20,6 +20,16 @@ type Note = {
   source?: "supabase" | "legacy";
 };
 
+type FilterKey = "all" | "trips" | "money" | "social" | "safety" | "games";
+const FILTERS: { key: FilterKey; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: "all", label: "All", icon: "apps-outline" },
+  { key: "trips", label: "Trips", icon: "navigate-outline" },
+  { key: "money", label: "Money", icon: "wallet-outline" },
+  { key: "social", label: "Social", icon: "people-outline" },
+  { key: "safety", label: "Safety", icon: "shield-checkmark-outline" },
+  { key: "games", label: "Games", icon: "game-controller-outline" },
+];
+
 const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   match: "people-outline",
   request: "person-add-outline",
@@ -31,11 +41,13 @@ const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   games: "game-controller-outline",
   circle: "wallet-outline",
   people: "people-circle-outline",
+  safety: "shield-checkmark-outline",
   general: "sparkles-outline",
 };
 
 function categoryFor(type?: string) {
   const value = String(type || "general").toLowerCase();
+  if (value.includes("safety") || value.includes("report") || value.includes("restrict") || value.includes("block") || value.includes("trusted")) return "safety";
   if (value.includes("route")) return "saved_route";
   if (value.includes("trip") || value.includes("journey") || value.includes("waitlist")) return "trip";
   if (value.includes("chat") || value.includes("message")) return "chat";
@@ -43,9 +55,20 @@ function categoryFor(type?: string) {
   if (value.includes("match")) return "match";
   if (value.includes("rating") || value.includes("feedback")) return "rating";
   if (value.includes("game") || value.includes("streak")) return "games";
-  if (value.includes("circle") || value.includes("expense") || value.includes("settle")) return "circle";
-  if (value.includes("people") || value.includes("contact")) return "people";
+  if (value.includes("circle") || value.includes("expense") || value.includes("settle") || value.includes("payment")) return "circle";
+  if (value.includes("people") || value.includes("contact") || value.includes("invite")) return "people";
   return value in ICONS ? value : "general";
+}
+
+function belongs(note: Note, filter: FilterKey) {
+  const category = note.category || "general";
+  if (filter === "all") return true;
+  if (filter === "trips") return ["trip", "match", "request", "saved_route", "rating"].includes(category);
+  if (filter === "money") return category === "circle";
+  if (filter === "social") return ["chat", "people"].includes(category);
+  if (filter === "safety") return category === "safety";
+  if (filter === "games") return category === "games";
+  return true;
 }
 
 function relativeTime(value: string) {
@@ -66,6 +89,7 @@ export default function NotificationsScreen() {
   const loaded = useRef(false);
   const [items, setItems] = useState<Note[]>([]);
   const [unread, setUnread] = useState(0);
+  const [filter, setFilter] = useState<FilterKey>("all");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -127,6 +151,9 @@ export default function NotificationsScreen() {
     } catch { load(true); }
   };
 
+  const visible = items.filter((note) => belongs(note, filter));
+  const filteredUnread = visible.filter((note) => !note.read_at).length;
+
   return <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
     <View style={styles.header}>
       <Pressable onPress={() => router.back()} style={styles.back} accessibilityLabel="Go back"><Ionicons name="chevron-back" size={21} color={colors.onSurface} /></Pressable>
@@ -140,11 +167,12 @@ export default function NotificationsScreen() {
     >
       {error ? <Pressable onPress={() => load(true)} style={styles.errorCard}><Ionicons name="refresh" size={19} color={colors.indigo} /><Text style={styles.errorText}>{error} Tap to retry.</Text></Pressable> : null}
       <View style={styles.summary}>
-        <View><Text style={styles.summaryNum}>{unread}</Text><Text style={styles.summaryLabel}>unread</Text></View>
-        <Text style={styles.summaryCopy}>Matches, ride alerts, trip updates, Circle activity and chats can land here without waiting for the legacy travel backend.</Text>
+        <View><Text style={styles.summaryNum}>{filter === "all" ? unread : filteredUnread}</Text><Text style={styles.summaryLabel}>{filter === "all" ? "unread" : `unread ${filter}`}</Text></View>
+        <Text style={styles.summaryCopy}>Trips, Circle money, social updates, safety events and Time-pass now share one Supabase-first inbox.</Text>
       </View>
-      {items.length === 0 ? <View style={styles.empty}><Ionicons name="notifications-off-outline" size={32} color={colors.muted} /><Text style={styles.emptyTitle}>You're caught up</Text><Text style={styles.muted}>New UniPool activity will appear here.</Text></View> : <View style={styles.stack}>
-        {items.map((note) => {
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>{FILTERS.map((item) => <Pressable key={item.key} onPress={() => setFilter(item.key)} style={[styles.filter, filter === item.key && styles.filterActive]}><Ionicons name={item.icon} size={14} color={filter === item.key ? "#fff" : colors.indigo} /><Text style={[styles.filterText, filter === item.key && styles.filterTextActive]}>{item.label}</Text></Pressable>)}</ScrollView>
+      {visible.length === 0 ? <View style={styles.empty}><Ionicons name="notifications-off-outline" size={32} color={colors.muted} /><Text style={styles.emptyTitle}>{items.length ? `No ${filter} updates` : "You're caught up"}</Text><Text style={styles.muted}>{items.length ? "Try another filter or check back after new UniPool activity." : "New UniPool activity will appear here."}</Text></View> : <View style={styles.stack}>
+        {visible.map((note) => {
           const unreadNote = !note.read_at;
           const category = note.category || "general";
           return <Pressable key={note.notification_id} onPress={() => open(note)} style={({ pressed }) => [styles.note, unreadNote && styles.noteUnread, pressed && { opacity: .76 }]}>
@@ -171,10 +199,11 @@ const makeStyles = (colors: any) => StyleSheet.create({
   readAllText: { color: colors.indigo, fontSize: 11, fontWeight: "900" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
   content: { width: "100%", maxWidth: 820, alignSelf: "center", padding: SPACING.lg, paddingBottom: 120 },
-  summary: { flexDirection: "row", alignItems: "center", gap: 16, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, padding: 15, marginBottom: 14 },
+  summary: { flexDirection: "row", alignItems: "center", gap: 16, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, padding: 15, marginBottom: 10 },
   summaryNum: { color: colors.onSurface, fontSize: 26, fontWeight: "900" },
   summaryLabel: { color: colors.muted, fontSize: 9, fontWeight: "800" },
   summaryCopy: { flex: 1, color: colors.muted, fontSize: 11, lineHeight: 17 },
+  filters: { gap: 7, paddingVertical: 4, marginBottom: 12 }, filter: { minHeight: 34, paddingHorizontal: 11, borderRadius: 17, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface2, flexDirection: "row", alignItems: "center", gap: 5 }, filterActive: { backgroundColor: colors.indigo, borderColor: colors.indigo }, filterText: { color: colors.onSurface, fontSize: 9, fontWeight: "900" }, filterTextActive: { color: "#fff" },
   errorCard: { flexDirection: "row", alignItems: "center", gap: 8, borderRadius: RADIUS.md, backgroundColor: colors.surface2, padding: 11, marginBottom: 12 },
   errorText: { color: colors.onSurface, fontSize: 11, fontWeight: "700" },
   stack: { gap: 8 },
