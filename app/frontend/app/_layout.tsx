@@ -17,7 +17,7 @@ import FloatingChatLauncher from "@/src/components/FloatingChatLauncher";
 LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
 applyPremiumFontDefaults();
-const PROTECTED_ROOTS = new Set(["post-request", "games", "chat", "pool", "heatmap", "trip-receipt", "network", "settings", "notifications"]);
+const PROTECTED_ROOTS = new Set(["post-request", "games", "chat", "pool", "heatmap", "trip-receipt", "network", "settings", "notifications", "circles"]);
 
 function AuthGate() {
   const { user, loading } = useAuth();
@@ -41,6 +41,8 @@ function AuthGate() {
         <Stack.Screen name="post-request" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
         <Stack.Screen name="settings" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="notifications" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="circles/index" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="circles/[groupId]" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="games/trivia" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="games/word-scramble" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="games/airport-codes" options={{ animation: "slide_from_right" }} />
