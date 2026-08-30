@@ -1,13 +1,16 @@
 import { getToken } from "@/src/api/client";
 
-const BASE = process.env.EXPO_PUBLIC_API_BASE_URL;
+const SHARED_BASE = process.env.EXPO_PUBLIC_UNIPOOL_SHARED_API || "https://jwodrevycbzlcukkoaps.supabase.co/functions/v1/unipool-shared";
 
 async function request(path: string, options: RequestInit = {}) {
-  if (!BASE) throw new Error("UniPool API is not configured");
   const token = await getToken();
-  const response = await fetch(`${BASE}/api${path}`, {
+  const response = await fetch(`${SHARED_BASE}${path}`, {
     ...options,
-    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(options.headers || {}) },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    },
   });
   const text = await response.text();
   let data: any = null;
@@ -22,9 +25,8 @@ async function request(path: string, options: RequestInit = {}) {
 }
 
 async function capability() {
-  if (!BASE) return { available: false, version: null, status: "unconfigured" };
   try {
-    const response = await fetch(`${BASE}/health`, { cache: "no-store" });
+    const response = await fetch(`${SHARED_BASE}/health`, { cache: "no-store" });
     const data = response.ok ? await response.json() : null;
     return {
       available: Boolean(response.ok && data?.circles_version),
