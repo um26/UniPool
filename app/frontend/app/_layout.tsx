@@ -16,27 +16,19 @@ import FloatingChatLauncher from "@/src/components/FloatingChatLauncher";
 import ContextToolsLauncher from "@/src/components/ContextToolsLauncher";
 import ConsentGate from "@/src/components/ConsentGate";
 
-LogBox.ignoreAllLogs(true);
-SplashScreen.preventAutoHideAsync();
-applyPremiumFontDefaults();
-const PROTECTED_ROOTS = new Set(["post-request", "games", "chat", "pool", "trip-tools", "heatmap", "trip-receipt", "network", "settings", "notifications", "circles", "people"]);
+LogBox.ignoreAllLogs(true); SplashScreen.preventAutoHideAsync(); applyPremiumFontDefaults();
+const PROTECTED_ROOTS = new Set(["post-request", "games", "chat", "pool", "trip-tools", "heatmap", "trip-receipt", "network", "settings", "notifications", "circles", "people", "campus"]);
 const PUBLIC_ROOTS = new Set(["terms", "privacy", "faq", "community-guidelines"]);
-
 function AuthGate() {
   const { user, loading } = useAuth(); const { colors } = useTheme(); const segments = useSegments(); const router = useRouter();
-  useEffect(() => {
-    if (loading) return;
-    const inTabs = segments[0] === "(tabs)"; const root = String(segments[0] || ""); const isPublic = PUBLIC_ROOTS.has(root);
-    if (!user && (inTabs || PROTECTED_ROOTS.has(root))) router.replace("/");
-    if (user && !inTabs && !PROTECTED_ROOTS.has(root) && !isPublic) router.replace("/(tabs)");
-  }, [user, loading, segments, router]);
+  useEffect(() => { if (loading) return; const inTabs = segments[0] === "(tabs)"; const root = String(segments[0] || ""); const isPublic = PUBLIC_ROOTS.has(root); if (!user && (inTabs || PROTECTED_ROOTS.has(root))) router.replace("/"); if (user && !inTabs && !PROTECTED_ROOTS.has(root) && !isPublic) router.replace("/(tabs)"); }, [user, loading, segments, router]);
   if (loading) return <AnimatedSplash />;
   return <View style={{ flex: 1, backgroundColor: colors.surface }}>
     {user ? <WebTopBar /> : null}
     <View style={{ flex: 1 }}><Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface }, animation: "fade_from_bottom" }}>
       <Stack.Screen name="index" /><Stack.Screen name="(tabs)" />
       <Stack.Screen name="terms" options={{ animation: "slide_from_right" }} /><Stack.Screen name="privacy" options={{ animation: "slide_from_right" }} /><Stack.Screen name="faq" options={{ animation: "slide_from_right" }} /><Stack.Screen name="community-guidelines" options={{ animation: "slide_from_right" }} />
-      <Stack.Screen name="post-request" options={{ presentation: "modal", animation: "slide_from_bottom" }} /><Stack.Screen name="settings" options={{ animation: "slide_from_right" }} /><Stack.Screen name="notifications" options={{ animation: "slide_from_right" }} /><Stack.Screen name="people" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="post-request" options={{ presentation: "modal", animation: "slide_from_bottom" }} /><Stack.Screen name="settings" options={{ animation: "slide_from_right" }} /><Stack.Screen name="notifications" options={{ animation: "slide_from_right" }} /><Stack.Screen name="people" options={{ animation: "slide_from_right" }} /><Stack.Screen name="campus" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="circles/index" options={{ animation: "slide_from_right" }} /><Stack.Screen name="circles/personal" options={{ animation: "slide_from_right" }} /><Stack.Screen name="circles/[groupId]" options={{ animation: "slide_from_right" }} /><Stack.Screen name="circles/[groupId]/tools" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="games/trivia" options={{ animation: "slide_from_right" }} /><Stack.Screen name="games/word-scramble" options={{ animation: "slide_from_right" }} /><Stack.Screen name="games/airport-codes" options={{ animation: "slide_from_right" }} /><Stack.Screen name="games/destination-detective" options={{ animation: "slide_from_right" }} /><Stack.Screen name="games/travel-reveal" options={{ animation: "slide_from_right" }} /><Stack.Screen name="games/daily-challenge" options={{ animation: "slide_from_right" }} /><Stack.Screen name="games/guess-state" options={{ animation: "slide_from_right" }} /><Stack.Screen name="games/station-codes" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="chat/[userId]" options={{ animation: "slide_from_right" }} /><Stack.Screen name="chat/group/[conversationId]" options={{ animation: "slide_from_right" }} /><Stack.Screen name="pool/[poolId]" options={{ animation: "slide_from_right" }} /><Stack.Screen name="trip-tools/[poolId]" options={{ animation: "slide_from_right" }} /><Stack.Screen name="network" options={{ animation: "slide_from_right" }} /><Stack.Screen name="heatmap" options={{ animation: "slide_from_right" }} /><Stack.Screen name="trip-receipt/[poolId]" options={{ animation: "slide_from_bottom" }} />
@@ -44,8 +36,4 @@ function AuthGate() {
     {user ? <SiteFooter /> : null}{user ? <FloatingChatLauncher /> : null}{user ? <ContextToolsLauncher /> : null}{user ? <ConsentGate /> : null}
   </View>;
 }
-
-export default function RootLayout() {
-  const [loaded, error] = useIconFonts(); useEffect(() => { if (loaded || error) SplashScreen.hideAsync(); }, [loaded, error]); if (!loaded && !error) return null;
-  return <GestureHandlerRootView style={{ flex: 1 }}><SafeAreaProvider><ThemeProvider><AuthProvider><AuthGate /></AuthProvider></ThemeProvider></SafeAreaProvider></GestureHandlerRootView>;
-}
+export default function RootLayout() { const [loaded, error] = useIconFonts(); useEffect(() => { if (loaded || error) SplashScreen.hideAsync(); }, [loaded, error]); if (!loaded && !error) return null; return <GestureHandlerRootView style={{ flex: 1 }}><SafeAreaProvider><ThemeProvider><AuthProvider><AuthGate /></AuthProvider></ThemeProvider></SafeAreaProvider></GestureHandlerRootView>; }
