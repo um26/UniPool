@@ -3,12 +3,17 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-nati
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
-import { utilityApi } from "@/src/api/utility";
+import { POLICY_VERSION, utilityApi } from "@/src/api/utility";
+import { useAuth } from "@/src/auth/AuthContext";
+import { storage } from "@/src/utils/storage";
 import { RADIUS, SPACING, FONT_DISPLAY } from "@/src/theme";
 import { useTheme } from "@/src/theme_context/ThemeContext";
 
+const CONSENT_KEY_PREFIX = "unipool.policy-consent.v1";
+
 export default function PolicyConsentGate({ children, bypass = false }: { children: React.ReactNode; bypass?: boolean }) {
   const router = useRouter();
+  const { user } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [checking, setChecking] = useState(!bypass);
@@ -16,24 +21,51 @@ export default function PolicyConsentGate({ children, bypass = false }: { childr
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const localKey = useMemo(
+    () => user?.user_id ? `${CONSENT_KEY_PREFIX}.${user.user_id}.${POLICY_VERSION}` : null,
+    [user?.user_id],
+  );
+
+  const rememberLocalConsent = useCallback(async () => {
+    if (!localKey) return;
+    await storage.secureSet(localKey, JSON.stringify({ policy_version: POLICY_VERSION, accepted_at: new Date().toISOString() }));
+  }, [localKey]);
+
+  const syncConsentInBackground = useCallback(() => {
+    utilityApi.policyConsent()
+      .then((state) => state?.accepted ? null : utilityApi.recordPolicyConsent("account-gate-sync"))
+      .catch(() => null);
+  }, []);
+
   const check = useCallback(async () => {
     if (bypass) { setAccepted(true); setChecking(false); return; }
     setChecking(true); setError(null);
     try {
+      const locallyAccepted = localKey ? await storage.secureGet(localKey, null) : null;
+      if (locallyAccepted) {
+        setAccepted(true);
+        syncConsentInBackground();
+        return;
+      }
+
       const state = await utilityApi.policyConsent();
-      setAccepted(Boolean(state?.accepted));
+      const isAccepted = Boolean(state?.accepted);
+      if (isAccepted) await rememberLocalConsent();
+      setAccepted(isAccepted);
     } catch (e: any) {
       setError(e?.message || "Couldn't verify your privacy choices.");
     } finally { setChecking(false); }
-  }, [bypass]);
+  }, [bypass, localKey, rememberLocalConsent, syncConsentInBackground]);
 
   useEffect(() => { check(); }, [check]);
 
   const accept = async () => {
     setSaving(true); setError(null);
-    try { await utilityApi.recordPolicyConsent("account-gate"); setAccepted(true); }
-    catch (e: any) { setError(e?.message || "Couldn't save your consent. Please retry."); }
-    finally { setSaving(false); }
+    try {
+      await rememberLocalConsent();
+      setAccepted(true);
+      utilityApi.recordPolicyConsent("account-gate").catch(() => null);
+    } finally { setSaving(false); }
   };
 
   if (bypass || accepted) return <>{children}</>;
@@ -51,7 +83,7 @@ export default function PolicyConsentGate({ children, bypass = false }: { childr
       </View>
       {error ? <View style={styles.error}><Ionicons name="alert-circle-outline" size={16} color={colors.error} /><Text style={styles.errorText}>{error}</Text><Pressable onPress={check}><Text style={styles.retry}>Retry</Text></Pressable></View> : null}
       <Pressable disabled={saving} onPress={accept} style={[styles.accept, saving && { opacity: .65 }]}>{saving ? <ActivityIndicator color="#fff" /> : <><Ionicons name="checkmark-circle" size={18} color="#fff" /><Text style={styles.acceptText}>I agree and continue</Text></>}</Pressable>
-      <Text style={styles.fine}>Your acceptance is versioned and stored with your UniPool account. You can revisit these documents from Settings at any time.</Text>
+      <Text style={styles.fine}>Your acceptance is versioned for this account and synced to UniPool. You can revisit these documents from Settings at any time.</Text>
     </View>
   </View>;
 }
