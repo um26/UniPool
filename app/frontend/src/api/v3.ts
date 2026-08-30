@@ -1,11 +1,12 @@
 import { getToken } from "@/src/api/client";
 
 const ROOT = "https://jwodrevycbzlcukkoaps.supabase.co/functions/v1";
-type Options = RequestInit & { body?: any };
+type Options = Omit<RequestInit, "body"> & { body?: any };
 async function edge(slug: string, path: string, options: Options = {}) {
   const token = await getToken();
-  const init: RequestInit = { ...options, headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(options.headers || {}) } };
-  if (options.body !== undefined && typeof options.body !== "string") init.body = JSON.stringify(options.body);
+  const { body, ...requestOptions } = options;
+  const init: RequestInit = { ...requestOptions, headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(options.headers || {}) } };
+  if (body !== undefined) init.body = typeof body === "string" ? body : JSON.stringify(body);
   const response = await fetch(`${ROOT}/${slug}${path}`, init); const text = await response.text(); let data: any = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
   if (!response.ok) { const error: any = new Error(data?.detail || response.statusText || `Request failed (${response.status})`); error.status = response.status; error.data = data; throw error; }
