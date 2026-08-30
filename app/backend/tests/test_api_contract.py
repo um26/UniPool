@@ -20,7 +20,9 @@ def test_frontend_required_api_routes_exist():
         ("POST", "/api/pools/{pool_id}/requests"), ("GET", "/api/pools/{pool_id}/requests"),
         ("GET", "/api/requests/incoming"), ("GET", "/api/requests/mine"),
         ("PATCH", "/api/requests/{request_id}/accept"), ("PATCH", "/api/requests/{request_id}/decline"), ("DELETE", "/api/requests/{request_id}"),
-        ("GET", "/api/matches/confirmed"), ("GET", "/api/messages/conversations"),
+        ("GET", "/api/matches/confirmed"),
+        ("POST", "/api/messages"), ("GET", "/api/messages/{other_user_id}"), ("GET", "/api/messages/conversations"),
+        ("POST", "/api/messages/typing"), ("GET", "/api/messages/typing/{other_user_id}"), ("GET", "/api/users/{user_id}/presence"),
         ("POST", "/api/messages/trip/ensure/{pool_id}"), ("GET", "/api/messages/group/{conversation_id}"), ("POST", "/api/messages/group/{conversation_id}"),
         ("POST", "/api/ratings"), ("GET", "/api/ratings/user/{user_id}"), ("GET", "/api/ratings/can-rate/{user_id}"),
         ("POST", "/api/users/{user_id}/block"), ("DELETE", "/api/users/{user_id}/block"), ("GET", "/api/users/me/blocked"), ("POST", "/api/reports"),
@@ -37,6 +39,8 @@ def test_frontend_required_api_routes_exist():
         ("POST", "/api/expense-groups/join"), ("GET", "/api/expense-groups/{group_id}"),
         ("POST", "/api/expense-groups/{group_id}/members"), ("POST", "/api/expense-groups/{group_id}/expenses"),
         ("DELETE", "/api/expense-groups/{group_id}/expenses/{expense_id}"), ("POST", "/api/expense-groups/{group_id}/settlements"),
+        ("GET", "/api/personal-finance/dashboard"), ("GET", "/api/personal-transactions"), ("POST", "/api/personal-transactions"),
+        ("PATCH", "/api/personal-transactions/{transaction_id}"), ("DELETE", "/api/personal-transactions/{transaction_id}"),
     }
     missing = sorted(required - routes)
     assert not missing, "Frontend-required API routes missing:\n" + "\n".join(f"{m} {p}" for m, p in missing)
