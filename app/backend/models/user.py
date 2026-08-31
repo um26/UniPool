@@ -6,7 +6,7 @@ import re
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, EmailStr, validator
+from pydantic import BaseModel, EmailStr, field_validator
 
 
 class UserOut(BaseModel):
@@ -23,7 +23,8 @@ class UserProfileUpdate(BaseModel):
     phone: Optional[str] = None
     blood_group: Optional[str] = None
 
-    @validator("phone")
+    @field_validator("phone")
+    @classmethod
     def validate_phone(cls, value: Optional[str]):
         if value is None:
             return value
@@ -32,7 +33,8 @@ class UserProfileUpdate(BaseModel):
             raise ValueError("Phone number must contain exactly 10 digits")
         return phone
 
-    @validator("blood_group")
+    @field_validator("blood_group")
+    @classmethod
     def validate_blood_group(cls, value: Optional[str]):
         if value is None:
             return value
