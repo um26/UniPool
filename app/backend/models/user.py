@@ -2,62 +2,90 @@
 User-related Pydantic models and MongoDB document schemas.
 """
 
-from pydantic import BaseModel, Field, EmailStr
-from typing import List, Optional
+import re
 from datetime import datetime
+from typing import List, Optional
 
-# Pydantic models for request/response validation
+from pydantic import BaseModel, EmailStr, field_validator
+
+
 class UserOut(BaseModel):
-    """Public user information (safe to expose)"""
+    """Public user information (safe to expose)."""
     user_id: str
     email: EmailStr
     name: str
     picture: Optional[str] = None
 
+
 class UserProfileUpdate(BaseModel):
-    """Fields that can be updated in user profile"""
-    gender: Optional[str] = None  # "male" | "female" | "other"
+    """Fields that can be updated in a user profile."""
+    gender: Optional[str] = None
     phone: Optional[str] = None
     blood_group: Optional[str] = None
 
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, value: Optional[str]):
+        if value is None:
+            return value
+        phone = value.strip()
+        if not re.fullmatch(r"\d{10}", phone):
+            raise ValueError("Phone number must contain exactly 10 digits")
+        return phone
+
+    @field_validator("blood_group")
+    @classmethod
+    def validate_blood_group(cls, value: Optional[str]):
+        if value is None:
+            return value
+        blood_group = value.strip().upper()
+        allowed = {"A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"}
+        if blood_group not in allowed:
+            raise ValueError("Blood group must be one of A+, A-, B+, B-, AB+, AB-, O+ or O-")
+        return blood_group
+
+
 class SignupRequest(BaseModel):
-    """User signup request"""
+    """User signup request."""
     email: EmailStr
     password: str
     name: str
     username: Optional[str] = None
     turnstile_token: Optional[str] = None
 
+
 class LoginRequest(BaseModel):
-    """User login request"""
-    identifier: str  # email or username
+    """User login request."""
+    identifier: str
     password: str
     turnstile_token: Optional[str] = None
 
+
 class CollegeVerifyStart(BaseModel):
-    """Request to start college verification"""
+    """Request to start college verification."""
     college_email: EmailStr
 
+
 class CollegeVerifyConfirm(BaseModel):
-    """Request to confirm college verification with code"""
+    """Request to confirm college verification with code."""
     code: str
 
-# MongoDB document representation (for internal use)
+
 class UserDocument:
-    """MongoDB document structure for users collection"""
+    """MongoDB document structure for users collection."""
+
     @staticmethod
     def get_indexes():
-        """Define database indexes for users collection"""
         return [
             {"key": [("email", 1)], "unique": True},
             {"key": [("user_id", 1)], "unique": True},
             {"key": [("username", 1)], "unique": True, "sparse": True},
-            {"key": [("roll_number", 1)], "sparse": True}
+            {"key": [("roll_number", 1)], "sparse": True},
         ]
 
-# Response models with computed fields
+
 class UserResponse(BaseModel):
-    """Complete user response with computed fields"""
+    """Complete user response with computed fields."""
     user_id: str
     email: EmailStr
     name: str
