@@ -4,6 +4,7 @@ Contains business logic for user authentication, registration, and session manag
 """
 
 import asyncio
+import hashlib
 import os
 import sys
 from pathlib import Path
@@ -41,6 +42,8 @@ MICROSOFT_CLIENT_ID = os.environ.get("MICROSOFT_CLIENT_ID", "").strip()
 MICROSOFT_TENANT_ID = os.environ.get("MICROSOFT_TENANT_ID", "organizations").strip() or "organizations"
 _MICROSOFT_CONSUMER_TENANT = "9188040d-6c67-4c5b-b112-36a304b66dad"
 _MICROSOFT_JWKS = PyJWKClient("https://login.microsoftonline.com/common/discovery/v2.0/keys")
+_LOGIN_FAILURE_LIMIT = 8
+_LOGIN_FAILURE_WINDOW = timedelta(minutes=10)
 
 
 def _fmt_ist(dt: datetime) -> str:
@@ -53,6 +56,36 @@ def _fmt_ist(dt: datetime) -> str:
 def _is_mu_email(email: str) -> bool:
     normalized = (email or "").strip().lower()
     return normalized.endswith(f"@{MU_EMAIL_DOMAIN}") and normalized.count("@") == 1
+
+
+def _login_attempt_key(identifier: str) -> str:
+    """Hash login identifiers so throttle records do not duplicate raw emails/usernames."""
+    return hashlib.sha256(identifier.strip().casefold().encode("utf-8")).hexdigest()
+
+
+async def _check_login_throttle(identifier: str) -> str:
+    key = _login_attempt_key(identifier)
+    now = datetime.now(timezone.utc)
+    await db.auth_login_attempts.delete_many({"expires_at": {"$lte": now}})
+    attempt = await db.auth_login_attempts.find_one({"key": key}, {"_id": 0, "count": 1, "expires_at": 1})
+    if attempt and int(attempt.get("count") or 0) >= _LOGIN_FAILURE_LIMIT:
+        expires = attempt.get("expires_at")
+        if expires and _ensure_aware(expires) > now:
+            raise Exception("Too many login attempts. Try again in a few minutes.")
+    return key
+
+
+async def _record_login_failure(key: str) -> None:
+    now = datetime.now(timezone.utc)
+    await db.auth_login_attempts.update_one(
+        {"key": key},
+        {
+            "$inc": {"count": 1},
+            "$set": {"updated_at": now},
+            "$setOnInsert": {"created_at": now, "expires_at": now + _LOGIN_FAILURE_WINDOW},
+        },
+        upsert=True,
+    )
 
 
 def microsoft_sign_in_config() -> Dict[str, Any]:
@@ -82,13 +115,8 @@ async def verify_turnstile(token: Optional[str], remote_ip: Optional[str]) -> bo
 
 
 async def signup_user(body: SignupRequest) -> Dict[str, Any]:
-    """Register a new personal-email user with email and password."""
+    """Register a new user with any valid email address and password."""
     email = str(body.email).strip().lower()
-    if _is_mu_email(email):
-        # Official college mail must prove mailbox ownership before account
-        # creation. This also prevents callers bypassing the OTP UI by hitting
-        # the legacy signup endpoint directly.
-        raise Exception("Verify your Mahindra University email with the OTP signup flow")
 
     if await db.users.find_one({"email": email}, {"_id": 0}):
         raise Exception("An account with this email already exists")
@@ -121,14 +149,17 @@ async def signup_user(body: SignupRequest) -> Dict[str, Any]:
 async def login_user(body: LoginRequest) -> Dict[str, Any]:
     """Authenticate a user with email/username and password."""
     identifier = body.identifier.strip()
+    throttle_key = await _check_login_throttle(identifier)
     user = await db.users.find_one(
         {"$or": [{"email": identifier.lower()}, {"username": identifier}]},
         {"_id": 0}
     )
 
     if not user or not user.get("password_hash") or not _verify_password(body.password, user["password_hash"]):
+        await _record_login_failure(throttle_key)
         raise Exception("Incorrect email/username or password")
 
+    await db.auth_login_attempts.delete_one({"key": throttle_key})
     await db.users.update_one(
         {"user_id": user["user_id"]},
         {"$set": {"last_login": datetime.now(timezone.utc)}}
@@ -140,12 +171,7 @@ async def login_user(body: LoginRequest) -> Dict[str, Any]:
 
 
 async def google_sign_in(body: GoogleSignIn) -> Dict[str, Any]:
-    """Authenticate/register with Google as a personal UniPool account.
-
-    University verification deliberately does not happen here. Mahindra University
-    accounts are Microsoft-managed, so trusted student verification uses Microsoft
-    SSO or the mailbox OTP flow instead.
-    """
+    """Authenticate or register with Google as a regular UniPool account."""
     if not GOOGLE_CLIENT_ID:
         raise RuntimeError("Server missing GOOGLE_CLIENT_ID")
     try:
