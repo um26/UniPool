@@ -15,6 +15,7 @@ def test_frontend_required_api_routes_exist():
     routes = _routes()
     required = {
         ("POST", "/api/auth/google"), ("POST", "/api/auth/login"), ("GET", "/api/auth/me"), ("PATCH", "/api/profile"),
+        ("POST", "/api/auth/signup/college/start"), ("POST", "/api/auth/signup/college/confirm"),
         ("GET", "/api/pools"), ("POST", "/api/pools"), ("GET", "/api/pools/mine"), ("GET", "/api/pools/matches"),
         ("PATCH", "/api/pools/{pool_id}"), ("GET", "/api/pools/{pool_id}"),
         ("POST", "/api/pools/{pool_id}/requests"), ("GET", "/api/pools/{pool_id}/requests"),
