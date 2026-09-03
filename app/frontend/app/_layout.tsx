@@ -15,6 +15,7 @@ import SiteFooter from "@/src/components/SiteFooter";
 import FloatingChatLauncher from "@/src/components/FloatingChatLauncher";
 import PolicyConsentGate from "@/src/components/PolicyConsentGate";
 import CampusUtilityStrip from "@/src/components/CampusUtilityStrip";
+import FirstLoginTour from "@/src/components/FirstLoginTour";
 
 LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
@@ -100,6 +101,7 @@ function AuthGate() {
       </View>
       {user ? <SiteFooter /> : null}
       {user ? <FloatingChatLauncher /> : null}
+      {user ? <FirstLoginTour /> : null}
     </View>
   );
 
