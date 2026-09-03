@@ -39,7 +39,7 @@ const FEATURES: Feature[] = [
     icon: "navigate-circle-outline",
     eyebrow: "RIDES",
     title: "Find a ride that actually fits",
-    body: "Plan campus travel around where you are going, when you can leave and how you prefer to ride — not just a generic carpool listing.",
+    body: "Plan around your route, departure window and ride preferences instead of browsing a generic carpool list.",
     points: ["Road-aware routes and distance", "Time, cab, luggage and detour preferences", "Saved-route alerts and waitlist support"],
     accent: "#2F67D8",
   },
@@ -47,7 +47,7 @@ const FEATURES: Feature[] = [
     icon: "location-outline",
     eyebrow: "LIVE TRIPS",
     title: "Coordinate without the chaos",
-    body: "Once a trip is happening, UniPool keeps the group on the same page instead of spreading coordination across calls and random messages.",
+    body: "Once a trip starts, UniPool keeps the group on the same page instead of spreading coordination across calls and separate chats.",
     points: ["Getting ready / on my way / here / late statuses", "Explicit temporary location sharing", "Trip polls and final-fare capture"],
     accent: "#0B8F78",
   },
@@ -63,7 +63,7 @@ const FEATURES: Feature[] = [
     icon: "stats-chart-outline",
     eyebrow: "PERSONAL MONEY",
     title: "Know what you can actually spend",
-    body: "Your personal ledger is separate from what friends owe you, with practical budgeting built around your own cashflow.",
+    body: "Your personal ledger stays separate from what friends owe you, with practical budgeting built around your own cashflow.",
     points: ["Category budgets you can add, edit or delete", "Safe-to-spend per day and week", "Monthly income, spend and net cashflow"],
     accent: "#7A55C7",
   },
@@ -71,7 +71,7 @@ const FEATURES: Feature[] = [
     icon: "people-outline",
     eyebrow: "CAMPUS NETWORK",
     title: "Remember the people you travel with",
-    body: "UniPool is a campus network around real coordination — find students, save useful contacts and understand genuine shared context.",
+    body: "Find students, save useful contacts and see genuine academic or travel context you share with them.",
     points: ["Student discovery and saved people", "Mutual academic and travel context", "Circles, chats, polls and campus events"],
     accent: "#C75276",
   },
@@ -79,7 +79,7 @@ const FEATURES: Feature[] = [
     icon: "shield-checkmark-outline",
     eyebrow: "TRUST & SAFETY",
     title: "Safety features that stay explicit",
-    body: "Trip safety should be useful without pretending to know more than it does. UniPool keeps sharing opt-in and trust signals grounded in actual activity.",
+    body: "Trip safety should be useful without pretending to know more than it does. Sharing stays opt-in and trust signals come from actual activity.",
     points: ["Trusted contacts and reporting", "Temporary, user-controlled live sharing", "Structured post-trip feedback"],
     accent: "#237A4B",
   },
@@ -87,8 +87,8 @@ const FEATURES: Feature[] = [
 
 const JOURNEY_STEPS = [
   { icon: "search-outline" as IconName, n: "01", title: "Plan or find", body: "Choose a route, time and ride preferences, then find compatible campus travellers." },
-  { icon: "chatbubbles-outline" as IconName, n: "02", title: "Match & coordinate", body: "Chat, vote in trip polls and use live status or temporary location sharing when the trip starts." },
-  { icon: "receipt-outline" as IconName, n: "03", title: "Finish & settle", body: "Record the final fare, move it into a Circle when useful, settle up and leave structured trip feedback." },
+  { icon: "chatbubbles-outline" as IconName, n: "02", title: "Match and coordinate", body: "Chat, vote in trip polls and use live status or temporary location sharing when the trip starts." },
+  { icon: "receipt-outline" as IconName, n: "03", title: "Finish and settle", body: "Record the final fare, move it into a Circle when useful, settle up and leave structured trip feedback." },
 ];
 
 export default function LoginScreen() {
@@ -100,6 +100,7 @@ export default function LoginScreen() {
   const scrollRef = useRef<any>(null);
   const { width: screenWidth } = useWindowDimensions();
   const isWide = screenWidth >= 900;
+  const isPhone = screenWidth < 560;
   const travel = useSharedValue(0);
 
   const [mode, setMode] = useState<"login" | "signup">("signup");
@@ -147,6 +148,7 @@ export default function LoginScreen() {
     clearSignInError();
     if (!identifier.trim() || !password) return setLocalError("Please fill in all fields.");
     if (mode === "signup" && !name.trim()) return setLocalError("Please enter your name.");
+    if (mode === "signup" && password.length < 8) return setLocalError("Use at least 8 characters for your password.");
     if (mode === "signup" && !legalAccepted) return setLocalError("Please accept the Terms and Privacy Policy to create your account.");
 
     try {
@@ -170,37 +172,37 @@ export default function LoginScreen() {
         <View style={styles.heroShade} />
         <View style={styles.heroTint} />
 
-        <View style={styles.navWrap}>
+        <View style={[styles.navWrap, isPhone && styles.navWrapPhone]}>
           <View style={styles.logoRow}>
-            <View style={styles.logoBadge}><Ionicons name="car-sport" size={22} color={COLORS.saffron} /></View>
-            <Text style={styles.logo}>UniPool</Text>
+            <View style={[styles.logoBadge, isPhone && styles.logoBadgePhone]}><Ionicons name="car-sport" size={isPhone ? 19 : 22} color={COLORS.saffron} /></View>
+            <Text style={[styles.logo, isPhone && styles.logoPhone]}>UniPool</Text>
           </View>
-          <View style={styles.navActions}>
-            <Pressable onPress={() => scrollToAuth("login")} style={styles.navGhost}><Text style={styles.navGhostText}>Log in</Text></Pressable>
-            <Pressable onPress={() => scrollToAuth("signup")} style={styles.navPrimary}><Text style={styles.navPrimaryText}>Create account</Text></Pressable>
+          <View style={[styles.navActions, isPhone && styles.navActionsPhone]}>
+            <Pressable onPress={() => scrollToAuth("login")} style={[styles.navGhost, isPhone && styles.navGhostPhone]}><Text style={styles.navGhostText}>Log in</Text></Pressable>
+            <Pressable onPress={() => scrollToAuth("signup")} style={[styles.navPrimary, isPhone && styles.navPrimaryPhone]}><Text style={styles.navPrimaryText}>{isPhone ? "Sign up" : "Create account"}</Text></Pressable>
           </View>
         </View>
 
-        <View style={[styles.heroInner, isWide ? styles.heroInnerWide : styles.heroInnerNarrow]}>
+        <View style={[styles.heroInner, isWide ? styles.heroInnerWide : styles.heroInnerNarrow, isPhone && styles.heroInnerPhone]}>
           <View style={styles.heroCopy}>
             <View style={styles.kicker}><Ionicons name="sparkles-outline" size={15} color={COLORS.saffron} /><Text style={styles.kickerText}>BUILT FOR CAMPUS LIFE</Text></View>
-            <Text style={[styles.heroTitle, !isWide && styles.heroTitleNarrow]}>Your campus rides, trip coordination and shared money — <Text style={styles.heroTitleAccent}>together.</Text></Text>
-            <Text style={styles.heroBody}>UniPool helps students find compatible rides, coordinate the trip live, split the final fare, manage shared expenses and keep useful campus connections in one place.</Text>
+            <Text style={[styles.heroTitle, !isWide && styles.heroTitleNarrow, isPhone && styles.heroTitlePhone]}>Campus rides, trip coordination and shared money <Text style={styles.heroTitleAccent}>in one place.</Text></Text>
+            <Text style={styles.heroBody}>Find compatible rides, coordinate the trip live, settle the final fare, manage shared expenses and keep useful campus connections together.</Text>
 
             <View style={styles.heroChips}>
-              <HeroChip icon="navigate-outline" label="Find & match rides" />
+              <HeroChip icon="navigate-outline" label="Find and match rides" />
               <HeroChip icon="location-outline" label="Coordinate live" />
-              <HeroChip icon="wallet-outline" label="Split & track money" />
+              <HeroChip icon="wallet-outline" label="Split and track money" />
             </View>
 
             <View style={styles.heroCtas}>
               <Pressable onPress={() => scrollToAuth("signup")} style={styles.heroPrimaryCta}><Text style={styles.heroPrimaryCtaText}>Start with any email</Text><Ionicons name="arrow-forward" size={18} color="#10214A" /></Pressable>
-              <Pressable onPress={() => scrollRef.current?.scrollTo?.({ y: featuresOffset || 760, animated: true })} style={styles.heroSecondaryCta}><Text style={styles.heroSecondaryCtaText}>Explore what UniPool does</Text></Pressable>
+              <Pressable onPress={() => scrollRef.current?.scrollTo?.({ y: featuresOffset || 760, animated: true })} style={styles.heroSecondaryCta}><Text style={styles.heroSecondaryCtaText}>See the features</Text></Pressable>
             </View>
-            <Text style={styles.heroMicrocopy}>No made-up scores. No forced location sharing. Google is optional.</Text>
+            <Text style={styles.heroMicrocopy}>Sign up with any email. Google is optional. Location sharing stays off until you turn it on.</Text>
           </View>
 
-          <View style={[styles.authCard, !isWide && styles.authCardNarrow]}>
+          <View style={[styles.authCard, !isWide && styles.authCardNarrow, isPhone && styles.authCardPhone]}>
             <Text style={styles.authEyebrow}>{mode === "signup" ? "JOIN UNIPOOL" : "WELCOME BACK"}</Text>
             <Text style={styles.authHeading}>{mode === "signup" ? "Create your account" : "Log in to UniPool"}</Text>
             <Text style={styles.authSubheading}>{mode === "signup" ? "Use any valid email address." : "Use your email or username and password."}</Text>
@@ -212,7 +214,7 @@ export default function LoginScreen() {
 
             {mode === "signup" && <TextInput testID="signup-name" value={name} onChangeText={setName} placeholder="Full name" placeholderTextColor={AUTH_COLORS.muted} style={styles.input} autoCapitalize="words" />}
             <TextInput testID="auth-identifier" value={identifier} onChangeText={(value) => { setIdentifier(value); setLocalError(null); clearSignInError(); }} placeholder={mode === "login" ? "Email or username" : "Email address"} placeholderTextColor={AUTH_COLORS.muted} style={styles.input} autoCapitalize="none" keyboardType={mode === "signup" ? "email-address" : "default"} />
-            <TextInput testID="auth-password" value={password} onChangeText={setPassword} placeholder="Password" placeholderTextColor={AUTH_COLORS.muted} style={styles.input} secureTextEntry />
+            <TextInput testID="auth-password" value={password} onChangeText={setPassword} placeholder={mode === "signup" ? "Password (8+ characters)" : "Password"} placeholderTextColor={AUTH_COLORS.muted} style={styles.input} secureTextEntry />
 
             {mode === "signup" ? <Pressable testID="signup-legal-consent" onPress={() => setLegalAccepted((v) => !v)} style={styles.consentRow}><View style={[styles.checkbox, legalAccepted && styles.checkboxOn]}>{legalAccepted ? <Ionicons name="checkmark" size={15} color="#fff" /> : null}</View><Text style={styles.consentText}>I agree to the <Text style={styles.inlineLink} onPress={(e) => { e.stopPropagation?.(); router.push("/terms" as any); }}>Terms & Conditions</Text> and <Text style={styles.inlineLink} onPress={(e) => { e.stopPropagation?.(); router.push("/privacy" as any); }}>Privacy Policy</Text>.</Text></Pressable> : null}
             {(localError || signInError) ? <Text testID="password-auth-error" style={styles.errorText}>{localError || signInError}</Text> : null}
@@ -223,7 +225,7 @@ export default function LoginScreen() {
 
             <View style={styles.dividerRow}><View style={styles.dividerLine} /><Text style={styles.dividerText}>or Google</Text><View style={styles.dividerLine} /></View>
             {Platform.OS === "web" ? <View style={styles.googleBtnWrap}>
-              {loading ? <ActivityIndicator color={AUTH_COLORS.blue} /> : signingIn ? <View style={{ alignItems: "center" }}><ActivityIndicator color={AUTH_COLORS.blue} /><Text style={styles.signingInText}>Signing you in…</Text></View> : <><View nativeID="google-signin-container" /><Pressable testID="signin-fallback" onPress={signIn} hitSlop={8} style={{ marginTop: SPACING.sm }}><Text style={styles.fallbackLink}>Google button not showing? Tap here</Text></Pressable></>}
+              {loading ? <ActivityIndicator color={AUTH_COLORS.blue} /> : signingIn ? <View style={{ alignItems: "center" }}><ActivityIndicator color={AUTH_COLORS.blue} /><Text style={styles.signingInText}>Signing you in...</Text></View> : <><View nativeID="google-signin-container" /><Pressable testID="signin-fallback" onPress={signIn} hitSlop={8} style={{ marginTop: SPACING.sm }}><Text style={styles.fallbackLink}>Google button not showing? Tap here</Text></Pressable></>}
             </View> : <Pressable testID="google-signin-button" onPress={signIn} disabled={loading} style={({ pressed }) => [styles.googleBtn, pressed && { opacity: .85 }]}>
               {loading ? <ActivityIndicator color={AUTH_COLORS.blue} /> : <><View style={styles.gLogo}><Text style={{ fontWeight: "800", color: "#4285F4", fontSize: 18 }}>G</Text></View><Text style={styles.googleText}>Continue with Google</Text></>}
             </Pressable>}
@@ -236,18 +238,18 @@ export default function LoginScreen() {
 
       <View style={styles.promiseStrip}>
         <View style={styles.promiseInner}>
-          <PromiseItem icon="car-sport-outline" title="One trip flow" body="Plan → match → coordinate → settle" />
+          <PromiseItem icon="car-sport-outline" title="One trip flow" body="Plan, match, coordinate and settle" />
           <PromiseItem icon="people-circle-outline" title="Campus context" body="People, Circles, events and shared travel" />
           <PromiseItem icon="shield-checkmark-outline" title="Explicit safety" body="Temporary sharing and grounded feedback" />
-          <PromiseItem icon="wallet-outline" title="Two money views" body="Shared Circle debts + your personal budget" />
+          <PromiseItem icon="wallet-outline" title="Two money views" body="Shared Circle debts plus your personal budget" />
         </View>
       </View>
 
       <View style={styles.featuresSection} onLayout={(event) => setFeaturesOffset(event.nativeEvent.layout.y)}>
         <View style={styles.sectionInner}>
           <Text style={styles.lightEyebrow}>WHAT YOU CAN DO TODAY</Text>
-          <Text style={styles.lightTitle}>More than carpooling.</Text>
-          <Text style={styles.lightLead}>UniPool is designed around the messy parts that happen before, during and after a student trip — and the shared campus life around it.</Text>
+          <Text style={styles.lightTitle}>Rides are only the start.</Text>
+          <Text style={styles.lightLead}>Plan the ride, coordinate it, settle the fare and keep the campus connections you want to use again.</Text>
 
           <View style={styles.featureGrid}>
             {FEATURES.map((feature) => <FeatureCard key={feature.title} feature={feature} wide={isWide} />)}
@@ -265,7 +267,7 @@ export default function LoginScreen() {
               <StoryBadge icon="map-outline" label="Road routing" />
               <StoryBadge icon="options-outline" label="Matching controls" />
               <StoryBadge icon="notifications-outline" label="Saved-route alerts" />
-              <StoryBadge icon="chatbubbles-outline" label="Trip polls & chat" />
+              <StoryBadge icon="chatbubbles-outline" label="Trip polls and chat" />
             </View>
           </View>
           <View style={styles.journeyCard}>
@@ -284,8 +286,8 @@ export default function LoginScreen() {
               <Pressable onPress={() => scrollToAuth("signup")} style={styles.moneyCta}><Text style={styles.moneyCtaText}>Create an account</Text><Ionicons name="arrow-forward" size={17} color="#fff" /></Pressable>
             </View>
             <View style={styles.moneyCards}>
-              <MiniProductCard icon="people-outline" eyebrow="CIRCLES" title="For money with other people" lines={["Split shared expenses", "Recurring bills & reminders", "Settlements, comments & records"]} />
-              <MiniProductCard icon="stats-chart-outline" eyebrow="PERSONAL MONEY" title="For your own spending" lines={["Category budgets", "Safe-to-spend day / week", "Income, spend & cashflow"]} />
+              <MiniProductCard icon="people-outline" eyebrow="CIRCLES" title="For money with other people" lines={["Split shared expenses", "Recurring bills and reminders", "Settlements, comments and records"]} />
+              <MiniProductCard icon="stats-chart-outline" eyebrow="PERSONAL MONEY" title="For your own spending" lines={["Category budgets", "Safe-to-spend day / week", "Income, spend and cashflow"]} />
             </View>
           </View>
         </View>
@@ -294,12 +296,12 @@ export default function LoginScreen() {
       <View style={styles.safetySection}>
         <View style={[styles.sectionInner, styles.safetyInner]}>
           <View style={styles.safetyIcon}><Ionicons name="shield-checkmark" size={32} color="#BDEBCB" /></View>
-          <Text style={styles.safetyEyebrow}>TRUST WITHOUT THE THEATRE</Text>
+          <Text style={styles.safetyEyebrow}>TRUST YOU CAN UNDERSTAND</Text>
           <Text style={styles.safetyTitle}>Useful signals, not a mysterious public score.</Text>
           <Text style={styles.safetyLead}>See real shared context and structured feedback from completed trips. Live location sharing is temporary and opt-in. Trusted contacts and reporting stay available without pretending UniPool is an emergency service.</Text>
           <View style={styles.safetyPills}>
             <SafetyPill text="Structured punctuality feedback" />
-            <SafetyPill text="Coordination & behaviour feedback" />
+            <SafetyPill text="Coordination and behaviour feedback" />
             <SafetyPill text="Trusted contacts" />
             <SafetyPill text="Explicit temporary sharing" />
           </View>
@@ -310,12 +312,12 @@ export default function LoginScreen() {
         <View style={styles.sectionInner}>
           <Text style={styles.lightEyebrow}>CAMPUS BEYOND THE RIDE</Text>
           <Text style={styles.lightTitle}>The useful extras stay connected.</Text>
-          <Text style={styles.lightLead}>Discover students, save people you may travel with again, coordinate inside Circles, RSVP to campus events — and kill time with lightweight games while you wait.</Text>
+          <Text style={styles.lightLead}>Discover students, save people you may travel with again, coordinate inside Circles, RSVP to campus events, and play lightweight games while you wait.</Text>
           <View style={styles.extrasGrid}>
             <ExtraCard icon="people-outline" title="People" body="Search students, save useful contacts and see mutual campus or travel context." />
             <ExtraCard icon="calendar-outline" title="Campus events" body="See campus events and RSVP Going or Interested from Campus Home." />
             <ExtraCard icon="chatbubble-ellipses-outline" title="Circle coordination" body="Group chat, polls, shared ride links and recurring bills around the same group." />
-            <ExtraCard icon="game-controller-outline" title="Time-pass" body="XP and weekly game leaderboards for fun — kept separate from trust and ride matching." />
+            <ExtraCard icon="game-controller-outline" title="Time-pass" body="XP and weekly game leaderboards for fun. They do not affect trust or ride matching." />
           </View>
         </View>
       </View>
@@ -324,7 +326,7 @@ export default function LoginScreen() {
         <View style={styles.finalCtaInner}>
           <View>
             <Text style={styles.finalEyebrow}>READY WHEN YOU ARE</Text>
-            <Text style={styles.finalTitle}>Give yourself fewer things to coordinate manually.</Text>
+            <Text style={styles.finalTitle}>Keep the trip in one place from planning to settlement.</Text>
             <Text style={styles.finalLead}>Create a UniPool account with any valid email, or use Google if you prefer.</Text>
           </View>
           <View style={styles.finalButtons}>
@@ -393,23 +395,31 @@ const styles = StyleSheet.create({
   heroShade: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(2,11,29,0.74)" },
   heroTint: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(22,55,126,0.18)" },
   navWrap: { width: "100%", maxWidth: 1180, alignSelf: "center", paddingHorizontal: 24, paddingTop: 24, flexDirection: "row", alignItems: "center", justifyContent: "space-between", zIndex: 6 },
+  navWrapPhone: { paddingHorizontal: 14, paddingTop: 16 },
   logoRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   logoBadge: { width: 42, height: 42, borderRadius: 21, backgroundColor: "rgba(7,23,53,0.5)", borderWidth: 1.2, borderColor: "rgba(255,211,107,0.72)", alignItems: "center", justifyContent: "center" },
+  logoBadgePhone: { width: 36, height: 36, borderRadius: 18 },
   logo: { fontSize: 28, fontWeight: "800", color: "#fff", letterSpacing: .2, fontFamily: FONT_DISPLAY },
+  logoPhone: { fontSize: 23 },
   navActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  navActionsPhone: { gap: 2 },
   navGhost: { minHeight: 40, paddingHorizontal: 15, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  navGhostPhone: { paddingHorizontal: 9, minHeight: 36 },
   navGhostText: { color: "#E8EEFC", fontWeight: "800", fontSize: 13 },
   navPrimary: { minHeight: 40, paddingHorizontal: 16, borderRadius: 20, backgroundColor: COLORS.saffron, alignItems: "center", justifyContent: "center" },
+  navPrimaryPhone: { minHeight: 36, paddingHorizontal: 12 },
   navPrimaryText: { color: "#10214A", fontWeight: "900", fontSize: 13 },
 
   heroInner: { width: "100%", maxWidth: 1180, alignSelf: "center", paddingHorizontal: 24, paddingTop: 72, zIndex: 4, gap: 42 },
   heroInnerWide: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   heroInnerNarrow: { flexDirection: "column", paddingTop: 50 },
+  heroInnerPhone: { paddingHorizontal: 14, paddingTop: 38, gap: 30 },
   heroCopy: { flex: 1, maxWidth: 650 },
   kicker: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 7, borderRadius: 20, borderWidth: 1, borderColor: "rgba(255,179,77,0.36)", backgroundColor: "rgba(255,179,77,0.08)", paddingHorizontal: 12, paddingVertical: 7 },
   kickerText: { color: "#FFD29B", fontSize: 11, fontWeight: "900", letterSpacing: 1.1 },
   heroTitle: { marginTop: 20, color: "#F9FBFF", fontFamily: FONT_DISPLAY, fontWeight: "800", fontSize: 52, lineHeight: 59, letterSpacing: -.7 },
   heroTitleNarrow: { fontSize: 38, lineHeight: 44 },
+  heroTitlePhone: { fontSize: 33, lineHeight: 39 },
   heroTitleAccent: { color: COLORS.saffron },
   heroBody: { color: "#CBD6E8", fontSize: 17, lineHeight: 27, marginTop: 18, maxWidth: 620 },
   heroChips: { flexDirection: "row", flexWrap: "wrap", gap: 9, marginTop: 24 },
@@ -425,6 +435,7 @@ const styles = StyleSheet.create({
 
   authCard: { width: 400, borderRadius: 28, borderWidth: 1, borderColor: "rgba(255,255,255,0.18)", backgroundColor: "rgba(5,18,43,0.86)", padding: 24, shadowColor: "#000", shadowOpacity: .24, shadowRadius: 24, shadowOffset: { width: 0, height: 12 } },
   authCardNarrow: { width: "100%", maxWidth: 520, alignSelf: "center" },
+  authCardPhone: { padding: 18, borderRadius: 22 },
   authEyebrow: { color: COLORS.saffron, fontSize: 10, fontWeight: "900", letterSpacing: 1.2 },
   authHeading: { color: AUTH_COLORS.text, fontSize: 24, lineHeight: 30, fontWeight: "800", marginTop: 7, fontFamily: FONT_DISPLAY },
   authSubheading: { color: AUTH_COLORS.muted, fontSize: 12, lineHeight: 18, marginTop: 5 },
