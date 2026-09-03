@@ -16,6 +16,7 @@ import FloatingChatLauncher from "@/src/components/FloatingChatLauncher";
 import PolicyConsentGate from "@/src/components/PolicyConsentGate";
 import CampusUtilityStrip from "@/src/components/CampusUtilityStrip";
 import FirstLoginTour from "@/src/components/FirstLoginTour";
+import PasswordSetupPrompt from "@/src/components/PasswordSetupPrompt";
 
 LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
@@ -42,19 +43,17 @@ function AuthGate() {
     // maintaining a fragile allow-list every time a new authenticated screen is added.
     if (!user && !isPublic && !isLanding) {
       router.replace("/");
-      return;
     }
 
-    // Signed-in users only need redirecting away from the public landing screen.
-    // Every real Expo Router screen is otherwise allowed to render normally.
-    if (user && isLanding) router.replace("/(tabs)");
+    // Signed-in users are intentionally allowed to remain on the landing page.
+    // The landing page is the product front door even when a cached session exists.
   }, [user, loading, isPublic, isLanding, router]);
 
   if (loading) return <AnimatedSplash />;
 
   const shell = (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      {user ? <WebTopBar /> : null}
+      {user && !isLanding ? <WebTopBar /> : null}
       {user && onHome ? <CampusUtilityStrip /> : null}
       <View style={{ flex: 1 }}>
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface }, animation: "fade_from_bottom" }}>
@@ -99,9 +98,10 @@ function AuthGate() {
           <Stack.Screen name="trip-receipt/[poolId]" options={{ animation: "slide_from_bottom" }} />
         </Stack>
       </View>
-      {user ? <SiteFooter /> : null}
-      {user ? <FloatingChatLauncher /> : null}
+      {user && !isLanding ? <SiteFooter /> : null}
+      {user && !isLanding ? <FloatingChatLauncher /> : null}
       {user ? <FirstLoginTour /> : null}
+      {user ? <PasswordSetupPrompt /> : null}
     </View>
   );
 
