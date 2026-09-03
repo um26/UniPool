@@ -4,6 +4,7 @@ Contains business logic for user authentication, registration, and session manag
 """
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -18,7 +19,7 @@ from helpers.auth_helper import (
 )
 from helpers.roll_number_decoder import decode_roll_number
 from models.user import UserOut, SignupRequest, LoginRequest
-from models.auth import GoogleSignIn
+from models.auth import GoogleSignIn, MicrosoftSignIn
 from config.settings import GOOGLE_CLIENT_ID
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
@@ -26,6 +27,8 @@ from cachecontrol import CacheControl
 import requests as requests_lib
 import logging
 import httpx
+import jwt
+from jwt import PyJWKClient
 from datetime import datetime, timezone, timedelta
 from config.settings import TURNSTILE_SECRET_KEY
 
@@ -34,6 +37,10 @@ logger = logging.getLogger("unipool.auth")
 IST = timezone(timedelta(hours=5, minutes=30))
 _GOOGLE_REQUEST = google_requests.Request(session=CacheControl(requests_lib.Session()))
 MU_EMAIL_DOMAIN = "mahindrauniversity.edu.in"
+MICROSOFT_CLIENT_ID = os.environ.get("MICROSOFT_CLIENT_ID", "").strip()
+MICROSOFT_TENANT_ID = os.environ.get("MICROSOFT_TENANT_ID", "organizations").strip() or "organizations"
+_MICROSOFT_CONSUMER_TENANT = "9188040d-6c67-4c5b-b112-36a304b66dad"
+_MICROSOFT_JWKS = PyJWKClient("https://login.microsoftonline.com/common/discovery/v2.0/keys")
 
 
 def _fmt_ist(dt: datetime) -> str:
@@ -46,6 +53,15 @@ def _fmt_ist(dt: datetime) -> str:
 def _is_mu_email(email: str) -> bool:
     normalized = (email or "").strip().lower()
     return normalized.endswith(f"@{MU_EMAIL_DOMAIN}") and normalized.count("@") == 1
+
+
+def microsoft_sign_in_config() -> Dict[str, Any]:
+    """Public Microsoft SSO bootstrap data. Client IDs are not secrets."""
+    return {
+        "enabled": bool(MICROSOFT_CLIENT_ID),
+        "client_id": MICROSOFT_CLIENT_ID or None,
+        "tenant": MICROSOFT_TENANT_ID,
+    }
 
 
 async def verify_turnstile(token: Optional[str], remote_ip: Optional[str]) -> bool:
@@ -92,6 +108,7 @@ async def signup_user(body: SignupRequest) -> Dict[str, Any]:
         "password_hash": _hash_password(body.password),
         "gender": None,
         "phone": None,
+        "onboarding_completed": False,
         "created_at": datetime.now(timezone.utc),
         "last_login": datetime.now(timezone.utc),
     })
@@ -123,7 +140,12 @@ async def login_user(body: LoginRequest) -> Dict[str, Any]:
 
 
 async def google_sign_in(body: GoogleSignIn) -> Dict[str, Any]:
-    """Authenticate/register with Google and auto-verify a trusted MU mailbox."""
+    """Authenticate/register with Google as a personal UniPool account.
+
+    University verification deliberately does not happen here. Mahindra University
+    accounts are Microsoft-managed, so trusted student verification uses Microsoft
+    SSO or the mailbox OTP flow instead.
+    """
     if not GOOGLE_CLIENT_ID:
         raise RuntimeError("Server missing GOOGLE_CLIENT_ID")
     try:
@@ -145,39 +167,127 @@ async def google_sign_in(body: GoogleSignIn) -> Dict[str, Any]:
     email = email.strip().lower()
     name = idinfo.get("name") or email.split("@", 1)[0]
     picture = idinfo.get("picture")
+    return await _create_session_for_user(email, name, picture)
 
-    decoded = None
-    if _is_mu_email(email):
-        decoded = decode_roll_number(email.split("@", 1)[0])
-        if not decoded:
-            raise ValueError("Couldn't recognize your Mahindra University roll number from this Google account")
 
-        existing_identity = await db.users.find_one(
-            {
-                "roll_number": decoded["roll_number"],
-                "college_verified": True,
-                "email": {"$ne": email},
-            },
-            {"_id": 0, "user_id": 1},
+async def _verify_microsoft_token(body: MicrosoftSignIn) -> dict:
+    if not MICROSOFT_CLIENT_ID:
+        raise RuntimeError("Microsoft sign-in is not configured")
+
+    try:
+        unverified = jwt.decode(body.id_token, options={"verify_signature": False})
+        tenant_id = str(unverified.get("tid") or "").strip().lower()
+        if not tenant_id:
+            raise ValueError("Microsoft token is missing its tenant")
+        if tenant_id == _MICROSOFT_CONSUMER_TENANT:
+            raise ValueError("Use your Mahindra University work or school Microsoft account")
+        if MICROSOFT_TENANT_ID.lower() not in {"organizations", "common"} and tenant_id != MICROSOFT_TENANT_ID.lower():
+            raise ValueError("This Microsoft account is not from the configured university tenant")
+
+        signing_key = await asyncio.to_thread(_MICROSOFT_JWKS.get_signing_key_from_jwt, body.id_token)
+        claims = jwt.decode(
+            body.id_token,
+            signing_key.key,
+            algorithms=["RS256"],
+            audience=MICROSOFT_CLIENT_ID,
+            issuer=f"https://login.microsoftonline.com/{tenant_id}/v2.0",
+            options={"require": ["exp", "iat", "iss", "aud", "tid", "oid", "nonce"]},
         )
-        if existing_identity:
-            raise ValueError("This college identity is already linked to another UniPool account")
+    except ValueError:
+        raise
+    except Exception as exc:
+        logger.warning("Microsoft token verification failed: %s", exc)
+        raise ValueError("Invalid Microsoft sign-in token") from exc
 
-    result = await _create_session_for_user(email, name, picture)
+    if not body.nonce or not __import__('hmac').compare_digest(str(claims.get("nonce") or ""), body.nonce):
+        raise ValueError("Microsoft sign-in session could not be verified")
+    return claims
 
-    if decoded:
-        verified_fields = {
+
+async def microsoft_sign_in(body: MicrosoftSignIn) -> Dict[str, Any]:
+    """Authenticate an official MU Microsoft account and verify student identity."""
+    claims = await _verify_microsoft_token(body)
+    email = str(claims.get("preferred_username") or claims.get("email") or "").strip().lower()
+    if not _is_mu_email(email):
+        raise ValueError(f"Use your @{MU_EMAIL_DOMAIN} Microsoft university account")
+
+    decoded = decode_roll_number(email.split("@", 1)[0])
+    if not decoded:
+        raise ValueError("Couldn't recognize your Mahindra University roll number from this Microsoft account")
+
+    tenant_id = str(claims.get("tid") or "").strip().lower()
+    object_id = str(claims.get("oid") or "").strip().lower()
+    name = str(claims.get("name") or email.split("@", 1)[0]).strip()
+
+    existing_identity = await db.users.find_one(
+        {
+            "roll_number": decoded["roll_number"],
             "college_verified": True,
-            "college_email": email,
-            **decoded,
-        }
-        await db.users.update_one(
-            {"user_id": result["user"]["user_id"]},
-            {"$set": verified_fields},
-        )
-        result["user"] = _with_admin_flag({**result["user"], **verified_fields})
+            "email": {"$ne": email},
+            "$or": [
+                {"microsoft_oid": {"$ne": object_id}},
+                {"microsoft_tid": {"$ne": tenant_id}},
+            ],
+        },
+        {"_id": 0, "user_id": 1},
+    )
+    if existing_identity:
+        raise ValueError("This college identity is already linked to another UniPool account")
 
+    linked = await db.users.find_one(
+        {"microsoft_oid": object_id, "microsoft_tid": tenant_id},
+        {"_id": 0, "password_hash": 0},
+    )
+    if linked:
+        user_id = linked["user_id"]
+        if linked.get("email") != email:
+            email_owner = await db.users.find_one({"email": email, "user_id": {"$ne": user_id}}, {"_id": 0, "user_id": 1})
+            if email_owner:
+                raise ValueError("This university email is already linked to another UniPool account")
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {
+                "email": email,
+                "name": name,
+                "last_login": datetime.now(timezone.utc),
+                "college_verified": True,
+                "college_email": email,
+                "microsoft_oid": object_id,
+                "microsoft_tid": tenant_id,
+                **decoded,
+            }},
+        )
+        session_token = await _create_session_token(user_id)
+        user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+        return {"session_token": session_token, "user": _with_admin_flag(user_doc)}
+
+    result = await _create_session_for_user(email, name, None)
+    verified_fields = {
+        "college_verified": True,
+        "college_email": email,
+        "microsoft_oid": object_id,
+        "microsoft_tid": tenant_id,
+        **decoded,
+    }
+    await db.users.update_one(
+        {"user_id": result["user"]["user_id"]},
+        {"$set": verified_fields},
+    )
+    result["user"] = _with_admin_flag({**result["user"], **verified_fields})
     return result
+
+
+async def complete_onboarding(user_id: str) -> Dict[str, Any]:
+    """Persist completion of the one-time first-login product tour."""
+    now = datetime.now(timezone.utc)
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"onboarding_completed": True, "onboarding_completed_at": now}},
+    )
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+    if not user_doc:
+        raise ValueError("User not found")
+    return _with_admin_flag(user_doc)
 
 
 async def logout_user(session_token: str) -> bool:
