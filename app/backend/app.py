@@ -35,7 +35,7 @@ from routes import (
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("unipool")
 
-API_VERSION = "2.3.1"
+API_VERSION = "2.3.2"
 
 app = FastAPI(
     title="UniPool API",
@@ -43,12 +43,22 @@ app = FastAPI(
     version=API_VERSION,
 )
 
+# Browser access is limited to UniPool's production hosts and local development.
+# Bearer-token API clients such as native builds are not affected by CORS.
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=False,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[
+        "https://uni-pool-ruddy.vercel.app",
+        "https://uni-pool-um26s-projects-7a7e368d.vercel.app",
+        "https://uni-pool-git-main-um26s-projects-7a7e368d.vercel.app",
+        "http://localhost:3000",
+        "http://localhost:8081",
+        "http://localhost:19006",
+    ],
+    allow_origin_regex=r"https://uni-pool-[a-z0-9-]+-um26s-projects-7a7e368d\.vercel\.app",
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
 for router in (
@@ -121,6 +131,8 @@ async def startup_event():
         await db.user_sessions.create_index("session_token", unique=True)
         await db.user_sessions.create_index("user_id")
         await db.user_sessions.create_index("expires_at", expireAfterSeconds=0)
+        await db.auth_login_attempts.create_index("key", unique=True)
+        await db.auth_login_attempts.create_index("expires_at", expireAfterSeconds=0)
         await db.pools.create_index("pool_id", unique=True)
         await db.pools.create_index([("from_location", 1), ("to_location", 1), ("travel_datetime", 1)])
         await db.pools.create_index([("route_key", 1), ("status", 1), ("travel_datetime", 1)])
