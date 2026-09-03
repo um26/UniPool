@@ -5,13 +5,14 @@ from typing import Optional
 import logging
 
 from services.auth_service import (
-    signup_user, login_user, google_sign_in, logout_user, get_current_user,
-    verify_turnstile,
+    signup_user, login_user, google_sign_in, microsoft_sign_in,
+    microsoft_sign_in_config, complete_onboarding,
+    logout_user, get_current_user, verify_turnstile,
 )
 from services.college_signup_service import start_college_signup, confirm_college_signup
 from services.user_service import start_college_verification, confirm_college_verification
 from helpers.college_helper import sync_user_college_profile
-from models.auth import GoogleSignIn
+from models.auth import GoogleSignIn, MicrosoftSignIn
 from models.user import (
     SignupRequest,
     LoginRequest,
@@ -104,6 +105,43 @@ async def google_sign_in_route(body: GoogleSignIn):
     except Exception:
         logger.exception("Unexpected Google sign-in failure")
         raise HTTPException(status_code=500, detail="Google sign-in failed")
+
+
+@router.get("/microsoft/config", response_model=dict)
+async def microsoft_config_route():
+    """Return public Microsoft OAuth bootstrap settings for the SPA."""
+    return microsoft_sign_in_config()
+
+
+@router.post("/microsoft", response_model=dict)
+async def microsoft_sign_in_route(body: MicrosoftSignIn):
+    try:
+        return await _sync_result_user(await microsoft_sign_in(body))
+    except RuntimeError as e:
+        logger.error("Microsoft sign-in configuration error: %s", e)
+        raise HTTPException(status_code=503, detail=str(e))
+    except ValueError as e:
+        logger.warning("Microsoft sign-in rejected: %s", e)
+        raise HTTPException(status_code=401, detail=str(e))
+    except Exception:
+        logger.exception("Unexpected Microsoft sign-in failure")
+        raise HTTPException(status_code=500, detail="Microsoft sign-in failed")
+
+
+@router.post("/onboarding/complete", response_model=dict)
+async def onboarding_complete_route(authorization: Optional[str] = Header(None)):
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing authorization header")
+    user = await get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+    try:
+        return await sync_user_college_profile(await complete_onboarding(user["user_id"]))
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception:
+        logger.exception("Could not complete onboarding")
+        raise HTTPException(status_code=500, detail="Could not save tour completion")
 
 
 @router.get("/me", response_model=dict)

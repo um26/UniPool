@@ -165,6 +165,7 @@ async def confirm_college_signup(body: CollegeSignupConfirm) -> Dict[str, Any]:
         "blood_group": None,
         "password_hash": challenge["password_hash"],
         "college_verified": True,
+        "onboarding_completed": False,
         **decoded,
         "created_at": now,
         "last_login": now,

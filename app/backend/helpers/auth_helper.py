@@ -54,15 +54,15 @@ async def _create_session_for_user(
     )
     if existing_user:
         user_id = existing_user["user_id"]
+        fields = {
+            "name": name,
+            "last_login": datetime.now(timezone.utc),
+        }
+        if picture is not None:
+            fields["picture"] = picture
         await db.users.update_one(
             {"user_id": user_id},
-            {
-                "$set": {
-                    "name": name,
-                    "picture": picture,
-                    "last_login": datetime.now(timezone.utc),
-                }
-            },
+            {"$set": fields},
         )
     else:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
@@ -76,6 +76,7 @@ async def _create_session_for_user(
                 "gender": None,
                 "phone": None,
                 "password_hash": "",
+                "onboarding_completed": False,
                 "created_at": datetime.now(timezone.utc),
                 "last_login": datetime.now(timezone.utc),
             }

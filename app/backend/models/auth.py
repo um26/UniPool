@@ -11,6 +11,11 @@ class GoogleSignIn(BaseModel):
     id_token: str
 
 
+class MicrosoftSignIn(BaseModel):
+    id_token: str
+    nonce: str
+
+
 class SessionExchange(BaseModel):
     session_id: str
 
