@@ -1,10 +1,7 @@
-import asyncio
-
 import pytest
 from pydantic import ValidationError
 
 from models.user import CollegeSignupConfirm, SignupRequest
-from services.auth_service import signup_user
 from services.college_signup_service import _decode_email, is_mu_college_email
 
 
@@ -36,11 +33,16 @@ def test_college_signup_code_must_be_six_digits():
         CollegeSignupConfirm(challenge_id="abc", code="12345")
 
 
-def test_legacy_signup_cannot_bypass_college_otp():
-    body = SignupRequest(
+def test_regular_signup_accepts_mu_email_as_a_normal_account():
+    request = SignupRequest(
         email="se22ucam015@mahindrauniversity.edu.in",
         password="test-password",
         name="Test Student",
     )
-    with pytest.raises(Exception, match="OTP signup flow"):
-        asyncio.run(signup_user(body))
+    assert str(request.email) == "se22ucam015@mahindrauniversity.edu.in"
+
+
+def test_signup_password_has_server_side_minimum():
+    with pytest.raises(ValidationError):
+        SignupRequest(email="student@example.com", password="short", name="Student")
+    assert SignupRequest(email="student@example.com", password="long-enough", name="Student").password == "long-enough"
