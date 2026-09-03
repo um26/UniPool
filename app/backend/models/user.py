@@ -6,7 +6,7 @@ import re
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class UserOut(BaseModel):
@@ -48,10 +48,30 @@ class UserProfileUpdate(BaseModel):
 class SignupRequest(BaseModel):
     """User signup request."""
     email: EmailStr
-    password: str
-    name: str
-    username: Optional[str] = None
-    turnstile_token: Optional[str] = None
+    password: str = Field(min_length=8, max_length=128)
+    name: str = Field(min_length=1, max_length=80)
+    username: Optional[str] = Field(default=None, max_length=40)
+    turnstile_token: Optional[str] = Field(default=None, max_length=4096)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str):
+        name = re.sub(r"\s+", " ", value.strip())
+        if not name:
+            raise ValueError("Name is required")
+        return name
+
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, value: Optional[str]):
+        if value is None:
+            return value
+        username = value.strip()
+        if not username:
+            return None
+        if not re.fullmatch(r"[A-Za-z0-9._-]{3,40}", username):
+            raise ValueError("Username must be 3-40 characters using letters, numbers, dot, underscore or hyphen")
+        return username
 
 
 class CollegeSignupStart(SignupRequest):
@@ -60,7 +80,7 @@ class CollegeSignupStart(SignupRequest):
 
 class CollegeSignupConfirm(BaseModel):
     """Finish a verified college-email signup after proving mailbox ownership."""
-    challenge_id: str
+    challenge_id: str = Field(min_length=1, max_length=128)
     code: str
 
     @field_validator("code")
@@ -74,9 +94,9 @@ class CollegeSignupConfirm(BaseModel):
 
 class LoginRequest(BaseModel):
     """User login request."""
-    identifier: str
-    password: str
-    turnstile_token: Optional[str] = None
+    identifier: str = Field(min_length=1, max_length=254)
+    password: str = Field(min_length=1, max_length=128)
+    turnstile_token: Optional[str] = Field(default=None, max_length=4096)
 
 
 class CollegeVerifyStart(BaseModel):
