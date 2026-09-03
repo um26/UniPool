@@ -74,6 +74,12 @@ class SignupRequest(BaseModel):
         return username
 
 
+class PasswordSetRequest(BaseModel):
+    """Set or change the password for an authenticated account."""
+    new_password: str = Field(min_length=8, max_length=128)
+    current_password: Optional[str] = Field(default=None, max_length=128)
+
+
 class CollegeSignupStart(SignupRequest):
     """Start a verified signup using an official Mahindra University email."""
 
