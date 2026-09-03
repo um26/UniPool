@@ -39,7 +39,9 @@ export default function FirstLoginTour() {
   const [step, setStep] = useState(0);
   const [closing, setClosing] = useState(false);
 
-  const visible = user?.onboarding_completed === false;
+  // Older accounts created before onboarding was introduced may not have the
+  // field at all. Anything except an explicit true means the tour is still due.
+  const visible = Boolean(user) && user?.onboarding_completed !== true;
   const current = STEPS[step];
   const last = step === STEPS.length - 1;
   const progress = useMemo(() => `${step + 1} / ${STEPS.length}`, [step]);
