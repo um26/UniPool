@@ -28,6 +28,7 @@ type AuthCtx = {
   loading: boolean;
   signingIn: boolean;
   signInError: string | null;
+  clearSignInError: () => void;
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -95,6 +96,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [signingIn, setSigningIn] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
+
+  const clearSignInError = useCallback(() => setSignInError(null), []);
 
   const applySession = useCallback(async (sessionToken: string, nextUser: UniUser) => {
     await Promise.all([setToken(sessionToken), cacheUser(nextUser)]);
@@ -263,7 +266,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <Ctx.Provider value={{
-      user, loading, signingIn, signInError, signIn, signOut, refresh, renderGoogleButton,
+      user, loading, signingIn, signInError, clearSignInError, signIn, signOut, refresh, renderGoogleButton,
       signInWithPassword, signUpWithPassword, startCollegeSignup, confirmCollegeSignup,
     }}>
       {children}
