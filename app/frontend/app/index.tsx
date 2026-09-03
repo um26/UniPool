@@ -21,6 +21,7 @@ const AUTH_COLORS = {
   muted: "#AEBBD0",
   blue: "#8FB1FF",
   blueStrong: "#AFC6FF",
+  microsoft: "#2F7DD1",
   saffron: "#FFB34D",
   border: "rgba(255,255,255,0.24)",
   borderStrong: "rgba(143,177,255,0.55)",
@@ -32,6 +33,7 @@ const AUTH_COLORS = {
 export default function LoginScreen() {
   const {
     user, loading, signingIn, signInError, clearSignInError, signIn, renderGoogleButton,
+    microsoftEnabled, microsoftConfigLoading, signInWithMicrosoft,
     signInWithPassword, signUpWithPassword, startCollegeSignup, confirmCollegeSignup,
   } = useAuth();
   const router = useRouter();
@@ -96,6 +98,13 @@ export default function LoginScreen() {
     clearSignInError();
     setCollegeChallenge(null);
     setCollegeCode("");
+  };
+
+  const openCollegeEmailSignup = () => {
+    setMode("signup");
+    setShowPasswordForm(true);
+    setLocalError(null);
+    clearSignInError();
   };
 
   const submitPasswordForm = async () => {
@@ -185,12 +194,36 @@ export default function LoginScreen() {
           </Pressable>
           <Pressable testID="college-signup-change-email" onPress={resetCollegeChallenge} style={styles.secondaryAction}><Text style={styles.fallbackLink}>Use a different email</Text></Pressable>
         </View> : !showPasswordForm ? <>
+          <View style={styles.universityBlock}>
+            <View style={styles.universityHeadingRow}>
+              <Ionicons name="school-outline" size={18} color={AUTH_COLORS.saffron} />
+              <Text style={styles.universityLabel}>MAHINDRA UNIVERSITY ACCOUNT</Text>
+            </View>
+            {microsoftConfigLoading ? <View style={styles.configLoading}><ActivityIndicator color={AUTH_COLORS.blue} /><Text style={styles.signingInText}>Checking university sign-in…</Text></View> : microsoftEnabled ? <>
+              <Pressable testID="microsoft-signin-button" onPress={signInWithMicrosoft} disabled={signingIn} style={({ pressed }) => [styles.microsoftBtn, pressed && { opacity: .88 }, signingIn && styles.disabled]}>
+                <MicrosoftMark />
+                <Text style={styles.microsoftText}>Continue with Microsoft</Text>
+              </Pressable>
+              <Text style={styles.universityHelp}>Your verified <Text style={styles.domainStrong}>@mahindrauniversity.edu.in</Text> Microsoft account is used to verify your student identity and fill your roll, branch, school and batch automatically.</Text>
+            </> : <>
+              <Text style={styles.universityHelp}>Microsoft university sign-in is temporarily unavailable. You can still verify the same college mailbox with a one-time code.</Text>
+              <Pressable testID="college-email-signup-fallback" onPress={openCollegeEmailSignup} style={styles.emailToggleBtn}>
+                <Ionicons name="mail-unread-outline" size={18} color={AUTH_COLORS.blue} />
+                <Text style={styles.emailToggleText}>Verify with college email instead</Text>
+              </Pressable>
+            </>}
+          </View>
+
+          {(signInError && !showPasswordForm) ? <Text testID="signin-error" style={styles.errorText}>{signInError}</Text> : null}
+
+          <View style={styles.dividerRow}><View style={styles.dividerLine} /><Text style={styles.dividerText}>personal account</Text><View style={styles.dividerLine} /></View>
           {Platform.OS === "web" ? <View style={styles.googleBtnWrap}>
-            {loading ? <ActivityIndicator color={AUTH_COLORS.blue} /> : signingIn ? <View style={{ alignItems: "center" }}><ActivityIndicator color={AUTH_COLORS.blue} /><Text style={styles.signingInText}>Signing you in… this can take longer if the travel server was asleep.</Text></View> : <><View nativeID="google-signin-container" /><Pressable testID="signin-fallback" onPress={signIn} hitSlop={8} style={{ marginTop: SPACING.sm }}><Text style={styles.fallbackLink}>Button not showing? Tap here</Text></Pressable>{signInError ? <Text testID="signin-error" style={styles.errorText}>{signInError}</Text> : null}</>}
+            {loading ? <ActivityIndicator color={AUTH_COLORS.blue} /> : signingIn ? <View style={{ alignItems: "center" }}><ActivityIndicator color={AUTH_COLORS.blue} /><Text style={styles.signingInText}>Signing you in… this can take longer if the travel server was asleep.</Text></View> : <><View nativeID="google-signin-container" /><Pressable testID="signin-fallback" onPress={signIn} hitSlop={8} style={{ marginTop: SPACING.sm }}><Text style={styles.fallbackLink}>Google button not showing? Tap here</Text></Pressable></>}
           </View> : <Pressable testID="google-signin-button" onPress={signIn} disabled={loading} style={({ pressed }) => [styles.googleBtn, pressed && { opacity: .85 }]}>
             {loading ? <ActivityIndicator color={AUTH_COLORS.blue} /> : <><View style={styles.gLogo}><Text style={{ fontWeight: "800", color: "#4285F4", fontSize: 18 }}>G</Text></View><Text style={styles.googleText}>Continue with Google</Text></>}
           </Pressable>}
-          <Text style={styles.googleLegal}>A verified <Text style={styles.googleLegalStrong}>@mahindrauniversity.edu.in</Text> Google account is automatically verified as a student and its roll details are filled in. New Google accounts are subject to UniPool's <Text style={styles.inlineLink} onPress={() => router.push("/terms" as any)}>Terms</Text> and <Text style={styles.inlineLink} onPress={() => router.push("/privacy" as any)}>Privacy Policy</Text>.</Text>
+          <Text style={styles.googleLegal}>Google is a convenient personal login only. It does <Text style={styles.googleLegalStrong}>not</Text> verify Mahindra University student status. New accounts are subject to UniPool's <Text style={styles.inlineLink} onPress={() => router.push("/terms" as any)}>Terms</Text> and <Text style={styles.inlineLink} onPress={() => router.push("/privacy" as any)}>Privacy Policy</Text>.</Text>
+
           <View style={styles.dividerRow}><View style={styles.dividerLine} /><Text style={styles.dividerText}>or</Text><View style={styles.dividerLine} /></View>
           <Pressable testID="show-password-form" onPress={() => { setLocalError(null); clearSignInError(); setShowPasswordForm(true); }} style={styles.emailToggleBtn}><Ionicons name="mail-outline" size={18} color={AUTH_COLORS.blue} /><Text style={styles.emailToggleText}>Continue with email &amp; password</Text></Pressable>
         </> : <View>
@@ -208,13 +241,20 @@ export default function LoginScreen() {
           <Pressable testID="password-auth-submit" onPress={submitPasswordForm} disabled={signingIn} style={[styles.googleBtn, styles.primaryBtn, signingIn && styles.disabled]}>
             {signingIn ? <ActivityIndicator color="#fff" /> : <Text style={[styles.googleText, { color: "#fff" }]}>{submitLabel}</Text>}
           </Pressable>
-          <Pressable testID="back-to-google" onPress={() => { setShowPasswordForm(false); setLocalError(null); clearSignInError(); }} hitSlop={8} style={styles.secondaryAction}><Text style={styles.fallbackLink}>Back to Google sign-in</Text></Pressable>
+          <Pressable testID="back-to-signin-options" onPress={() => { setShowPasswordForm(false); setLocalError(null); clearSignInError(); }} hitSlop={8} style={styles.secondaryAction}><Text style={styles.fallbackLink}>Back to sign-in options</Text></Pressable>
         </View>}
 
         <View style={styles.footerRow}><Ionicons name="shield-checkmark" size={14} color={AUTH_COLORS.muted} /><Text style={styles.footerText}>Safe rides. Real people. Clear shared-money records.</Text></View>
         <BrandFooter />
       </ScrollView>
     </KeyboardAvoidingView>
+  </View>;
+}
+
+function MicrosoftMark() {
+  return <View style={styles.msMark} accessibilityLabel="Microsoft">
+    <View style={styles.msRow}><View style={[styles.msSquare, { backgroundColor: "#F35325" }]} /><View style={[styles.msSquare, { backgroundColor: "#81BC06" }]} /></View>
+    <View style={styles.msRow}><View style={[styles.msSquare, { backgroundColor: "#05A6F0" }]} /><View style={[styles.msSquare, { backgroundColor: "#FFBA08" }]} /></View>
   </View>;
 }
 
@@ -237,7 +277,18 @@ const styles = StyleSheet.create({
   bottomCard: { padding: 28, paddingBottom: 44, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)", backgroundColor: "rgba(7,23,53,0.96)" },
   heading: { fontSize: 25, fontWeight: "800", color: AUTH_COLORS.text, fontFamily: FONT_DISPLAY },
   subheading: { marginTop: 6, color: AUTH_COLORS.muted, fontSize: 15, lineHeight: 22 },
-  googleBtnWrap: { marginTop: 20, minHeight: 44, alignItems: "center", justifyContent: "center" },
+  universityBlock: { marginTop: 20, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: "rgba(255,179,77,0.35)", backgroundColor: "rgba(255,179,77,0.055)", padding: 14 },
+  universityHeadingRow: { flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 11 },
+  universityLabel: { color: AUTH_COLORS.saffron, fontSize: 11, fontWeight: "800", letterSpacing: 1 },
+  universityHelp: { color: AUTH_COLORS.muted, fontSize: 11, lineHeight: 17, marginTop: 10, textAlign: "center" },
+  domainStrong: { color: AUTH_COLORS.saffron, fontWeight: "800" },
+  configLoading: { alignItems: "center", justifyContent: "center", minHeight: 54 },
+  microsoftBtn: { minHeight: 50, borderRadius: RADIUS.md, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "rgba(255,255,255,0.7)", alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 12, paddingHorizontal: 18 },
+  microsoftText: { color: "#1F1F1F", fontSize: 15, fontWeight: "700" },
+  msMark: { width: 22, height: 22, gap: 2 },
+  msRow: { flex: 1, flexDirection: "row", gap: 2 },
+  msSquare: { flex: 1 },
+  googleBtnWrap: { marginTop: 4, minHeight: 44, alignItems: "center", justifyContent: "center" },
   googleBtn: { minHeight: 48, borderRadius: RADIUS.md, borderWidth: 1, borderColor: AUTH_COLORS.border, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 10, paddingHorizontal: 18 },
   primaryBtn: { backgroundColor: "#315CCB", marginTop: SPACING.md, borderColor: AUTH_COLORS.blue },
   disabled: { opacity: .6 },
@@ -247,9 +298,9 @@ const styles = StyleSheet.create({
   googleLegalStrong: { color: AUTH_COLORS.saffron, fontWeight: "800" },
   dividerRow: { flexDirection: "row", alignItems: "center", gap: 10, marginVertical: 18 },
   dividerLine: { flex: 1, height: 1, backgroundColor: AUTH_COLORS.border },
-  dividerText: { color: AUTH_COLORS.muted, fontSize: 12, fontWeight: "800" },
-  emailToggleBtn: { minHeight: 48, borderRadius: RADIUS.md, borderWidth: 1, borderColor: AUTH_COLORS.borderStrong, backgroundColor: AUTH_COLORS.surfaceStrong, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
-  emailToggleText: { color: AUTH_COLORS.blueStrong, fontWeight: "800" },
+  dividerText: { color: AUTH_COLORS.muted, fontSize: 11, fontWeight: "800" },
+  emailToggleBtn: { minHeight: 48, borderRadius: RADIUS.md, borderWidth: 1, borderColor: AUTH_COLORS.borderStrong, backgroundColor: AUTH_COLORS.surfaceStrong, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, paddingHorizontal: 14 },
+  emailToggleText: { color: AUTH_COLORS.blueStrong, fontWeight: "800", textAlign: "center" },
   segmentRow: { flexDirection: "row", backgroundColor: AUTH_COLORS.surface, borderRadius: RADIUS.lg, padding: 3, marginTop: 18, marginBottom: 14, borderWidth: 1, borderColor: AUTH_COLORS.border },
   segment: { flex: 1, minHeight: 42, alignItems: "center", justifyContent: "center", borderRadius: RADIUS.lg },
   segmentActive: { backgroundColor: "#315CCB" },
@@ -262,7 +313,7 @@ const styles = StyleSheet.create({
   checkboxOn: { backgroundColor: "#315CCB", borderColor: AUTH_COLORS.blue },
   consentText: { flex: 1, color: AUTH_COLORS.muted, fontSize: 11, lineHeight: 17 },
   inlineLink: { color: AUTH_COLORS.blueStrong, fontWeight: "800" },
-  errorText: { marginTop: 10, color: AUTH_COLORS.error, fontWeight: "700" },
+  errorText: { marginTop: 10, color: AUTH_COLORS.error, fontWeight: "700", textAlign: "center" },
   footerRow: { marginTop: 22, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
   footerText: { color: AUTH_COLORS.muted, fontSize: 12, fontWeight: "600" },
   fallbackLink: { color: AUTH_COLORS.blueStrong, fontWeight: "800", fontSize: 12 },
