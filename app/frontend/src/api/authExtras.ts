@@ -8,6 +8,10 @@ export type MicrosoftAuthConfig = {
   tenant: string;
 };
 
+export type PasswordStatus = {
+  has_password: boolean;
+};
+
 async function authReq(path: string, opts: RequestInit = {}) {
   if (!BASE) throw new Error("UniPool API is not configured");
   const token = await getToken();
@@ -33,6 +37,11 @@ export const authExtrasApi = {
   microsoftSignIn: (idToken: string, nonce: string) => authReq("/auth/microsoft", {
     method: "POST",
     body: JSON.stringify({ id_token: idToken, nonce }),
+  }),
+  passwordStatus: (): Promise<PasswordStatus> => authReq("/auth/password/status"),
+  setPassword: (newPassword: string, currentPassword?: string) => authReq("/auth/password", {
+    method: "POST",
+    body: JSON.stringify({ new_password: newPassword, current_password: currentPassword || undefined }),
   }),
   completeOnboarding: () => authReq("/auth/onboarding/complete", { method: "POST" }),
 };
