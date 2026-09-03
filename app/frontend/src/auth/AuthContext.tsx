@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { Platform } from "react-native";
 import { api, getToken, setToken } from "@/src/api/client";
+import { collegeSignupApi, CollegeSignupChallenge } from "@/src/api/collegeSignup";
 import { storage } from "@/src/utils/storage";
 
 export type UniUser = {
@@ -33,6 +34,8 @@ type AuthCtx = {
   renderGoogleButton: (containerId: string) => void;
   signInWithPassword: (identifier: string, password: string, turnstileToken?: string | null) => Promise<void>;
   signUpWithPassword: (email: string, password: string, name: string, username?: string, turnstileToken?: string | null) => Promise<void>;
+  startCollegeSignup: (email: string, password: string, name: string, username?: string, turnstileToken?: string | null) => Promise<CollegeSignupChallenge>;
+  confirmCollegeSignup: (challengeId: string, code: string) => Promise<void>;
 };
 
 const Ctx = createContext<AuthCtx>({} as any);
@@ -94,8 +97,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [signInError, setSignInError] = useState<string | null>(null);
 
   const applySession = useCallback(async (sessionToken: string, nextUser: UniUser) => {
-    // Persist both pieces before routing. Returning users can then restore the
-    // signed-in shell immediately even when the API host is waking up.
     await Promise.all([setToken(sessionToken), cacheUser(nextUser)]);
     setUser(nextUser);
   }, []);
@@ -144,8 +145,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(u);
       await cacheUser(u);
     } catch (e: any) {
-      // Network/cold-start failures must NOT log a remembered user out. Only
-      // an explicit auth rejection means the local session is no longer valid.
       if (e?.status === 401 || e?.status === 403) {
         setUser(null);
         await Promise.all([setToken(null), cacheUser(null)]);
@@ -158,16 +157,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let active = true;
     (async () => {
-      // Restore local auth first. This is intentionally independent of Google
-      // script loading and backend latency.
       const [token, cached] = await Promise.all([getToken(), readCachedUser()]);
       if (!active) return;
       if (token && cached) setUser(cached);
       setLoading(false);
 
-      // Start waking the API and loading GSI immediately, in parallel. A user
-      // who clicks Google after reading the landing screen should not be the
-      // request that wakes a sleeping backend.
       api.wakeBackend().catch(() => {});
       initGoogle().catch((e) => console.warn("Google script failed to load", e));
 
@@ -240,8 +234,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [applySession]);
 
+  const startCollegeSignup = useCallback(async (email: string, password: string, name: string, username?: string, turnstileToken?: string | null) => {
+    setSigningIn(true);
+    setSignInError(null);
+    try {
+      return await collegeSignupApi.start({ email, password, name, username, turnstile_token: turnstileToken });
+    } catch (e: any) {
+      setSignInError(e?.message || "Couldn't send the college verification code. Please try again.");
+      throw e;
+    } finally {
+      setSigningIn(false);
+    }
+  }, []);
+
+  const confirmCollegeSignup = useCallback(async (challengeId: string, code: string) => {
+    setSigningIn(true);
+    setSignInError(null);
+    try {
+      const res = await collegeSignupApi.confirm(challengeId, code);
+      await applySession(res.session_token, res.user);
+    } catch (e: any) {
+      setSignInError(e?.message || "Couldn't verify that code. Please try again.");
+      throw e;
+    } finally {
+      setSigningIn(false);
+    }
+  }, [applySession]);
+
   return (
-    <Ctx.Provider value={{ user, loading, signingIn, signInError, signIn, signOut, refresh, renderGoogleButton, signInWithPassword, signUpWithPassword }}>
+    <Ctx.Provider value={{
+      user, loading, signingIn, signInError, signIn, signOut, refresh, renderGoogleButton,
+      signInWithPassword, signUpWithPassword, startCollegeSignup, confirmCollegeSignup,
+    }}>
       {children}
     </Ctx.Provider>
   );
