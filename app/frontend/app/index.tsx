@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, Pressable, StyleSheet, ActivityIndicator, Dimensions, Platform, TextInput, KeyboardAvoidingView, ScrollView } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { View, Text, Pressable, StyleSheet, ActivityIndicator, Platform, TextInput, KeyboardAvoidingView, ScrollView, useWindowDimensions } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -11,9 +11,17 @@ import { COLORS, SPACING, RADIUS, FONT_DISPLAY } from "@/src/theme";
 import BrandFooter from "@/src/components/BrandFooter";
 import Turnstile from "@/src/components/Turnstile";
 
-const { width } = Dimensions.get("window");
 const HERO_URL = "https://raw.githubusercontent.com/um26/UniPool/5b90d0fd059122e21621eb2f5648da2fa64f0505/app/frontend/assets/mu-airport-hero.svg";
-const MU_POSITION = width * 0.50;
+
+type IconName = React.ComponentProps<typeof Ionicons>["name"];
+type Feature = {
+  icon: IconName;
+  eyebrow: string;
+  title: string;
+  body: string;
+  points: string[];
+  accent: string;
+};
 
 const AUTH_COLORS = {
   text: "#F7F9FF",
@@ -26,12 +34,72 @@ const AUTH_COLORS = {
   error: "#FF8591",
 };
 
+const FEATURES: Feature[] = [
+  {
+    icon: "navigate-circle-outline",
+    eyebrow: "RIDES",
+    title: "Find a ride that actually fits",
+    body: "Plan campus travel around where you are going, when you can leave and how you prefer to ride — not just a generic carpool listing.",
+    points: ["Road-aware routes and distance", "Time, cab, luggage and detour preferences", "Saved-route alerts and waitlist support"],
+    accent: "#2F67D8",
+  },
+  {
+    icon: "location-outline",
+    eyebrow: "LIVE TRIPS",
+    title: "Coordinate without the chaos",
+    body: "Once a trip is happening, UniPool keeps the group on the same page instead of spreading coordination across calls and random messages.",
+    points: ["Getting ready / on my way / here / late statuses", "Explicit temporary location sharing", "Trip polls and final-fare capture"],
+    accent: "#0B8F78",
+  },
+  {
+    icon: "wallet-outline",
+    eyebrow: "CIRCLES",
+    title: "Shared money without spreadsheets",
+    body: "Create a Circle for friends, roommates or travel groups and keep shared expenses, reminders and settlements together.",
+    points: ["Shared and recurring expenses", "Comments, reminders and settlement history", "CSV records and print-to-PDF summaries"],
+    accent: "#E58A16",
+  },
+  {
+    icon: "stats-chart-outline",
+    eyebrow: "PERSONAL MONEY",
+    title: "Know what you can actually spend",
+    body: "Your personal ledger is separate from what friends owe you, with practical budgeting built around your own cashflow.",
+    points: ["Category budgets you can add, edit or delete", "Safe-to-spend per day and week", "Monthly income, spend and net cashflow"],
+    accent: "#7A55C7",
+  },
+  {
+    icon: "people-outline",
+    eyebrow: "CAMPUS NETWORK",
+    title: "Remember the people you travel with",
+    body: "UniPool is a campus network around real coordination — find students, save useful contacts and understand genuine shared context.",
+    points: ["Student discovery and saved people", "Mutual academic and travel context", "Circles, chats, polls and campus events"],
+    accent: "#C75276",
+  },
+  {
+    icon: "shield-checkmark-outline",
+    eyebrow: "TRUST & SAFETY",
+    title: "Safety features that stay explicit",
+    body: "Trip safety should be useful without pretending to know more than it does. UniPool keeps sharing opt-in and trust signals grounded in actual activity.",
+    points: ["Trusted contacts and reporting", "Temporary, user-controlled live sharing", "Structured post-trip feedback"],
+    accent: "#237A4B",
+  },
+];
+
+const JOURNEY_STEPS = [
+  { icon: "search-outline" as IconName, n: "01", title: "Plan or find", body: "Choose a route, time and ride preferences, then find compatible campus travellers." },
+  { icon: "chatbubbles-outline" as IconName, n: "02", title: "Match & coordinate", body: "Chat, vote in trip polls and use live status or temporary location sharing when the trip starts." },
+  { icon: "receipt-outline" as IconName, n: "03", title: "Finish & settle", body: "Record the final fare, move it into a Circle when useful, settle up and leave structured trip feedback." },
+];
+
 export default function LoginScreen() {
   const {
     user, loading, signingIn, signInError, clearSignInError, signIn, renderGoogleButton,
     signInWithPassword, signUpWithPassword,
   } = useAuth();
   const router = useRouter();
+  const scrollRef = useRef<any>(null);
+  const { width: screenWidth } = useWindowDimensions();
+  const isWide = screenWidth >= 900;
   const travel = useSharedValue(0);
 
   const [mode, setMode] = useState<"login" | "signup">("signup");
@@ -42,6 +110,7 @@ export default function LoginScreen() {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const [legalAccepted, setLegalAccepted] = useState(false);
+  const [featuresOffset, setFeaturesOffset] = useState(0);
 
   useEffect(() => {
     travel.value = withRepeat(withTiming(1, { duration: 18000, easing: Easing.linear }), -1, false);
@@ -52,29 +121,25 @@ export default function LoginScreen() {
   useEffect(() => { if (user) router.replace("/(tabs)"); }, [user]);
 
   const arrivingPlaneStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(travel.value, [0.00,0.08,0.18,0.28,0.42,0.52,0.72,0.80,0.82], [0,0,1,1,1,1,1,1,0]),
+    opacity: interpolate(travel.value, [0.00,0.08,0.18,0.28,0.52,0.72,0.82], [0,0,1,1,1,1,0]),
     transform: [
-      { translateX: interpolate(travel.value, [0.08,0.18,0.28,0.40,0.52,0.62,0.72,0.80,0.82], [-140,-80,width*0.05,width*0.30,MU_POSITION,width*0.62,width*0.80,width*0.96,width*1.02]) },
-      { translateY: interpolate(travel.value, [0.08,0.18,0.28,0.40,0.52,0.62,0.72,0.80,0.82], [-110,-90,-60,-25,0,0,0,0,0]) },
-      { rotate: `${interpolate(travel.value, [0.08,0.18,0.28,0.40,0.52,0.62,0.72,0.80,0.82], [-18,-14,-8,-3,0,0,0,0,0])}deg` },
-      { scale: interpolate(travel.value, [0.08,0.52], [0.60,1]) },
+      { translateX: interpolate(travel.value, [0.08,0.18,0.32,0.52,0.72,0.82], [-140,-60,screenWidth*0.18,screenWidth*0.50,screenWidth*0.82,screenWidth+80]) },
+      { translateY: interpolate(travel.value, [0.08,0.18,0.32,0.52,0.72,0.82], [-90,-70,-35,0,0,0]) },
+      { rotate: `${interpolate(travel.value, [0.08,0.32,0.52,0.82], [-14,-7,0,0])}deg` },
+      { scale: interpolate(travel.value, [0.08,0.52], [0.68,1]) },
     ],
-  }));
-  const departingPlaneStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(travel.value, [0.75,0.77,0.80,0.88,0.96,1.00], [0,1,1,1,1,0]),
-    transform: [
-      { translateX: interpolate(travel.value, [0.75,0.77,0.80,0.84,0.88,0.92,0.96,1.00], [-100,-20,width*0.03,width*0.25,width*0.40,MU_POSITION,width*0.72,width+100]) },
-      { translateY: interpolate(travel.value, [0.75,0.84,0.88,0.92,0.96,1.00], [0,0,0,-35,-100,-180]) },
-      { rotate: `${interpolate(travel.value, [0.75,0.88,0.92,0.96,1.00], [0,0,-7,-14,-20])}deg` },
-      { scale: interpolate(travel.value, [0.75,0.96,1.00], [1,0.9,0.65]) },
-    ],
-  }));
+  }), [screenWidth]);
 
   const switchMode = (next: "login" | "signup") => {
     setMode(next);
     setLocalError(null);
     clearSignInError();
     if (next === "login") setLegalAccepted(false);
+  };
+
+  const scrollToAuth = (next: "login" | "signup" = "signup") => {
+    switchMode(next);
+    scrollRef.current?.scrollTo?.({ y: 0, animated: true });
   };
 
   const submitPasswordForm = async () => {
@@ -98,96 +163,384 @@ export default function LoginScreen() {
     }
   };
 
-  return <View style={styles.container} testID="login-screen">
-    <View style={styles.hero}>
-      <Image source={{ uri: HERO_URL }} style={StyleSheet.absoluteFill} contentFit="cover" />
-      <View style={styles.heroShade} />
-      <View style={styles.brandOverlay}>
-        <View style={styles.logoRow}><View style={styles.logoBadge}><Ionicons name="car-sport" size={25} color={COLORS.saffron} /></View><Text style={styles.logo}>UniPool</Text></View>
-        <Text style={styles.tagline}>Share the ride. Split the fare. <Text style={styles.taglineAccent}>Save the day.</Text></Text>
-      </View>
-      <Animated.View style={[styles.animatedPlane, arrivingPlaneStyle]}><Ionicons name="airplane" size={40} color="#fff" /></Animated.View>
-      <Animated.View style={[styles.animatedPlane, departingPlaneStyle]}><Ionicons name="airplane" size={40} color="#fff" /></Animated.View>
-    </View>
+  return <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.container} testID="login-screen">
+    <ScrollView ref={scrollRef} style={styles.pageScroll} contentContainerStyle={styles.pageContent} keyboardShouldPersistTaps="handled">
+      <View style={styles.hero}>
+        <Image source={{ uri: HERO_URL }} style={StyleSheet.absoluteFill} contentFit="cover" />
+        <View style={styles.heroShade} />
+        <View style={styles.heroTint} />
 
-    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ maxHeight: "62%" }}>
-      <ScrollView contentContainerStyle={styles.bottomCard} keyboardShouldPersistTaps="handled">
-        <Text style={styles.heading}>{mode === "signup" ? "Create your UniPool account" : "Welcome back"}</Text>
-        <Text style={styles.subheading}>
-          {mode === "signup"
-            ? "Sign up with any email address. Google is optional if you prefer it."
-            : "Log in with your UniPool email or username, or continue with Google."}
-        </Text>
-
-        <View style={styles.segmentRow}>
-          <Pressable testID="mode-signup" onPress={() => switchMode("signup")} style={[styles.segment, mode === "signup" && styles.segmentActive]}><Text style={[styles.segmentText, mode === "signup" && styles.segmentTextActive]}>Sign up</Text></Pressable>
-          <Pressable testID="mode-login" onPress={() => switchMode("login")} style={[styles.segment, mode === "login" && styles.segmentActive]}><Text style={[styles.segmentText, mode === "login" && styles.segmentTextActive]}>Log in</Text></Pressable>
+        <View style={styles.navWrap}>
+          <View style={styles.logoRow}>
+            <View style={styles.logoBadge}><Ionicons name="car-sport" size={22} color={COLORS.saffron} /></View>
+            <Text style={styles.logo}>UniPool</Text>
+          </View>
+          <View style={styles.navActions}>
+            <Pressable onPress={() => scrollToAuth("login")} style={styles.navGhost}><Text style={styles.navGhostText}>Log in</Text></Pressable>
+            <Pressable onPress={() => scrollToAuth("signup")} style={styles.navPrimary}><Text style={styles.navPrimaryText}>Create account</Text></Pressable>
+          </View>
         </View>
 
-        {mode === "signup" && <TextInput testID="signup-name" value={name} onChangeText={setName} placeholder="Full name" placeholderTextColor={AUTH_COLORS.muted} style={styles.input} autoCapitalize="words" />}
-        <TextInput testID="auth-identifier" value={identifier} onChangeText={(value) => { setIdentifier(value); setLocalError(null); clearSignInError(); }} placeholder={mode === "login" ? "Email or username" : "Email address"} placeholderTextColor={AUTH_COLORS.muted} style={styles.input} autoCapitalize="none" keyboardType={mode === "signup" ? "email-address" : "default"} />
-        <TextInput testID="auth-password" value={password} onChangeText={setPassword} placeholder="Password" placeholderTextColor={AUTH_COLORS.muted} style={styles.input} secureTextEntry />
+        <View style={[styles.heroInner, isWide ? styles.heroInnerWide : styles.heroInnerNarrow]}>
+          <View style={styles.heroCopy}>
+            <View style={styles.kicker}><Ionicons name="sparkles-outline" size={15} color={COLORS.saffron} /><Text style={styles.kickerText}>BUILT FOR CAMPUS LIFE</Text></View>
+            <Text style={[styles.heroTitle, !isWide && styles.heroTitleNarrow]}>Your campus rides, trip coordination and shared money — <Text style={styles.heroTitleAccent}>together.</Text></Text>
+            <Text style={styles.heroBody}>UniPool helps students find compatible rides, coordinate the trip live, split the final fare, manage shared expenses and keep useful campus connections in one place.</Text>
 
-        {mode === "signup" ? <Pressable testID="signup-legal-consent" onPress={() => setLegalAccepted((v) => !v)} style={styles.consentRow}><View style={[styles.checkbox, legalAccepted && styles.checkboxOn]}>{legalAccepted ? <Ionicons name="checkmark" size={15} color="#fff" /> : null}</View><Text style={styles.consentText}>I agree to the <Text style={styles.inlineLink} onPress={(e) => { e.stopPropagation?.(); router.push("/terms" as any); }}>Terms & Conditions</Text> and <Text style={styles.inlineLink} onPress={(e) => { e.stopPropagation?.(); router.push("/privacy" as any); }}>Privacy Policy</Text>.</Text></Pressable> : null}
-        {(localError || signInError) ? <Text testID="password-auth-error" style={styles.errorText}>{localError || signInError}</Text> : null}
-        <Turnstile onToken={setTurnstileToken} resetKey={turnstileResetKey} />
-        <Pressable testID="password-auth-submit" onPress={submitPasswordForm} disabled={signingIn} style={[styles.googleBtn, styles.primaryBtn, signingIn && styles.disabled]}>
-          {signingIn ? <ActivityIndicator color="#fff" /> : <Text style={[styles.googleText, { color: "#fff" }]}>{mode === "signup" ? "Create account" : "Log in"}</Text>}
-        </Pressable>
+            <View style={styles.heroChips}>
+              <HeroChip icon="navigate-outline" label="Find & match rides" />
+              <HeroChip icon="location-outline" label="Coordinate live" />
+              <HeroChip icon="wallet-outline" label="Split & track money" />
+            </View>
 
-        <View style={styles.dividerRow}><View style={styles.dividerLine} /><Text style={styles.dividerText}>or continue with Google</Text><View style={styles.dividerLine} /></View>
-        {Platform.OS === "web" ? <View style={styles.googleBtnWrap}>
-          {loading ? <ActivityIndicator color={AUTH_COLORS.blue} /> : signingIn ? <View style={{ alignItems: "center" }}><ActivityIndicator color={AUTH_COLORS.blue} /><Text style={styles.signingInText}>Signing you in… this can take longer if the travel server was asleep.</Text></View> : <><View nativeID="google-signin-container" /><Pressable testID="signin-fallback" onPress={signIn} hitSlop={8} style={{ marginTop: SPACING.sm }}><Text style={styles.fallbackLink}>Google button not showing? Tap here</Text></Pressable></>}
-        </View> : <Pressable testID="google-signin-button" onPress={signIn} disabled={loading} style={({ pressed }) => [styles.googleBtn, pressed && { opacity: .85 }]}>
-          {loading ? <ActivityIndicator color={AUTH_COLORS.blue} /> : <><View style={styles.gLogo}><Text style={{ fontWeight: "800", color: "#4285F4", fontSize: 18 }}>G</Text></View><Text style={styles.googleText}>Continue with Google</Text></>}
-        </Pressable>}
-        <Text style={styles.googleLegal}>Google is optional. A regular UniPool account can be created with any valid email address.</Text>
+            <View style={styles.heroCtas}>
+              <Pressable onPress={() => scrollToAuth("signup")} style={styles.heroPrimaryCta}><Text style={styles.heroPrimaryCtaText}>Start with any email</Text><Ionicons name="arrow-forward" size={18} color="#10214A" /></Pressable>
+              <Pressable onPress={() => scrollRef.current?.scrollTo?.({ y: featuresOffset || 760, animated: true })} style={styles.heroSecondaryCta}><Text style={styles.heroSecondaryCtaText}>Explore what UniPool does</Text></Pressable>
+            </View>
+            <Text style={styles.heroMicrocopy}>No made-up scores. No forced location sharing. Google is optional.</Text>
+          </View>
 
+          <View style={[styles.authCard, !isWide && styles.authCardNarrow]}>
+            <Text style={styles.authEyebrow}>{mode === "signup" ? "JOIN UNIPOOL" : "WELCOME BACK"}</Text>
+            <Text style={styles.authHeading}>{mode === "signup" ? "Create your account" : "Log in to UniPool"}</Text>
+            <Text style={styles.authSubheading}>{mode === "signup" ? "Use any valid email address." : "Use your email or username and password."}</Text>
+
+            <View style={styles.segmentRow}>
+              <Pressable testID="mode-signup" onPress={() => switchMode("signup")} style={[styles.segment, mode === "signup" && styles.segmentActive]}><Text style={[styles.segmentText, mode === "signup" && styles.segmentTextActive]}>Sign up</Text></Pressable>
+              <Pressable testID="mode-login" onPress={() => switchMode("login")} style={[styles.segment, mode === "login" && styles.segmentActive]}><Text style={[styles.segmentText, mode === "login" && styles.segmentTextActive]}>Log in</Text></Pressable>
+            </View>
+
+            {mode === "signup" && <TextInput testID="signup-name" value={name} onChangeText={setName} placeholder="Full name" placeholderTextColor={AUTH_COLORS.muted} style={styles.input} autoCapitalize="words" />}
+            <TextInput testID="auth-identifier" value={identifier} onChangeText={(value) => { setIdentifier(value); setLocalError(null); clearSignInError(); }} placeholder={mode === "login" ? "Email or username" : "Email address"} placeholderTextColor={AUTH_COLORS.muted} style={styles.input} autoCapitalize="none" keyboardType={mode === "signup" ? "email-address" : "default"} />
+            <TextInput testID="auth-password" value={password} onChangeText={setPassword} placeholder="Password" placeholderTextColor={AUTH_COLORS.muted} style={styles.input} secureTextEntry />
+
+            {mode === "signup" ? <Pressable testID="signup-legal-consent" onPress={() => setLegalAccepted((v) => !v)} style={styles.consentRow}><View style={[styles.checkbox, legalAccepted && styles.checkboxOn]}>{legalAccepted ? <Ionicons name="checkmark" size={15} color="#fff" /> : null}</View><Text style={styles.consentText}>I agree to the <Text style={styles.inlineLink} onPress={(e) => { e.stopPropagation?.(); router.push("/terms" as any); }}>Terms & Conditions</Text> and <Text style={styles.inlineLink} onPress={(e) => { e.stopPropagation?.(); router.push("/privacy" as any); }}>Privacy Policy</Text>.</Text></Pressable> : null}
+            {(localError || signInError) ? <Text testID="password-auth-error" style={styles.errorText}>{localError || signInError}</Text> : null}
+            <Turnstile onToken={setTurnstileToken} resetKey={turnstileResetKey} />
+            <Pressable testID="password-auth-submit" onPress={submitPasswordForm} disabled={signingIn} style={[styles.authSubmit, signingIn && styles.disabled]}>
+              {signingIn ? <ActivityIndicator color="#10214A" /> : <><Text style={styles.authSubmitText}>{mode === "signup" ? "Create account" : "Log in"}</Text><Ionicons name="arrow-forward" size={17} color="#10214A" /></>}
+            </Pressable>
+
+            <View style={styles.dividerRow}><View style={styles.dividerLine} /><Text style={styles.dividerText}>or Google</Text><View style={styles.dividerLine} /></View>
+            {Platform.OS === "web" ? <View style={styles.googleBtnWrap}>
+              {loading ? <ActivityIndicator color={AUTH_COLORS.blue} /> : signingIn ? <View style={{ alignItems: "center" }}><ActivityIndicator color={AUTH_COLORS.blue} /><Text style={styles.signingInText}>Signing you in…</Text></View> : <><View nativeID="google-signin-container" /><Pressable testID="signin-fallback" onPress={signIn} hitSlop={8} style={{ marginTop: SPACING.sm }}><Text style={styles.fallbackLink}>Google button not showing? Tap here</Text></Pressable></>}
+            </View> : <Pressable testID="google-signin-button" onPress={signIn} disabled={loading} style={({ pressed }) => [styles.googleBtn, pressed && { opacity: .85 }]}>
+              {loading ? <ActivityIndicator color={AUTH_COLORS.blue} /> : <><View style={styles.gLogo}><Text style={{ fontWeight: "800", color: "#4285F4", fontSize: 18 }}>G</Text></View><Text style={styles.googleText}>Continue with Google</Text></>}
+            </Pressable>}
+            <Text style={styles.googleLegal}>Google is optional. Regular email signup works with any valid email address.</Text>
+          </View>
+        </View>
+
+        <Animated.View pointerEvents="none" style={[styles.animatedPlane, arrivingPlaneStyle]}><Ionicons name="airplane" size={38} color="rgba(255,255,255,0.9)" /></Animated.View>
+      </View>
+
+      <View style={styles.promiseStrip}>
+        <View style={styles.promiseInner}>
+          <PromiseItem icon="car-sport-outline" title="One trip flow" body="Plan → match → coordinate → settle" />
+          <PromiseItem icon="people-circle-outline" title="Campus context" body="People, Circles, events and shared travel" />
+          <PromiseItem icon="shield-checkmark-outline" title="Explicit safety" body="Temporary sharing and grounded feedback" />
+          <PromiseItem icon="wallet-outline" title="Two money views" body="Shared Circle debts + your personal budget" />
+        </View>
+      </View>
+
+      <View style={styles.featuresSection} onLayout={(event) => setFeaturesOffset(event.nativeEvent.layout.y)}>
+        <View style={styles.sectionInner}>
+          <Text style={styles.lightEyebrow}>WHAT YOU CAN DO TODAY</Text>
+          <Text style={styles.lightTitle}>More than carpooling.</Text>
+          <Text style={styles.lightLead}>UniPool is designed around the messy parts that happen before, during and after a student trip — and the shared campus life around it.</Text>
+
+          <View style={styles.featureGrid}>
+            {FEATURES.map((feature) => <FeatureCard key={feature.title} feature={feature} wide={isWide} />)}
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.tripStorySection}>
+        <View style={[styles.sectionInner, styles.tripStoryInner]}>
+          <View style={styles.storyCopy}>
+            <Text style={styles.darkEyebrow}>ONE RIDE, START TO FINISH</Text>
+            <Text style={styles.darkTitle}>The trip does not end when you find a match.</Text>
+            <Text style={styles.darkLead}>UniPool follows the actual lifecycle: route discovery, compatibility, group coordination, temporary live status, final fare, shared records and post-trip feedback.</Text>
+            <View style={styles.storyBadges}>
+              <StoryBadge icon="map-outline" label="Road routing" />
+              <StoryBadge icon="options-outline" label="Matching controls" />
+              <StoryBadge icon="notifications-outline" label="Saved-route alerts" />
+              <StoryBadge icon="chatbubbles-outline" label="Trip polls & chat" />
+            </View>
+          </View>
+          <View style={styles.journeyCard}>
+            {JOURNEY_STEPS.map((step, index) => <JourneyStep key={step.n} {...step} last={index === JOURNEY_STEPS.length - 1} />)}
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.moneySection}>
+        <View style={styles.sectionInner}>
+          <View style={[styles.moneySplit, isWide ? styles.moneySplitWide : styles.moneySplitNarrow]}>
+            <View style={styles.moneyCopy}>
+              <Text style={styles.moneyEyebrow}>MONEY THAT MAKES SENSE</Text>
+              <Text style={styles.moneyTitle}>Shared expenses and your own budget should not be the same thing.</Text>
+              <Text style={styles.moneyLead}>Circles track who paid and who owes whom. Personal Money tracks your own income, spend, category limits and safe-to-spend. UniPool keeps those jobs separate.</Text>
+              <Pressable onPress={() => scrollToAuth("signup")} style={styles.moneyCta}><Text style={styles.moneyCtaText}>Create an account</Text><Ionicons name="arrow-forward" size={17} color="#fff" /></Pressable>
+            </View>
+            <View style={styles.moneyCards}>
+              <MiniProductCard icon="people-outline" eyebrow="CIRCLES" title="For money with other people" lines={["Split shared expenses", "Recurring bills & reminders", "Settlements, comments & records"]} />
+              <MiniProductCard icon="stats-chart-outline" eyebrow="PERSONAL MONEY" title="For your own spending" lines={["Category budgets", "Safe-to-spend day / week", "Income, spend & cashflow"]} />
+            </View>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.safetySection}>
+        <View style={[styles.sectionInner, styles.safetyInner]}>
+          <View style={styles.safetyIcon}><Ionicons name="shield-checkmark" size={32} color="#BDEBCB" /></View>
+          <Text style={styles.safetyEyebrow}>TRUST WITHOUT THE THEATRE</Text>
+          <Text style={styles.safetyTitle}>Useful signals, not a mysterious public score.</Text>
+          <Text style={styles.safetyLead}>See real shared context and structured feedback from completed trips. Live location sharing is temporary and opt-in. Trusted contacts and reporting stay available without pretending UniPool is an emergency service.</Text>
+          <View style={styles.safetyPills}>
+            <SafetyPill text="Structured punctuality feedback" />
+            <SafetyPill text="Coordination & behaviour feedback" />
+            <SafetyPill text="Trusted contacts" />
+            <SafetyPill text="Explicit temporary sharing" />
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.extrasSection}>
+        <View style={styles.sectionInner}>
+          <Text style={styles.lightEyebrow}>CAMPUS BEYOND THE RIDE</Text>
+          <Text style={styles.lightTitle}>The useful extras stay connected.</Text>
+          <Text style={styles.lightLead}>Discover students, save people you may travel with again, coordinate inside Circles, RSVP to campus events — and kill time with lightweight games while you wait.</Text>
+          <View style={styles.extrasGrid}>
+            <ExtraCard icon="people-outline" title="People" body="Search students, save useful contacts and see mutual campus or travel context." />
+            <ExtraCard icon="calendar-outline" title="Campus events" body="See campus events and RSVP Going or Interested from Campus Home." />
+            <ExtraCard icon="chatbubble-ellipses-outline" title="Circle coordination" body="Group chat, polls, shared ride links and recurring bills around the same group." />
+            <ExtraCard icon="game-controller-outline" title="Time-pass" body="XP and weekly game leaderboards for fun — kept separate from trust and ride matching." />
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.finalCtaSection}>
+        <View style={styles.finalCtaInner}>
+          <View>
+            <Text style={styles.finalEyebrow}>READY WHEN YOU ARE</Text>
+            <Text style={styles.finalTitle}>Give yourself fewer things to coordinate manually.</Text>
+            <Text style={styles.finalLead}>Create a UniPool account with any valid email, or use Google if you prefer.</Text>
+          </View>
+          <View style={styles.finalButtons}>
+            <Pressable onPress={() => scrollToAuth("signup")} style={styles.finalPrimary}><Text style={styles.finalPrimaryText}>Create account</Text><Ionicons name="arrow-up" size={17} color="#10214A" /></Pressable>
+            <Pressable onPress={() => scrollToAuth("login")} style={styles.finalSecondary}><Text style={styles.finalSecondaryText}>Log in</Text></Pressable>
+          </View>
+        </View>
         <View style={styles.footerRow}><Ionicons name="shield-checkmark" size={14} color={AUTH_COLORS.muted} /><Text style={styles.footerText}>Safe rides. Real people. Clear shared-money records.</Text></View>
         <BrandFooter />
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </View>
+    </ScrollView>
+  </KeyboardAvoidingView>;
+}
+
+function HeroChip({ icon, label }: { icon: IconName; label: string }) {
+  return <View style={styles.heroChip}><Ionicons name={icon} size={15} color="#DCE7FF" /><Text style={styles.heroChipText}>{label}</Text></View>;
+}
+
+function PromiseItem({ icon, title, body }: { icon: IconName; title: string; body: string }) {
+  return <View style={styles.promiseItem}><View style={styles.promiseIcon}><Ionicons name={icon} size={19} color={COLORS.saffron} /></View><View style={{ flex: 1 }}><Text style={styles.promiseTitle}>{title}</Text><Text style={styles.promiseBody}>{body}</Text></View></View>;
+}
+
+function FeatureCard({ feature, wide }: { feature: Feature; wide: boolean }) {
+  return <View style={[styles.featureCard, wide && styles.featureCardWide]}>
+    <View style={[styles.featureIcon, { backgroundColor: `${feature.accent}14` }]}><Ionicons name={feature.icon} size={25} color={feature.accent} /></View>
+    <Text style={[styles.featureEyebrow, { color: feature.accent }]}>{feature.eyebrow}</Text>
+    <Text style={styles.featureTitle}>{feature.title}</Text>
+    <Text style={styles.featureBody}>{feature.body}</Text>
+    <View style={styles.featurePoints}>{feature.points.map((point) => <View key={point} style={styles.featurePoint}><Ionicons name="checkmark-circle" size={16} color={feature.accent} /><Text style={styles.featurePointText}>{point}</Text></View>)}</View>
   </View>;
+}
+
+function StoryBadge({ icon, label }: { icon: IconName; label: string }) {
+  return <View style={styles.storyBadge}><Ionicons name={icon} size={15} color="#BBD0FF" /><Text style={styles.storyBadgeText}>{label}</Text></View>;
+}
+
+function JourneyStep({ icon, n, title, body, last }: { icon: IconName; n: string; title: string; body: string; last: boolean }) {
+  return <View style={styles.journeyStep}>
+    <View style={styles.journeyRail}><View style={styles.journeyDot}><Ionicons name={icon} size={17} color="#10214A" /></View>{!last ? <View style={styles.journeyLine} /> : null}</View>
+    <View style={styles.journeyContent}><Text style={styles.journeyNumber}>{n}</Text><Text style={styles.journeyTitle}>{title}</Text><Text style={styles.journeyBody}>{body}</Text></View>
+  </View>;
+}
+
+function MiniProductCard({ icon, eyebrow, title, lines }: { icon: IconName; eyebrow: string; title: string; lines: string[] }) {
+  return <View style={styles.miniProductCard}>
+    <View style={styles.miniProductHead}><View style={styles.miniProductIcon}><Ionicons name={icon} size={20} color="#C96E00" /></View><Text style={styles.miniProductEyebrow}>{eyebrow}</Text></View>
+    <Text style={styles.miniProductTitle}>{title}</Text>
+    {lines.map((line) => <View key={line} style={styles.miniLine}><Ionicons name="checkmark" size={16} color="#A75C00" /><Text style={styles.miniLineText}>{line}</Text></View>)}
+  </View>;
+}
+
+function SafetyPill({ text }: { text: string }) {
+  return <View style={styles.safetyPill}><Ionicons name="checkmark-circle-outline" size={16} color="#BDEBCB" /><Text style={styles.safetyPillText}>{text}</Text></View>;
+}
+
+function ExtraCard({ icon, title, body }: { icon: IconName; title: string; body: string }) {
+  return <View style={styles.extraCard}><Ionicons name={icon} size={24} color="#2F5CC6" /><Text style={styles.extraTitle}>{title}</Text><Text style={styles.extraBody}>{body}</Text></View>;
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#071735" },
-  hero: { height: 440, position: "relative", overflow: "hidden" },
-  heroShade: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(19,48,119,0.02)" },
-  brandOverlay: { position: "absolute", top: 34, left: 48, zIndex: 5 },
-  logoRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  logoBadge: { width: 52, height: 52, borderRadius: 26, backgroundColor: "rgba(7,23,53,0.26)", borderWidth: 1.2, borderColor: "rgba(255,211,107,0.7)", alignItems: "center", justifyContent: "center" },
-  logo: { fontSize: 38, fontWeight: "800", color: "#fff", letterSpacing: .2, fontFamily: FONT_DISPLAY },
-  tagline: { color: "rgba(255,255,255,0.94)", marginTop: 10, fontSize: 16, fontWeight: "600" },
-  taglineAccent: { color: COLORS.saffron },
-  animatedPlane: { position: "absolute", left: 0, top: 365, zIndex: 8, width: 52, height: 42, alignItems: "center", justifyContent: "center" },
-  bottomCard: { padding: 28, paddingBottom: 44, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)", backgroundColor: "rgba(7,23,53,0.96)" },
-  heading: { fontSize: 25, fontWeight: "800", color: AUTH_COLORS.text, fontFamily: FONT_DISPLAY },
-  subheading: { marginTop: 6, color: AUTH_COLORS.muted, fontSize: 15, lineHeight: 22 },
-  googleBtnWrap: { marginTop: 4, minHeight: 44, alignItems: "center", justifyContent: "center" },
-  googleBtn: { minHeight: 48, borderRadius: RADIUS.md, borderWidth: 1, borderColor: AUTH_COLORS.border, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 10, paddingHorizontal: 18 },
-  primaryBtn: { backgroundColor: "#315CCB", marginTop: SPACING.md, borderColor: AUTH_COLORS.blue },
-  disabled: { opacity: .6 },
-  googleText: { fontSize: 15, fontWeight: "700", color: "#18202A" },
-  gLogo: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#fff" },
-  googleLegal: { color: AUTH_COLORS.muted, fontSize: 10, textAlign: "center", marginTop: 10, lineHeight: 16 },
-  dividerRow: { flexDirection: "row", alignItems: "center", gap: 10, marginVertical: 18 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: AUTH_COLORS.border },
-  dividerText: { color: AUTH_COLORS.muted, fontSize: 11, fontWeight: "800" },
-  segmentRow: { flexDirection: "row", backgroundColor: AUTH_COLORS.surface, borderRadius: RADIUS.lg, padding: 3, marginTop: 18, marginBottom: 14, borderWidth: 1, borderColor: AUTH_COLORS.border },
-  segment: { flex: 1, minHeight: 42, alignItems: "center", justifyContent: "center", borderRadius: RADIUS.lg },
+  pageScroll: { flex: 1, backgroundColor: "#071735" },
+  pageContent: { backgroundColor: "#071735" },
+
+  hero: { position: "relative", overflow: "hidden", paddingBottom: 70, backgroundColor: "#071735" },
+  heroShade: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(2,11,29,0.74)" },
+  heroTint: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(22,55,126,0.18)" },
+  navWrap: { width: "100%", maxWidth: 1180, alignSelf: "center", paddingHorizontal: 24, paddingTop: 24, flexDirection: "row", alignItems: "center", justifyContent: "space-between", zIndex: 6 },
+  logoRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  logoBadge: { width: 42, height: 42, borderRadius: 21, backgroundColor: "rgba(7,23,53,0.5)", borderWidth: 1.2, borderColor: "rgba(255,211,107,0.72)", alignItems: "center", justifyContent: "center" },
+  logo: { fontSize: 28, fontWeight: "800", color: "#fff", letterSpacing: .2, fontFamily: FONT_DISPLAY },
+  navActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  navGhost: { minHeight: 40, paddingHorizontal: 15, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  navGhostText: { color: "#E8EEFC", fontWeight: "800", fontSize: 13 },
+  navPrimary: { minHeight: 40, paddingHorizontal: 16, borderRadius: 20, backgroundColor: COLORS.saffron, alignItems: "center", justifyContent: "center" },
+  navPrimaryText: { color: "#10214A", fontWeight: "900", fontSize: 13 },
+
+  heroInner: { width: "100%", maxWidth: 1180, alignSelf: "center", paddingHorizontal: 24, paddingTop: 72, zIndex: 4, gap: 42 },
+  heroInnerWide: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  heroInnerNarrow: { flexDirection: "column", paddingTop: 50 },
+  heroCopy: { flex: 1, maxWidth: 650 },
+  kicker: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 7, borderRadius: 20, borderWidth: 1, borderColor: "rgba(255,179,77,0.36)", backgroundColor: "rgba(255,179,77,0.08)", paddingHorizontal: 12, paddingVertical: 7 },
+  kickerText: { color: "#FFD29B", fontSize: 11, fontWeight: "900", letterSpacing: 1.1 },
+  heroTitle: { marginTop: 20, color: "#F9FBFF", fontFamily: FONT_DISPLAY, fontWeight: "800", fontSize: 52, lineHeight: 59, letterSpacing: -.7 },
+  heroTitleNarrow: { fontSize: 38, lineHeight: 44 },
+  heroTitleAccent: { color: COLORS.saffron },
+  heroBody: { color: "#CBD6E8", fontSize: 17, lineHeight: 27, marginTop: 18, maxWidth: 620 },
+  heroChips: { flexDirection: "row", flexWrap: "wrap", gap: 9, marginTop: 24 },
+  heroChip: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 18, paddingHorizontal: 11, paddingVertical: 8, backgroundColor: "rgba(255,255,255,0.08)", borderWidth: 1, borderColor: "rgba(255,255,255,0.14)" },
+  heroChipText: { color: "#DCE7FF", fontSize: 12, fontWeight: "700" },
+  heroCtas: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 27 },
+  heroPrimaryCta: { minHeight: 50, borderRadius: 25, backgroundColor: COLORS.saffron, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 20 },
+  heroPrimaryCtaText: { color: "#10214A", fontWeight: "900", fontSize: 14 },
+  heroSecondaryCta: { minHeight: 50, borderRadius: 25, borderWidth: 1, borderColor: "rgba(255,255,255,0.28)", backgroundColor: "rgba(7,23,53,0.28)", alignItems: "center", justifyContent: "center", paddingHorizontal: 20 },
+  heroSecondaryCtaText: { color: "#F2F6FF", fontWeight: "800", fontSize: 14 },
+  heroMicrocopy: { color: "#8FA1BD", fontSize: 11, marginTop: 13, fontWeight: "600" },
+  animatedPlane: { position: "absolute", left: 0, bottom: 42, zIndex: 3, width: 48, height: 42, alignItems: "center", justifyContent: "center" },
+
+  authCard: { width: 400, borderRadius: 28, borderWidth: 1, borderColor: "rgba(255,255,255,0.18)", backgroundColor: "rgba(5,18,43,0.86)", padding: 24, shadowColor: "#000", shadowOpacity: .24, shadowRadius: 24, shadowOffset: { width: 0, height: 12 } },
+  authCardNarrow: { width: "100%", maxWidth: 520, alignSelf: "center" },
+  authEyebrow: { color: COLORS.saffron, fontSize: 10, fontWeight: "900", letterSpacing: 1.2 },
+  authHeading: { color: AUTH_COLORS.text, fontSize: 24, lineHeight: 30, fontWeight: "800", marginTop: 7, fontFamily: FONT_DISPLAY },
+  authSubheading: { color: AUTH_COLORS.muted, fontSize: 12, lineHeight: 18, marginTop: 5 },
+  segmentRow: { flexDirection: "row", backgroundColor: AUTH_COLORS.surface, borderRadius: RADIUS.lg, padding: 3, marginTop: 18, marginBottom: 10, borderWidth: 1, borderColor: AUTH_COLORS.border },
+  segment: { flex: 1, minHeight: 40, alignItems: "center", justifyContent: "center", borderRadius: RADIUS.lg },
   segmentActive: { backgroundColor: "#315CCB" },
-  segmentText: { color: AUTH_COLORS.muted, fontWeight: "800" },
+  segmentText: { color: AUTH_COLORS.muted, fontWeight: "800", fontSize: 13 },
   segmentTextActive: { color: "#fff" },
-  input: { minHeight: 50, borderRadius: RADIUS.md, borderWidth: 1, borderColor: AUTH_COLORS.border, paddingHorizontal: 14, marginTop: 10, color: AUTH_COLORS.text, backgroundColor: AUTH_COLORS.surface },
-  consentRow: { flexDirection: "row", alignItems: "flex-start", gap: 9, marginTop: 13, paddingVertical: 5 },
-  checkbox: { width: 21, height: 21, borderRadius: 6, borderWidth: 1, borderColor: AUTH_COLORS.borderStrong, backgroundColor: AUTH_COLORS.surface, alignItems: "center", justifyContent: "center" },
+  input: { minHeight: 48, borderRadius: RADIUS.md, borderWidth: 1, borderColor: AUTH_COLORS.border, paddingHorizontal: 14, marginTop: 9, color: AUTH_COLORS.text, backgroundColor: AUTH_COLORS.surface },
+  consentRow: { flexDirection: "row", alignItems: "flex-start", gap: 9, marginTop: 12, paddingVertical: 4 },
+  checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: 1, borderColor: AUTH_COLORS.borderStrong, backgroundColor: AUTH_COLORS.surface, alignItems: "center", justifyContent: "center" },
   checkboxOn: { backgroundColor: "#315CCB", borderColor: AUTH_COLORS.blue },
-  consentText: { flex: 1, color: AUTH_COLORS.muted, fontSize: 11, lineHeight: 17 },
+  consentText: { flex: 1, color: AUTH_COLORS.muted, fontSize: 10, lineHeight: 16 },
   inlineLink: { color: AUTH_COLORS.blueStrong, fontWeight: "800" },
-  errorText: { marginTop: 10, color: AUTH_COLORS.error, fontWeight: "700", textAlign: "center" },
-  footerRow: { marginTop: 22, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
-  footerText: { color: AUTH_COLORS.muted, fontSize: 12, fontWeight: "600" },
-  fallbackLink: { color: AUTH_COLORS.blueStrong, fontWeight: "800", fontSize: 12 },
-  signingInText: { marginTop: 6, color: AUTH_COLORS.muted, fontSize: 12, textAlign: "center" },
+  errorText: { marginTop: 9, color: AUTH_COLORS.error, fontWeight: "700", textAlign: "center", fontSize: 11 },
+  authSubmit: { minHeight: 48, borderRadius: 24, marginTop: 11, backgroundColor: COLORS.saffron, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 18 },
+  authSubmitText: { color: "#10214A", fontWeight: "900", fontSize: 14 },
+  disabled: { opacity: .6 },
+  dividerRow: { flexDirection: "row", alignItems: "center", gap: 10, marginVertical: 14 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: AUTH_COLORS.border },
+  dividerText: { color: AUTH_COLORS.muted, fontSize: 10, fontWeight: "800" },
+  googleBtnWrap: { minHeight: 42, alignItems: "center", justifyContent: "center" },
+  googleBtn: { minHeight: 46, borderRadius: RADIUS.md, borderWidth: 1, borderColor: AUTH_COLORS.border, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 10, paddingHorizontal: 18 },
+  googleText: { fontSize: 14, fontWeight: "700", color: "#18202A" },
+  gLogo: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#fff" },
+  googleLegal: { color: AUTH_COLORS.muted, fontSize: 9.5, textAlign: "center", marginTop: 8, lineHeight: 14 },
+  fallbackLink: { color: AUTH_COLORS.blueStrong, fontWeight: "800", fontSize: 11 },
+  signingInText: { marginTop: 6, color: AUTH_COLORS.muted, fontSize: 11, textAlign: "center" },
+
+  promiseStrip: { backgroundColor: "#0B1C3F", borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)", borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.08)" },
+  promiseInner: { width: "100%", maxWidth: 1180, alignSelf: "center", paddingHorizontal: 24, paddingVertical: 24, flexDirection: "row", flexWrap: "wrap", gap: 18 },
+  promiseItem: { flexGrow: 1, flexBasis: 240, minWidth: 220, flexDirection: "row", alignItems: "center", gap: 11 },
+  promiseIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: "rgba(255,179,77,0.08)", borderWidth: 1, borderColor: "rgba(255,179,77,0.2)", alignItems: "center", justifyContent: "center" },
+  promiseTitle: { color: "#F6F8FD", fontWeight: "800", fontSize: 12 },
+  promiseBody: { color: "#95A7C4", fontSize: 10.5, lineHeight: 15, marginTop: 2 },
+
+  sectionInner: { width: "100%", maxWidth: 1180, alignSelf: "center", paddingHorizontal: 24 },
+  featuresSection: { backgroundColor: "#F6F3EC", paddingVertical: 86 },
+  lightEyebrow: { color: "#C96E00", fontSize: 11, fontWeight: "900", letterSpacing: 1.25 },
+  lightTitle: { color: "#14203A", fontSize: 38, lineHeight: 45, fontWeight: "800", marginTop: 9, fontFamily: FONT_DISPLAY },
+  lightLead: { color: "#5E6878", fontSize: 16, lineHeight: 25, maxWidth: 760, marginTop: 11 },
+  featureGrid: { flexDirection: "row", flexWrap: "wrap", gap: 16, marginTop: 36 },
+  featureCard: { width: "100%", borderRadius: 24, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E8E2D7", padding: 22, shadowColor: "#26334C", shadowOpacity: .05, shadowRadius: 16, shadowOffset: { width: 0, height: 6 } },
+  featureCardWide: { flexGrow: 1, flexBasis: "31%", maxWidth: "32%" },
+  featureIcon: { width: 46, height: 46, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  featureEyebrow: { marginTop: 17, fontSize: 10, fontWeight: "900", letterSpacing: 1.1 },
+  featureTitle: { color: "#18243D", fontSize: 20, lineHeight: 25, fontWeight: "800", marginTop: 6, fontFamily: FONT_DISPLAY },
+  featureBody: { color: "#697281", fontSize: 12.5, lineHeight: 20, marginTop: 8 },
+  featurePoints: { marginTop: 15, gap: 8 },
+  featurePoint: { flexDirection: "row", alignItems: "flex-start", gap: 7 },
+  featurePointText: { flex: 1, color: "#465166", fontSize: 11.5, lineHeight: 17, fontWeight: "600" },
+
+  tripStorySection: { backgroundColor: "#112654", paddingVertical: 86 },
+  tripStoryInner: { flexDirection: "row", flexWrap: "wrap", gap: 48, alignItems: "center" },
+  storyCopy: { flexGrow: 1, flexBasis: 480 },
+  darkEyebrow: { color: "#FFBC62", fontSize: 11, fontWeight: "900", letterSpacing: 1.2 },
+  darkTitle: { color: "#F8FAFF", fontSize: 36, lineHeight: 44, fontWeight: "800", marginTop: 10, fontFamily: FONT_DISPLAY },
+  darkLead: { color: "#B9C6DB", fontSize: 15, lineHeight: 24, marginTop: 12, maxWidth: 620 },
+  storyBadges: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 23 },
+  storyBadge: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.07)", borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
+  storyBadgeText: { color: "#DCE6F7", fontSize: 11, fontWeight: "700" },
+  journeyCard: { flexGrow: 1, flexBasis: 360, borderRadius: 26, padding: 24, backgroundColor: "#F8FAFF" },
+  journeyStep: { flexDirection: "row", gap: 15 },
+  journeyRail: { width: 40, alignItems: "center" },
+  journeyDot: { width: 38, height: 38, borderRadius: 19, backgroundColor: "#FFD38A", alignItems: "center", justifyContent: "center" },
+  journeyLine: { width: 2, flex: 1, minHeight: 48, backgroundColor: "#DCE3EE", marginVertical: 4 },
+  journeyContent: { flex: 1, paddingBottom: 23 },
+  journeyNumber: { color: "#B66800", fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  journeyTitle: { color: "#17233B", fontSize: 17, fontWeight: "800", marginTop: 3 },
+  journeyBody: { color: "#657085", fontSize: 11.5, lineHeight: 18, marginTop: 4 },
+
+  moneySection: { backgroundColor: "#FFF0D7", paddingVertical: 86 },
+  moneySplit: { gap: 38, alignItems: "center" },
+  moneySplitWide: { flexDirection: "row" },
+  moneySplitNarrow: { flexDirection: "column" },
+  moneyCopy: { flex: 1 },
+  moneyEyebrow: { color: "#A75C00", fontSize: 11, fontWeight: "900", letterSpacing: 1.2 },
+  moneyTitle: { color: "#3C2A15", fontSize: 35, lineHeight: 43, fontWeight: "800", marginTop: 10, fontFamily: FONT_DISPLAY },
+  moneyLead: { color: "#705C45", fontSize: 15, lineHeight: 24, marginTop: 12 },
+  moneyCta: { alignSelf: "flex-start", marginTop: 22, minHeight: 46, borderRadius: 23, paddingHorizontal: 17, backgroundColor: "#A75C00", flexDirection: "row", alignItems: "center", gap: 7 },
+  moneyCtaText: { color: "#fff", fontWeight: "800", fontSize: 13 },
+  moneyCards: { flex: 1, gap: 12, width: "100%" },
+  miniProductCard: { borderRadius: 22, backgroundColor: "rgba(255,255,255,0.7)", borderWidth: 1, borderColor: "rgba(167,92,0,0.16)", padding: 20 },
+  miniProductHead: { flexDirection: "row", alignItems: "center", gap: 9 },
+  miniProductIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: "#FFE2B4", alignItems: "center", justifyContent: "center" },
+  miniProductEyebrow: { color: "#A75C00", fontSize: 10, fontWeight: "900", letterSpacing: 1 },
+  miniProductTitle: { color: "#3C2A15", fontSize: 17, fontWeight: "800", marginTop: 12 },
+  miniLine: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 9 },
+  miniLineText: { color: "#6B5740", fontSize: 11.5, fontWeight: "600" },
+
+  safetySection: { backgroundColor: "#0D3B2B", paddingVertical: 82 },
+  safetyInner: { alignItems: "center" },
+  safetyIcon: { width: 64, height: 64, borderRadius: 22, backgroundColor: "rgba(189,235,203,0.09)", borderWidth: 1, borderColor: "rgba(189,235,203,0.2)", alignItems: "center", justifyContent: "center" },
+  safetyEyebrow: { color: "#BDEBCB", fontSize: 11, fontWeight: "900", letterSpacing: 1.2, marginTop: 18 },
+  safetyTitle: { color: "#F3FFF7", fontSize: 35, lineHeight: 43, fontWeight: "800", marginTop: 8, textAlign: "center", fontFamily: FONT_DISPLAY },
+  safetyLead: { color: "#B9D1C3", fontSize: 14.5, lineHeight: 24, textAlign: "center", maxWidth: 800, marginTop: 11 },
+  safetyPills: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 9, marginTop: 24 },
+  safetyPill: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 20, borderWidth: 1, borderColor: "rgba(189,235,203,0.18)", backgroundColor: "rgba(189,235,203,0.06)", paddingHorizontal: 11, paddingVertical: 8 },
+  safetyPillText: { color: "#D9EFE0", fontSize: 11, fontWeight: "700" },
+
+  extrasSection: { backgroundColor: "#F6F3EC", paddingVertical: 82 },
+  extrasGrid: { flexDirection: "row", flexWrap: "wrap", gap: 14, marginTop: 30 },
+  extraCard: { flexGrow: 1, flexBasis: 240, borderRadius: 20, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E7E0D5", padding: 19 },
+  extraTitle: { color: "#192640", fontWeight: "800", fontSize: 16, marginTop: 13 },
+  extraBody: { color: "#6A7484", fontSize: 11.5, lineHeight: 18, marginTop: 6 },
+
+  finalCtaSection: { backgroundColor: "#071735", paddingTop: 70, paddingBottom: 34 },
+  finalCtaInner: { width: "100%", maxWidth: 1040, alignSelf: "center", paddingHorizontal: 24, flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 28, borderRadius: 28, borderWidth: 1, borderColor: "rgba(255,255,255,0.12)", backgroundColor: "#102654", paddingVertical: 34 },
+  finalEyebrow: { color: COLORS.saffron, fontSize: 10, fontWeight: "900", letterSpacing: 1.2 },
+  finalTitle: { color: "#F8FAFF", fontSize: 28, lineHeight: 35, fontWeight: "800", marginTop: 7, maxWidth: 620, fontFamily: FONT_DISPLAY },
+  finalLead: { color: "#AEBBD0", fontSize: 13, lineHeight: 20, marginTop: 7 },
+  finalButtons: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  finalPrimary: { minHeight: 46, borderRadius: 23, paddingHorizontal: 17, backgroundColor: COLORS.saffron, flexDirection: "row", alignItems: "center", gap: 7 },
+  finalPrimaryText: { color: "#10214A", fontWeight: "900", fontSize: 13 },
+  finalSecondary: { minHeight: 46, borderRadius: 23, paddingHorizontal: 18, borderWidth: 1, borderColor: "rgba(255,255,255,0.24)", alignItems: "center", justifyContent: "center" },
+  finalSecondaryText: { color: "#F4F7FD", fontWeight: "800", fontSize: 13 },
+  footerRow: { marginTop: 28, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  footerText: { color: AUTH_COLORS.muted, fontSize: 11, fontWeight: "600" },
 });
