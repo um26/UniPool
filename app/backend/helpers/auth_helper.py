@@ -76,6 +76,7 @@ async def _create_session_for_user(
                 "gender": None,
                 "phone": None,
                 "password_hash": "",
+                "onboarding_completed": False,
                 "created_at": datetime.now(timezone.utc),
                 "last_login": datetime.now(timezone.utc),
             }
