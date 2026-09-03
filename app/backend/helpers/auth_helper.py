@@ -121,4 +121,8 @@ def _with_admin_flag(user_doc: dict) -> dict:
         or explicit_override
     )
     user["is_admin"] = is_admin
+    # Accounts created before the first-login tour existed do not have this
+    # field. Treat them as not-yet-onboarded so they get the tour once rather
+    # than silently skipping it forever.
+    user["onboarding_completed"] = user.get("onboarding_completed") is True
     return user
