@@ -119,7 +119,6 @@ export default function LoginScreen() {
   useEffect(() => {
     if (Platform.OS === "web" && !loading && !user) renderGoogleButton("google-signin-container");
   }, [loading, user, renderGoogleButton]);
-  useEffect(() => { if (user) router.replace("/(tabs)"); }, [user]);
 
   const arrivingPlaneStyle = useAnimatedStyle(() => ({
     opacity: interpolate(travel.value, [0.00,0.08,0.18,0.28,0.52,0.72,0.82], [0,0,1,1,1,1,0]),
@@ -142,6 +141,8 @@ export default function LoginScreen() {
     switchMode(next);
     scrollRef.current?.scrollTo?.({ y: 0, animated: true });
   };
+
+  const go = (path: string) => router.push(path as any);
 
   const submitPasswordForm = async () => {
     setLocalError(null);
@@ -177,10 +178,14 @@ export default function LoginScreen() {
             <View style={[styles.logoBadge, isPhone && styles.logoBadgePhone]}><Ionicons name="car-sport" size={isPhone ? 19 : 22} color={COLORS.saffron} /></View>
             <Text style={[styles.logo, isPhone && styles.logoPhone]}>UniPool</Text>
           </View>
-          <View style={[styles.navActions, isPhone && styles.navActionsPhone]}>
+          {user ? <View style={[styles.navActions, isPhone && styles.navActionsPhone]}>
+            {!isPhone ? <Pressable onPress={() => go("/campus")} style={styles.navGhost}><Text style={styles.navGhostText}>Campus</Text></Pressable> : null}
+            {!isPhone ? <Pressable onPress={() => go("/people")} style={styles.navGhost}><Text style={styles.navGhostText}>People</Text></Pressable> : null}
+            <Pressable onPress={() => go("/(tabs)")} style={[styles.navPrimary, isPhone && styles.navPrimaryPhone]}><Text style={styles.navPrimaryText}>{isPhone ? "Home" : "Open UniPool"}</Text></Pressable>
+          </View> : <View style={[styles.navActions, isPhone && styles.navActionsPhone]}>
             <Pressable onPress={() => scrollToAuth("login")} style={[styles.navGhost, isPhone && styles.navGhostPhone]}><Text style={styles.navGhostText}>Log in</Text></Pressable>
             <Pressable onPress={() => scrollToAuth("signup")} style={[styles.navPrimary, isPhone && styles.navPrimaryPhone]}><Text style={styles.navPrimaryText}>{isPhone ? "Sign up" : "Create account"}</Text></Pressable>
-          </View>
+          </View>}
         </View>
 
         <View style={[styles.heroInner, isWide ? styles.heroInnerWide : styles.heroInnerNarrow, isPhone && styles.heroInnerPhone]}>
@@ -196,13 +201,27 @@ export default function LoginScreen() {
             </View>
 
             <View style={styles.heroCtas}>
-              <Pressable onPress={() => scrollToAuth("signup")} style={styles.heroPrimaryCta}><Text style={styles.heroPrimaryCtaText}>Start with any email</Text><Ionicons name="arrow-forward" size={18} color="#10214A" /></Pressable>
-              <Pressable onPress={() => scrollRef.current?.scrollTo?.({ y: featuresOffset || 760, animated: true })} style={styles.heroSecondaryCta}><Text style={styles.heroSecondaryCtaText}>See the features</Text></Pressable>
+              <Pressable onPress={() => user ? go("/(tabs)") : scrollToAuth("signup")} style={styles.heroPrimaryCta}><Text style={styles.heroPrimaryCtaText}>{user ? "Open your dashboard" : "Start with any email"}</Text><Ionicons name="arrow-forward" size={18} color="#10214A" /></Pressable>
+              <Pressable onPress={() => user ? go("/campus") : scrollRef.current?.scrollTo?.({ y: featuresOffset || 760, animated: true })} style={styles.heroSecondaryCta}><Text style={styles.heroSecondaryCtaText}>{user ? "Campus home" : "See the features"}</Text></Pressable>
             </View>
-            <Text style={styles.heroMicrocopy}>Sign up with any email. Google is optional. Location sharing stays off until you turn it on.</Text>
+            <Text style={styles.heroMicrocopy}>{user ? `Signed in as ${user.email}. The landing page stays your front door.` : "Sign up with any email. Google is optional. Location sharing stays off until you turn it on."}</Text>
           </View>
 
-          <View style={[styles.authCard, !isWide && styles.authCardNarrow, isPhone && styles.authCardPhone]}>
+          {user ? <View style={[styles.authCard, !isWide && styles.authCardNarrow, isPhone && styles.authCardPhone]}>
+            <Text style={styles.authEyebrow}>WELCOME BACK</Text>
+            <Text style={styles.authHeading}>Hi, {user.name?.split(" ")[0] || "there"}</Text>
+            <Text style={styles.authSubheading}>Your session is still active. Pick up where you want instead of being dropped into a page automatically.</Text>
+            <View style={styles.signedInAccount}><View style={styles.signedInAvatar}><Text style={styles.signedInAvatarText}>{user.name?.[0]?.toUpperCase() || "U"}</Text></View><View style={{ flex: 1 }}><Text style={styles.signedInName}>{user.name}</Text><Text style={styles.signedInEmail}>{user.email}</Text></View><Ionicons name="checkmark-circle" size={20} color="#72D7A0" /></View>
+            <View style={styles.signedInGrid}>
+              <LandingDestination icon="home-outline" label="Home" onPress={() => go("/(tabs)")} />
+              <LandingDestination icon="people-outline" label="Matches" onPress={() => go("/(tabs)/matches")} />
+              <LandingDestination icon="chatbubbles-outline" label="Chats" onPress={() => go("/(tabs)/messages")} />
+              <LandingDestination icon="school-outline" label="Campus" onPress={() => go("/campus")} />
+              <LandingDestination icon="wallet-outline" label="Circles" onPress={() => go("/circles")} />
+              <LandingDestination icon="person-outline" label="Profile" onPress={() => go("/(tabs)/profile")} />
+            </View>
+            <Pressable onPress={() => go("/settings")} style={styles.signedInSettings}><Ionicons name="settings-outline" size={16} color={AUTH_COLORS.blueStrong} /><Text style={styles.signedInSettingsText}>Account settings</Text></Pressable>
+          </View> : <View style={[styles.authCard, !isWide && styles.authCardNarrow, isPhone && styles.authCardPhone]}>
             <Text style={styles.authEyebrow}>{mode === "signup" ? "JOIN UNIPOOL" : "WELCOME BACK"}</Text>
             <Text style={styles.authHeading}>{mode === "signup" ? "Create your account" : "Log in to UniPool"}</Text>
             <Text style={styles.authSubheading}>{mode === "signup" ? "Use any valid email address." : "Use your email or username and password."}</Text>
@@ -230,7 +249,7 @@ export default function LoginScreen() {
               {loading ? <ActivityIndicator color={AUTH_COLORS.blue} /> : <><View style={styles.gLogo}><Text style={{ fontWeight: "800", color: "#4285F4", fontSize: 18 }}>G</Text></View><Text style={styles.googleText}>Continue with Google</Text></>}
             </Pressable>}
             <Text style={styles.googleLegal}>Google is optional. Regular email signup works with any valid email address.</Text>
-          </View>
+          </View>}
         </View>
 
         <Animated.View pointerEvents="none" style={[styles.animatedPlane, arrivingPlaneStyle]}><Ionicons name="airplane" size={38} color="rgba(255,255,255,0.9)" /></Animated.View>
@@ -283,7 +302,7 @@ export default function LoginScreen() {
               <Text style={styles.moneyEyebrow}>MONEY THAT MAKES SENSE</Text>
               <Text style={styles.moneyTitle}>Shared expenses and your own budget should not be the same thing.</Text>
               <Text style={styles.moneyLead}>Circles track who paid and who owes whom. Personal Money tracks your own income, spend, category limits and safe-to-spend. UniPool keeps those jobs separate.</Text>
-              <Pressable onPress={() => scrollToAuth("signup")} style={styles.moneyCta}><Text style={styles.moneyCtaText}>Create an account</Text><Ionicons name="arrow-forward" size={17} color="#fff" /></Pressable>
+              <Pressable onPress={() => user ? go("/circles") : scrollToAuth("signup")} style={styles.moneyCta}><Text style={styles.moneyCtaText}>{user ? "Open Circles" : "Create an account"}</Text><Ionicons name="arrow-forward" size={17} color="#fff" /></Pressable>
             </View>
             <View style={styles.moneyCards}>
               <MiniProductCard icon="people-outline" eyebrow="CIRCLES" title="For money with other people" lines={["Split shared expenses", "Recurring bills and reminders", "Settlements, comments and records"]} />
@@ -325,13 +344,13 @@ export default function LoginScreen() {
       <View style={styles.finalCtaSection}>
         <View style={styles.finalCtaInner}>
           <View>
-            <Text style={styles.finalEyebrow}>READY WHEN YOU ARE</Text>
-            <Text style={styles.finalTitle}>Keep the trip in one place from planning to settlement.</Text>
-            <Text style={styles.finalLead}>Create a UniPool account with any valid email, or use Google if you prefer.</Text>
+            <Text style={styles.finalEyebrow}>{user ? "YOU'RE SIGNED IN" : "READY WHEN YOU ARE"}</Text>
+            <Text style={styles.finalTitle}>{user ? "Choose where you want to go next." : "Keep the trip in one place from planning to settlement."}</Text>
+            <Text style={styles.finalLead}>{user ? "Your session stays active while this landing page remains the default entry point." : "Create a UniPool account with any valid email, or use Google if you prefer."}</Text>
           </View>
           <View style={styles.finalButtons}>
-            <Pressable onPress={() => scrollToAuth("signup")} style={styles.finalPrimary}><Text style={styles.finalPrimaryText}>Create account</Text><Ionicons name="arrow-up" size={17} color="#10214A" /></Pressable>
-            <Pressable onPress={() => scrollToAuth("login")} style={styles.finalSecondary}><Text style={styles.finalSecondaryText}>Log in</Text></Pressable>
+            <Pressable onPress={() => user ? go("/(tabs)") : scrollToAuth("signup")} style={styles.finalPrimary}><Text style={styles.finalPrimaryText}>{user ? "Open Home" : "Create account"}</Text><Ionicons name={user ? "arrow-forward" : "arrow-up"} size={17} color="#10214A" /></Pressable>
+            <Pressable onPress={() => user ? go("/campus") : scrollToAuth("login")} style={styles.finalSecondary}><Text style={styles.finalSecondaryText}>{user ? "Campus" : "Log in"}</Text></Pressable>
           </View>
         </View>
         <View style={styles.footerRow}><Ionicons name="shield-checkmark" size={14} color={AUTH_COLORS.muted} /><Text style={styles.footerText}>Safe rides. Real people. Clear shared-money records.</Text></View>
@@ -339,6 +358,10 @@ export default function LoginScreen() {
       </View>
     </ScrollView>
   </KeyboardAvoidingView>;
+}
+
+function LandingDestination({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
+  return <Pressable onPress={onPress} style={({ pressed }) => [styles.signedInDestination, pressed && { opacity: 0.78 }]}><Ionicons name={icon} size={20} color={AUTH_COLORS.blueStrong} /><Text style={styles.signedInDestinationText}>{label}</Text><Ionicons name="chevron-forward" size={15} color={AUTH_COLORS.muted} /></Pressable>;
 }
 
 function HeroChip({ icon, label }: { icon: IconName; label: string }) {
@@ -439,6 +462,16 @@ const styles = StyleSheet.create({
   authEyebrow: { color: COLORS.saffron, fontSize: 10, fontWeight: "900", letterSpacing: 1.2 },
   authHeading: { color: AUTH_COLORS.text, fontSize: 24, lineHeight: 30, fontWeight: "800", marginTop: 7, fontFamily: FONT_DISPLAY },
   authSubheading: { color: AUTH_COLORS.muted, fontSize: 12, lineHeight: 18, marginTop: 5 },
+  signedInAccount: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 18, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: AUTH_COLORS.border, backgroundColor: AUTH_COLORS.surface },
+  signedInAvatar: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(143,177,255,0.14)" },
+  signedInAvatarText: { color: AUTH_COLORS.blueStrong, fontSize: 15, fontWeight: "900" },
+  signedInName: { color: AUTH_COLORS.text, fontSize: 12, fontWeight: "900" },
+  signedInEmail: { color: AUTH_COLORS.muted, fontSize: 9.5, marginTop: 2 },
+  signedInGrid: { gap: 8, marginTop: 14 },
+  signedInDestination: { minHeight: 44, borderRadius: 14, borderWidth: 1, borderColor: AUTH_COLORS.border, backgroundColor: AUTH_COLORS.surface, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12 },
+  signedInDestinationText: { flex: 1, color: AUTH_COLORS.text, fontSize: 11.5, fontWeight: "800" },
+  signedInSettings: { minHeight: 40, alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, marginTop: 10 },
+  signedInSettingsText: { color: AUTH_COLORS.blueStrong, fontSize: 10.5, fontWeight: "800" },
   segmentRow: { flexDirection: "row", backgroundColor: AUTH_COLORS.surface, borderRadius: RADIUS.lg, padding: 3, marginTop: 18, marginBottom: 10, borderWidth: 1, borderColor: AUTH_COLORS.border },
   segment: { flex: 1, minHeight: 40, alignItems: "center", justifyContent: "center", borderRadius: RADIUS.lg },
   segmentActive: { backgroundColor: "#315CCB" },
