@@ -16,6 +16,19 @@ const { width } = Dimensions.get("window");
 const HERO_URL = "https://raw.githubusercontent.com/um26/UniPool/5b90d0fd059122e21621eb2f5648da2fa64f0505/app/frontend/assets/mu-airport-hero.svg";
 const MU_POSITION = width * 0.50;
 
+const AUTH_COLORS = {
+  text: "#F7F9FF",
+  muted: "#AEBBD0",
+  blue: "#8FB1FF",
+  blueStrong: "#AFC6FF",
+  saffron: "#FFB34D",
+  border: "rgba(255,255,255,0.24)",
+  borderStrong: "rgba(143,177,255,0.55)",
+  surface: "rgba(255,255,255,0.07)",
+  surfaceStrong: "rgba(36,71,168,0.16)",
+  error: "#FF8591",
+};
+
 export default function LoginScreen() {
   const {
     user, loading, signingIn, signInError, clearSignInError, signIn, renderGoogleButton,
@@ -148,7 +161,7 @@ export default function LoginScreen() {
 
         {collegeChallenge ? <View style={styles.verificationWrap}>
           <View style={styles.verifiedPreview}>
-            <View style={styles.previewHead}><Ionicons name="school" size={18} color={COLORS.indigo} /><Text style={styles.previewTitle}>Student details detected</Text></View>
+            <View style={styles.previewHead}><Ionicons name="school" size={18} color={AUTH_COLORS.blue} /><Text style={styles.previewTitle}>Student details detected</Text></View>
             <PreviewRow label="Roll number" value={preview?.roll_number} />
             <PreviewRow label="Branch" value={preview?.branch_name} />
             <PreviewRow label="School" value={preview?.school_name} />
@@ -160,7 +173,7 @@ export default function LoginScreen() {
             value={collegeCode}
             onChangeText={(value) => setCollegeCode(value.replace(/\D/g, "").slice(0, 6))}
             placeholder="6-digit verification code"
-            placeholderTextColor={COLORS.muted}
+            placeholderTextColor={AUTH_COLORS.muted}
             keyboardType="number-pad"
             maxLength={6}
             style={[styles.input, styles.codeInput]}
@@ -173,22 +186,22 @@ export default function LoginScreen() {
           <Pressable testID="college-signup-change-email" onPress={resetCollegeChallenge} style={styles.secondaryAction}><Text style={styles.fallbackLink}>Use a different email</Text></Pressable>
         </View> : !showPasswordForm ? <>
           {Platform.OS === "web" ? <View style={styles.googleBtnWrap}>
-            {loading ? <ActivityIndicator color={COLORS.indigo} /> : signingIn ? <View style={{ alignItems: "center" }}><ActivityIndicator color={COLORS.indigo} /><Text style={styles.signingInText}>Signing you in… this can take longer if the travel server was asleep.</Text></View> : <><View nativeID="google-signin-container" /><Pressable testID="signin-fallback" onPress={signIn} hitSlop={8} style={{ marginTop: SPACING.sm }}><Text style={styles.fallbackLink}>Button not showing? Tap here</Text></Pressable>{signInError ? <Text testID="signin-error" style={styles.errorText}>{signInError}</Text> : null}</>}
+            {loading ? <ActivityIndicator color={AUTH_COLORS.blue} /> : signingIn ? <View style={{ alignItems: "center" }}><ActivityIndicator color={AUTH_COLORS.blue} /><Text style={styles.signingInText}>Signing you in… this can take longer if the travel server was asleep.</Text></View> : <><View nativeID="google-signin-container" /><Pressable testID="signin-fallback" onPress={signIn} hitSlop={8} style={{ marginTop: SPACING.sm }}><Text style={styles.fallbackLink}>Button not showing? Tap here</Text></Pressable>{signInError ? <Text testID="signin-error" style={styles.errorText}>{signInError}</Text> : null}</>}
           </View> : <Pressable testID="google-signin-button" onPress={signIn} disabled={loading} style={({ pressed }) => [styles.googleBtn, pressed && { opacity: .85 }]}>
-            {loading ? <ActivityIndicator color={COLORS.indigo} /> : <><View style={styles.gLogo}><Text style={{ fontWeight: "800", color: "#4285F4", fontSize: 18 }}>G</Text></View><Text style={styles.googleText}>Continue with Google</Text></>}
+            {loading ? <ActivityIndicator color={AUTH_COLORS.blue} /> : <><View style={styles.gLogo}><Text style={{ fontWeight: "800", color: "#4285F4", fontSize: 18 }}>G</Text></View><Text style={styles.googleText}>Continue with Google</Text></>}
           </Pressable>}
           <Text style={styles.googleLegal}>A verified <Text style={styles.googleLegalStrong}>@mahindrauniversity.edu.in</Text> Google account is automatically verified as a student and its roll details are filled in. New Google accounts are subject to UniPool's <Text style={styles.inlineLink} onPress={() => router.push("/terms" as any)}>Terms</Text> and <Text style={styles.inlineLink} onPress={() => router.push("/privacy" as any)}>Privacy Policy</Text>.</Text>
           <View style={styles.dividerRow}><View style={styles.dividerLine} /><Text style={styles.dividerText}>or</Text><View style={styles.dividerLine} /></View>
-          <Pressable testID="show-password-form" onPress={() => { setLocalError(null); clearSignInError(); setShowPasswordForm(true); }} style={styles.emailToggleBtn}><Ionicons name="mail-outline" size={18} color={COLORS.indigo} /><Text style={styles.emailToggleText}>Continue with email &amp; password</Text></Pressable>
+          <Pressable testID="show-password-form" onPress={() => { setLocalError(null); clearSignInError(); setShowPasswordForm(true); }} style={styles.emailToggleBtn}><Ionicons name="mail-outline" size={18} color={AUTH_COLORS.blue} /><Text style={styles.emailToggleText}>Continue with email &amp; password</Text></Pressable>
         </> : <View>
           <View style={styles.segmentRow}>
             <Pressable testID="mode-login" onPress={() => switchMode("login")} style={[styles.segment, mode === "login" && styles.segmentActive]}><Text style={[styles.segmentText, mode === "login" && styles.segmentTextActive]}>Log in</Text></Pressable>
             <Pressable testID="mode-signup" onPress={() => switchMode("signup")} style={[styles.segment, mode === "signup" && styles.segmentActive]}><Text style={[styles.segmentText, mode === "signup" && styles.segmentTextActive]}>Sign up</Text></Pressable>
           </View>
-          {mode === "signup" && <TextInput testID="signup-name" value={name} onChangeText={setName} placeholder="Full name" placeholderTextColor={COLORS.muted} style={styles.input} autoCapitalize="words" />}
-          <TextInput testID="auth-identifier" value={identifier} onChangeText={(value) => { setIdentifier(value); setLocalError(null); clearSignInError(); }} placeholder={mode === "login" ? "Email or username" : "Email"} placeholderTextColor={COLORS.muted} style={styles.input} autoCapitalize="none" keyboardType={mode === "signup" ? "email-address" : "default"} />
-          {collegeEmail ? <View style={styles.collegeHint}><Ionicons name="shield-checkmark-outline" size={16} color={COLORS.indigo} /><Text style={styles.collegeHintText}>College email detected. We’ll send an OTP first, then automatically fill your verified roll, school, branch, batch and degree details.</Text></View> : null}
-          <TextInput testID="auth-password" value={password} onChangeText={setPassword} placeholder="Password" placeholderTextColor={COLORS.muted} style={styles.input} secureTextEntry />
+          {mode === "signup" && <TextInput testID="signup-name" value={name} onChangeText={setName} placeholder="Full name" placeholderTextColor={AUTH_COLORS.muted} style={styles.input} autoCapitalize="words" />}
+          <TextInput testID="auth-identifier" value={identifier} onChangeText={(value) => { setIdentifier(value); setLocalError(null); clearSignInError(); }} placeholder={mode === "login" ? "Email or username" : "Email"} placeholderTextColor={AUTH_COLORS.muted} style={styles.input} autoCapitalize="none" keyboardType={mode === "signup" ? "email-address" : "default"} />
+          {collegeEmail ? <View style={styles.collegeHint}><Ionicons name="shield-checkmark-outline" size={16} color={AUTH_COLORS.blue} /><Text style={styles.collegeHintText}>College email detected. We’ll send an OTP first, then automatically fill your verified roll, school, branch, batch and degree details.</Text></View> : null}
+          <TextInput testID="auth-password" value={password} onChangeText={setPassword} placeholder="Password" placeholderTextColor={AUTH_COLORS.muted} style={styles.input} secureTextEntry />
           {mode === "signup" ? <Pressable testID="signup-legal-consent" onPress={() => setLegalAccepted((v) => !v)} style={styles.consentRow}><View style={[styles.checkbox, legalAccepted && styles.checkboxOn]}>{legalAccepted ? <Ionicons name="checkmark" size={15} color="#fff" /> : null}</View><Text style={styles.consentText}>I agree to the <Text style={styles.inlineLink} onPress={(e) => { e.stopPropagation?.(); router.push("/terms" as any); }}>Terms & Conditions</Text> and <Text style={styles.inlineLink} onPress={(e) => { e.stopPropagation?.(); router.push("/privacy" as any); }}>Privacy Policy</Text>.</Text></Pressable> : null}
           {(localError || signInError) ? <Text testID="password-auth-error" style={styles.errorText}>{localError || signInError}</Text> : null}
           <Turnstile onToken={setTurnstileToken} resetKey={turnstileResetKey} />
@@ -198,7 +211,7 @@ export default function LoginScreen() {
           <Pressable testID="back-to-google" onPress={() => { setShowPasswordForm(false); setLocalError(null); clearSignInError(); }} hitSlop={8} style={styles.secondaryAction}><Text style={styles.fallbackLink}>Back to Google sign-in</Text></Pressable>
         </View>}
 
-        <View style={styles.footerRow}><Ionicons name="shield-checkmark" size={14} color={COLORS.muted} /><Text style={styles.footerText}>Safe rides. Real people. Clear shared-money records.</Text></View>
+        <View style={styles.footerRow}><Ionicons name="shield-checkmark" size={14} color={AUTH_COLORS.muted} /><Text style={styles.footerText}>Safe rides. Real people. Clear shared-money records.</Text></View>
         <BrandFooter />
       </ScrollView>
     </KeyboardAvoidingView>
@@ -221,47 +234,47 @@ const styles = StyleSheet.create({
   tagline: { color: "rgba(255,255,255,0.94)", marginTop: 10, fontSize: 16, fontWeight: "600" },
   taglineAccent: { color: COLORS.saffron },
   animatedPlane: { position: "absolute", left: 0, top: 365, zIndex: 8, width: 52, height: 42, alignItems: "center", justifyContent: "center" },
-  bottomCard: { padding: 28, paddingBottom: 44 },
-  heading: { fontSize: 25, fontWeight: "800", color: COLORS.text, fontFamily: FONT_DISPLAY },
-  subheading: { marginTop: 6, color: COLORS.muted, fontSize: 15, lineHeight: 22 },
+  bottomCard: { padding: 28, paddingBottom: 44, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)", backgroundColor: "rgba(7,23,53,0.96)" },
+  heading: { fontSize: 25, fontWeight: "800", color: AUTH_COLORS.text, fontFamily: FONT_DISPLAY },
+  subheading: { marginTop: 6, color: AUTH_COLORS.muted, fontSize: 15, lineHeight: 22 },
   googleBtnWrap: { marginTop: 20, minHeight: 44, alignItems: "center", justifyContent: "center" },
-  googleBtn: { minHeight: 48, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 10, paddingHorizontal: 18 },
-  primaryBtn: { backgroundColor: COLORS.indigo, marginTop: SPACING.md, borderColor: COLORS.indigo },
+  googleBtn: { minHeight: 48, borderRadius: RADIUS.md, borderWidth: 1, borderColor: AUTH_COLORS.border, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 10, paddingHorizontal: 18 },
+  primaryBtn: { backgroundColor: "#315CCB", marginTop: SPACING.md, borderColor: AUTH_COLORS.blue },
   disabled: { opacity: .6 },
-  googleText: { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  googleText: { fontSize: 15, fontWeight: "700", color: "#18202A" },
   gLogo: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#fff" },
-  googleLegal: { color: COLORS.muted, fontSize: 10, textAlign: "center", marginTop: 8, lineHeight: 15 },
-  googleLegalStrong: { color: COLORS.text, fontWeight: "800" },
+  googleLegal: { color: AUTH_COLORS.muted, fontSize: 10, textAlign: "center", marginTop: 10, lineHeight: 16 },
+  googleLegalStrong: { color: AUTH_COLORS.saffron, fontWeight: "800" },
   dividerRow: { flexDirection: "row", alignItems: "center", gap: 10, marginVertical: 18 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: COLORS.border },
-  dividerText: { color: COLORS.muted, fontSize: 12, fontWeight: "700" },
-  emailToggleBtn: { minHeight: 48, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
-  emailToggleText: { color: COLORS.indigo, fontWeight: "800" },
-  segmentRow: { flexDirection: "row", backgroundColor: COLORS.surfaceAlt, borderRadius: RADIUS.lg, padding: 3, marginTop: 18, marginBottom: 14 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: AUTH_COLORS.border },
+  dividerText: { color: AUTH_COLORS.muted, fontSize: 12, fontWeight: "800" },
+  emailToggleBtn: { minHeight: 48, borderRadius: RADIUS.md, borderWidth: 1, borderColor: AUTH_COLORS.borderStrong, backgroundColor: AUTH_COLORS.surfaceStrong, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
+  emailToggleText: { color: AUTH_COLORS.blueStrong, fontWeight: "800" },
+  segmentRow: { flexDirection: "row", backgroundColor: AUTH_COLORS.surface, borderRadius: RADIUS.lg, padding: 3, marginTop: 18, marginBottom: 14, borderWidth: 1, borderColor: AUTH_COLORS.border },
   segment: { flex: 1, minHeight: 42, alignItems: "center", justifyContent: "center", borderRadius: RADIUS.lg },
-  segmentActive: { backgroundColor: COLORS.indigo },
-  segmentText: { color: COLORS.muted, fontWeight: "800" },
+  segmentActive: { backgroundColor: "#315CCB" },
+  segmentText: { color: AUTH_COLORS.muted, fontWeight: "800" },
   segmentTextActive: { color: "#fff" },
-  input: { minHeight: 50, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 14, marginTop: 10, color: COLORS.text, backgroundColor: COLORS.surface },
+  input: { minHeight: 50, borderRadius: RADIUS.md, borderWidth: 1, borderColor: AUTH_COLORS.border, paddingHorizontal: 14, marginTop: 10, color: AUTH_COLORS.text, backgroundColor: AUTH_COLORS.surface },
   codeInput: { textAlign: "center", fontSize: 22, fontWeight: "800", letterSpacing: 5 },
   consentRow: { flexDirection: "row", alignItems: "flex-start", gap: 9, marginTop: 13, paddingVertical: 5 },
-  checkbox: { width: 21, height: 21, borderRadius: 6, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, alignItems: "center", justifyContent: "center" },
-  checkboxOn: { backgroundColor: COLORS.indigo, borderColor: COLORS.indigo },
-  consentText: { flex: 1, color: COLORS.muted, fontSize: 11, lineHeight: 17 },
-  inlineLink: { color: COLORS.indigo, fontWeight: "800" },
-  errorText: { marginTop: 10, color: "#C62828", fontWeight: "700" },
+  checkbox: { width: 21, height: 21, borderRadius: 6, borderWidth: 1, borderColor: AUTH_COLORS.borderStrong, backgroundColor: AUTH_COLORS.surface, alignItems: "center", justifyContent: "center" },
+  checkboxOn: { backgroundColor: "#315CCB", borderColor: AUTH_COLORS.blue },
+  consentText: { flex: 1, color: AUTH_COLORS.muted, fontSize: 11, lineHeight: 17 },
+  inlineLink: { color: AUTH_COLORS.blueStrong, fontWeight: "800" },
+  errorText: { marginTop: 10, color: AUTH_COLORS.error, fontWeight: "700" },
   footerRow: { marginTop: 22, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
-  footerText: { color: COLORS.muted, fontSize: 12, fontWeight: "600" },
-  fallbackLink: { color: COLORS.indigo, fontWeight: "700", fontSize: 12 },
-  signingInText: { marginTop: 6, color: COLORS.muted, fontSize: 12, textAlign: "center" },
+  footerText: { color: AUTH_COLORS.muted, fontSize: 12, fontWeight: "600" },
+  fallbackLink: { color: AUTH_COLORS.blueStrong, fontWeight: "800", fontSize: 12 },
+  signingInText: { marginTop: 6, color: AUTH_COLORS.muted, fontSize: 12, textAlign: "center" },
   secondaryAction: { marginTop: SPACING.md, alignSelf: "center", paddingVertical: 4 },
-  collegeHint: { marginTop: 9, padding: 10, borderRadius: RADIUS.md, backgroundColor: "rgba(57,73,171,0.07)", borderWidth: 1, borderColor: "rgba(57,73,171,0.16)", flexDirection: "row", alignItems: "flex-start", gap: 8 },
-  collegeHintText: { flex: 1, color: COLORS.muted, fontSize: 11, lineHeight: 16, fontWeight: "600" },
+  collegeHint: { marginTop: 9, padding: 10, borderRadius: RADIUS.md, backgroundColor: AUTH_COLORS.surfaceStrong, borderWidth: 1, borderColor: AUTH_COLORS.borderStrong, flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  collegeHintText: { flex: 1, color: AUTH_COLORS.muted, fontSize: 11, lineHeight: 16, fontWeight: "600" },
   verificationWrap: { marginTop: 18 },
-  verifiedPreview: { borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surfaceAlt, padding: 14 },
+  verifiedPreview: { borderRadius: RADIUS.lg, borderWidth: 1, borderColor: AUTH_COLORS.borderStrong, backgroundColor: AUTH_COLORS.surfaceStrong, padding: 14 },
   previewHead: { flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 8 },
-  previewTitle: { color: COLORS.text, fontWeight: "800", fontSize: 14 },
+  previewTitle: { color: AUTH_COLORS.text, fontWeight: "800", fontSize: 14 },
   previewRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 16, paddingVertical: 5 },
-  previewLabel: { color: COLORS.muted, fontSize: 11, fontWeight: "700" },
-  previewValue: { flex: 1, color: COLORS.text, fontSize: 11, fontWeight: "800", textAlign: "right" },
+  previewLabel: { color: AUTH_COLORS.muted, fontSize: 11, fontWeight: "700" },
+  previewValue: { flex: 1, color: AUTH_COLORS.text, fontSize: 11, fontWeight: "800", textAlign: "right" },
 });
