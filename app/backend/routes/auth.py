@@ -4,6 +4,8 @@ from fastapi import APIRouter, HTTPException, Header, Request
 from typing import Optional
 import logging
 
+from config.database import db
+from helpers.auth_helper import _hash_password, _verify_password
 from services.auth_service import (
     signup_user, login_user, google_sign_in, microsoft_sign_in,
     microsoft_sign_in_config, complete_onboarding,
@@ -16,6 +18,7 @@ from models.auth import GoogleSignIn, MicrosoftSignIn
 from models.user import (
     SignupRequest,
     LoginRequest,
+    PasswordSetRequest,
     CollegeVerifyStart,
     CollegeVerifyConfirm,
     CollegeSignupStart,
@@ -31,6 +34,15 @@ async def _sync_result_user(result: dict) -> dict:
     if result and result.get("user"):
         result["user"] = await sync_user_college_profile(result["user"])
     return result
+
+
+async def _require_user(authorization: Optional[str]) -> dict:
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing authorization header")
+    user = await get_current_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+    return user
 
 
 @router.post("/signup", response_model=dict)
@@ -128,13 +140,37 @@ async def microsoft_sign_in_route(body: MicrosoftSignIn):
         raise HTTPException(status_code=500, detail="Microsoft sign-in failed")
 
 
+@router.get("/password/status", response_model=dict)
+async def password_status_route(authorization: Optional[str] = Header(None)):
+    user = await _require_user(authorization)
+    stored = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "password_hash": 1})
+    return {"has_password": bool((stored or {}).get("password_hash"))}
+
+
+@router.post("/password", response_model=dict)
+async def set_password_route(body: PasswordSetRequest, authorization: Optional[str] = Header(None)):
+    user = await _require_user(authorization)
+    stored = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "password_hash": 1})
+    if not stored:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    current_hash = str(stored.get("password_hash") or "")
+    if current_hash:
+        if not body.current_password:
+            raise HTTPException(status_code=400, detail="Enter your current password before changing it")
+        if not _verify_password(body.current_password, current_hash):
+            raise HTTPException(status_code=400, detail="Current password is incorrect")
+
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"password_hash": _hash_password(body.new_password)}},
+    )
+    return {"ok": True, "has_password": True}
+
+
 @router.post("/onboarding/complete", response_model=dict)
 async def onboarding_complete_route(authorization: Optional[str] = Header(None)):
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Missing authorization header")
-    user = await get_current_user(authorization)
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid or expired session")
+    user = await _require_user(authorization)
     try:
         return await sync_user_college_profile(await complete_onboarding(user["user_id"]))
     except ValueError as e:
