@@ -54,6 +54,24 @@ class SignupRequest(BaseModel):
     turnstile_token: Optional[str] = None
 
 
+class CollegeSignupStart(SignupRequest):
+    """Start a verified signup using an official Mahindra University email."""
+
+
+class CollegeSignupConfirm(BaseModel):
+    """Finish a verified college-email signup after proving mailbox ownership."""
+    challenge_id: str
+    code: str
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, value: str):
+        code = value.strip()
+        if not re.fullmatch(r"\d{6}", code):
+            raise ValueError("Verification code must contain exactly 6 digits")
+        return code
+
+
 class LoginRequest(BaseModel):
     """User login request."""
     identifier: str
