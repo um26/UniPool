@@ -33,7 +33,7 @@ export default function SiteFooter() {
         <Pressable onPress={() => setReferOpen(true)} style={styles.link}><Ionicons name="person-add-outline" size={14} color={colors.muted} /><Text style={[styles.linkText, { color: colors.muted }]}>Refer a friend</Text></Pressable>
       </View>
     </View>
-    <SocialShareSheet visible={referOpen} onClose={() => setReferOpen(false)} payload={{ title: "Refer a friend to UniPool", text: "Join me on UniPool — university travel, shared expenses and useful student tools in one place.", url: HOME }} />
+    <SocialShareSheet visible={referOpen} onClose={() => setReferOpen(false)} payload={{ title: "Refer a friend to UniPool", text: "Join me on UniPool for university travel, shared expenses and useful student tools in one place.", url: HOME }} />
   </>;
 }
 
