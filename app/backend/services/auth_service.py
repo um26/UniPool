@@ -7,7 +7,6 @@ import asyncio
 import sys
 from pathlib import Path
 
-# Add the backend directory to the Python path so we can import from it
 backend_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(backend_dir))
 
@@ -17,7 +16,7 @@ from helpers.auth_helper import (
     _hash_password, _verify_password, _create_session_token,
     _create_session_for_user, _with_admin_flag
 )
-from helpers.college_helper import _is_verified_domain
+from helpers.roll_number_decoder import decode_roll_number
 from models.user import UserOut, SignupRequest, LoginRequest
 from models.auth import GoogleSignIn
 from config.settings import GOOGLE_CLIENT_ID
@@ -34,6 +33,7 @@ logger = logging.getLogger("unipool.auth")
 
 IST = timezone(timedelta(hours=5, minutes=30))
 _GOOGLE_REQUEST = google_requests.Request(session=CacheControl(requests_lib.Session()))
+MU_EMAIL_DOMAIN = "mahindrauniversity.edu.in"
 
 
 def _fmt_ist(dt: datetime) -> str:
@@ -41,6 +41,11 @@ def _fmt_ist(dt: datetime) -> str:
     if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(IST).strftime("%d %b %Y, %I:%M %p IST")
+
+
+def _is_mu_email(email: str) -> bool:
+    normalized = (email or "").strip().lower()
+    return normalized.endswith(f"@{MU_EMAIL_DOMAIN}") and normalized.count("@") == 1
 
 
 async def verify_turnstile(token: Optional[str], remote_ip: Optional[str]) -> bool:
@@ -61,19 +66,15 @@ async def verify_turnstile(token: Optional[str], remote_ip: Optional[str]) -> bo
 
 
 async def signup_user(body: SignupRequest) -> Dict[str, Any]:
-    """
-    Register a new user with email and password.
+    """Register a new personal-email user with email and password."""
+    email = str(body.email).strip().lower()
+    if _is_mu_email(email):
+        # Official college mail must prove mailbox ownership before account
+        # creation. This also prevents callers bypassing the OTP UI by hitting
+        # the legacy signup endpoint directly.
+        raise Exception("Verify your Mahindra University email with the OTP signup flow")
 
-    Args:
-        body: Signup request data
-
-    Returns:
-        Dictionary containing session_token and user data
-
-    Raises:
-        Exception: If email or username already exists
-    """
-    if await db.users.find_one({"email": body.email.lower()}, {"_id": 0}):
+    if await db.users.find_one({"email": email}, {"_id": 0}):
         raise Exception("An account with this email already exists")
 
     username = (body.username or "").strip() or None
@@ -84,9 +85,9 @@ async def signup_user(body: SignupRequest) -> Dict[str, Any]:
     user_id = f"user_{__import__('uuid').uuid4().hex[:12]}"
     await db.users.insert_one({
         "user_id": user_id,
-        "email": body.email.strip().lower(),
+        "email": email,
         "username": username,
-        "name": body.name.strip() or body.email.split("@")[0],
+        "name": body.name.strip() or email.split("@")[0],
         "picture": None,
         "password_hash": _hash_password(body.password),
         "gender": None,
@@ -101,18 +102,7 @@ async def signup_user(body: SignupRequest) -> Dict[str, Any]:
 
 
 async def login_user(body: LoginRequest) -> Dict[str, Any]:
-    """
-    Authenticate user with email/username and password.
-
-    Args:
-        body: Login request data
-
-    Returns:
-        Dictionary containing session_token and user data
-
-    Raises:
-        Exception: If credentials are invalid
-    """
+    """Authenticate a user with email/username and password."""
     identifier = body.identifier.strip()
     user = await db.users.find_one(
         {"$or": [{"email": identifier.lower()}, {"username": identifier}]},
@@ -133,13 +123,10 @@ async def login_user(body: LoginRequest) -> Dict[str, Any]:
 
 
 async def google_sign_in(body: GoogleSignIn) -> Dict[str, Any]:
-    """Authenticate or register a user via Google OAuth."""
+    """Authenticate/register with Google and auto-verify a trusted MU mailbox."""
     if not GOOGLE_CLIENT_ID:
         raise RuntimeError("Server missing GOOGLE_CLIENT_ID")
     try:
-        # google-auth normally performs certificate I/O synchronously. Keep its
-        # certificate response cached and run verification off the event loop so
-        # one Google login never stalls unrelated API traffic.
         idinfo = await asyncio.to_thread(
             google_id_token.verify_oauth2_token,
             body.id_token,
@@ -155,9 +142,42 @@ async def google_sign_in(body: GoogleSignIn) -> Dict[str, Any]:
         logger.warning("Google sign-in rejected an unverified or missing email")
         raise ValueError("Google email not verified")
 
+    email = email.strip().lower()
     name = idinfo.get("name") or email.split("@", 1)[0]
     picture = idinfo.get("picture")
-    return await _create_session_for_user(email.strip().lower(), name, picture)
+
+    decoded = None
+    if _is_mu_email(email):
+        decoded = decode_roll_number(email.split("@", 1)[0])
+        if not decoded:
+            raise ValueError("Couldn't recognize your Mahindra University roll number from this Google account")
+
+        existing_identity = await db.users.find_one(
+            {
+                "roll_number": decoded["roll_number"],
+                "college_verified": True,
+                "email": {"$ne": email},
+            },
+            {"_id": 0, "user_id": 1},
+        )
+        if existing_identity:
+            raise ValueError("This college identity is already linked to another UniPool account")
+
+    result = await _create_session_for_user(email, name, picture)
+
+    if decoded:
+        verified_fields = {
+            "college_verified": True,
+            "college_email": email,
+            **decoded,
+        }
+        await db.users.update_one(
+            {"user_id": result["user"]["user_id"]},
+            {"$set": verified_fields},
+        )
+        result["user"] = _with_admin_flag({**result["user"], **verified_fields})
+
+    return result
 
 
 async def logout_user(session_token: str) -> bool:
@@ -198,7 +218,6 @@ async def get_current_user(session_token: str) -> Optional[Dict[str, Any]]:
     return _with_admin_flag(user)
 
 
-# Helper functions (moved from original server.py for compatibility)
 def _ensure_aware(dt: datetime) -> datetime:
     """Ensure datetime is timezone aware."""
     if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
